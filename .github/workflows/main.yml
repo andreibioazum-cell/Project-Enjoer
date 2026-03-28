@@ -1,4 +1,4 @@
-name: Enjoer_Engine_v6.1_Clean
+name: Enjoer_6.1_Stars_Fixed
 on: [push, workflow_dispatch]
 
 jobs:
@@ -14,14 +14,17 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build APK
+      - name: Setup Android Project
         run: |
-          # Даем права на выполнение градлу, который уже лежит в репе
+          # Создаем Gradle Wrapper, если его нет в репозитории
+          gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+
+      - name: Build APK
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_Engine_Fixed
+          name: Enjoer_6.1_Stars_Final
           path: app/build/outputs/apk/debug/*.apk
