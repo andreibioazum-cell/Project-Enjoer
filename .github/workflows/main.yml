@@ -1,4 +1,4 @@
-name: Enjoer_DPI_Final_v1.3
+name: Enjoer_DPI_Final_v1.4
 on: [push, workflow_dispatch]
 
 jobs:
@@ -14,11 +14,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Clean and Create Project
+      - name: Create Project
         run: |
-          # Удаляем старые следы игрового движка, чтобы не было конфликтов
-          rm -rf app/src/main/java/com/enjoer/game
-          
+          # Полная очистка перед созданием
+          rm -rf app/src/main/java/com/enjoer
           mkdir -p app/src/main/java/com/enjoer/bypass
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
@@ -26,13 +25,13 @@ jobs:
           echo "include ':app'" > settings.gradle
           echo "android.useAndroidX=true" > gradle.properties
 
-          # 1. Манифест (Android 14)
+          # 1. Манифест
           cat <<'EOF' > app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
-              <application android:label="Enjoer Bypass" android:theme="@style/Theme.AppCompat.NoActionBar">
+              <application android:label="Enjoer Bypass" android:theme="@style/AppTheme">
                   <activity android:name="com.enjoer.bypass.MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
@@ -54,18 +53,24 @@ jobs:
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent"
               android:orientation="vertical" android:gravity="center" android:background="#0A0F14">
-              <TextView android:id="@+id/status" android:layout_width="wrap_content" android:layout_height="wrap_content"
+              <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                   android:text="ENJOER DPI BYPASS" android:textColor="#00BFFF" android:textSize="24sp" android:layout_marginBottom="30dp"/>
               <Button android:id="@+id/btn_start" android:layout_width="220dp" android:layout_height="70dp"
                   android:text="START BYPASS" android:backgroundTint="#101820" android:textColor="#00BFFF"/>
           </LinearLayout>
           EOF
 
+          # Исправленный файл ресурсов (только один!)
           cat <<'EOF' > app/src/main/res/values/styles.xml
-          <resources><style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar"/></resources>
+          <resources>
+              <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="android:windowFullscreen">true</item>
+                  <item name="android:windowContentOverlay">@null</item>
+              </style>
+          </resources>
           EOF
 
-          # 3. Логика VPN (С фрагментацией и Case Juggling)
+          # 3. Логика VPN
           cat <<'EOF' > app/src/main/java/com/enjoer/bypass/BypassVpnService.java
           package com.enjoer.bypass;
           import android.net.VpnService;
@@ -85,7 +90,7 @@ jobs:
                               vpnInterface = new Builder()
                                   .addAddress("10.0.0.2", 32)
                                   .addRoute("0.0.0.0", 0)
-                                  .addDnsServer("1.1.1.1")
+                                  .addDnsServer("8.8.8.8")
                                   .setSession("EnjoerDPI")
                                   .establish();
 
@@ -96,18 +101,17 @@ jobs:
                               while (!Thread.interrupted()) {
                                   int len = in.read(buffer);
                                   if (len > 0) {
-                                      // Простейшая проверка на HTTP и замена Host -> hOsT
                                       String s = new String(buffer, 0, len, StandardCharsets.US_ASCII);
+                                      // Модификация HTTP заголовка (Case Juggling)
                                       if (s.contains("Host: ")) {
                                           s = s.replace("Host: ", "hOsT: ");
-                                          byte[] mod = s.getBytes(StandardCharsets.US_ASCII);
-                                          out.write(mod);
+                                          out.write(s.getBytes(StandardCharsets.US_ASCII));
                                       } else {
                                           out.write(buffer, 0, len);
                                       }
                                   }
                               }
-                          } catch (Exception e) { e.printStackTrace(); }
+                          } catch (Exception e) {}
                       });
                       worker.start();
                   }
@@ -138,7 +142,7 @@ jobs:
           }
           EOF
 
-          # Настройки сборки
+          # Gradle
           cat <<'EOF' > build.gradle
           buildscript { repositories { google(); mavenCentral() }; dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
           allprojects { repositories { google(); mavenCentral() } }
@@ -159,5 +163,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_Bypass_Fixed
+          name: Enjoer_Bypass_v1.4
           path: app/build/outputs/apk/debug/*.apk
