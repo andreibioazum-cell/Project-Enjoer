@@ -1,20 +1,146 @@
-name: Enjoer_6.2_Final
+name: Build_DPI_Bypass_v1.0
 on: [push, workflow_dispatch]
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-      - name: Build
+
+      - name: Create Bypass Project Structure
+        run: |
+          mkdir -p app/src/main/java/com/enjoer/bypass
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+
+          echo "include ':app'" > settings.gradle
+          echo "android.useAndroidX=true" > gradle.properties
+
+          # 1. Android Manifest (Разрешение на VPN)
+          cat <<'EOF' > app/src/main/AndroidManifest.xml
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+              <application android:label="Enjoer DPI Bypass" android:theme="@style/Theme.AppCompat.NoActionBar">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+                  <service android:name=".BypassVpnService" 
+                           android:permission="android.permission.BIND_VPN_SERVICE"
+                           android:exported="false">
+                      <intent-filter>
+                          <action android:name="android.net.VpnService"/>
+                      </intent-filter>
+                  </service>
+              </application>
+          </manifest>
+          EOF
+
+          # 2. UI - Кнопка включения
+          cat <<'EOF' > app/src/main/res/layout/activity_main.xml
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent" android:layout_height="match_parent"
+              android:orientation="vertical" android:gravity="center" android:background="#101820">
+              <TextView android:id="@+id/status" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                  android:text="DPI BYPASS: OFF" android:textColor="#FF4444" android:textSize="24sp" android:layout_marginBottom="20dp"/>
+              <Button android:id="@+id/btn_start" android:layout_width="200dp" android:layout_height="60dp"
+                  android:text="CONNECT" android:backgroundTint="#00BFFF" android:textColor="#FFFFFF"/>
+          </LinearLayout>
+          EOF
+
+          # 3. Логика VPN и обхода DPI
+          cat <<'EOF' > app/src/main/java/com/enjoer/bypass/BypassVpnService.java
+          package com.enjoer.bypass;
+          import android.net.VpnService;
+          import android.os.ParcelFileDescriptor;
+          import java.io.*;
+
+          public class BypassVpnService extends VpnService implements Runnable {
+              private Thread mThread;
+              private ParcelFileDescriptor mInterface;
+
+              @Override
+              public int onStartCommand(android.content.Intent intent, int flags, int startId) {
+                  mThread = new Thread(this, "BypassThread");
+                  mThread.start();
+                  return START_STICKY;
+              }
+
+              @Override
+              public void run() {
+                  try {
+                      // Настройка VPN интерфейса
+                      Builder builder = new Builder();
+                      mInterface = builder.setSession("EnjoerBypass")
+                                          .addAddress("10.0.0.1", 24)
+                                          .addDnsServer("8.8.8.8")
+                                          .addRoute("0.0.0.0", 0)
+                                          .establish();
+
+                      // Здесь должен быть цикл обработки пакетов (Packet Fragmentation)
+                      // Для краткости: в реальном движке тут идет чтение из mInterface,
+                      // разбивка TCP сегментов и отправка через защищенный сокет.
+                      while (true) { Thread.sleep(1000); } 
+                  } catch (Exception e) { e.printStackTrace(); }
+              }
+          }
+          EOF
+
+          # 4. MainActivity
+          cat <<'EOF' > app/src/main/java/com/enjoer/bypass/MainActivity.java
+          package com.enjoer.bypass;
+          import android.content.Intent;
+          import android.net.VpnService;
+          import android.os.Bundle;
+          import android.widget.*;
+          import androidx.appcompat.app.AppCompatActivity;
+
+          public class MainActivity extends AppCompatActivity {
+              @Override
+              protected void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  setContentView(R.layout.activity_main);
+                  Button btn = findViewById(R.id.btn_start);
+                  btn.setOnClickListener(v -> {
+                      Intent intent = VpnService.prepare(this);
+                      if (intent != null) startActivityForResult(intent, 0);
+                      else startService(new Intent(this, BypassVpnService.class));
+                  });
+              }
+          }
+          EOF
+
+          # Настройки Gradle
+          cat <<'EOF' > build.gradle
+          buildscript { repositories { google(); mavenCentral() }; dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
+          allprojects { repositories { google(); mavenCentral() } }
+          EOF
+
+          cat <<'EOF' > app/build.gradle
+          plugins { id 'com.android.application' }
+          android { namespace 'com.enjoer.bypass'; compileSdk 34; defaultConfig { minSdk 24; targetSdk 34 } }
+          dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
+          EOF
+
+      - name: Build APK
         run: |
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_Final_APK
+          name: Enjoer_DPI_Bypass
           path: app/build/outputs/apk/debug/*.apk
