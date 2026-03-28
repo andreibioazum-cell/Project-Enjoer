@@ -1,4 +1,4 @@
-name: Enjoer_DPI_Final_v1.4
+name: Enjoer_DPI_Final_v1.5
 on: [push, workflow_dispatch]
 
 jobs:
@@ -16,8 +16,11 @@ jobs:
 
       - name: Create Project
         run: |
-          # Полная очистка перед созданием
+          # ЖЕСТКАЯ ОЧИСТКА всех старых файлов ресурсов и кода
           rm -rf app/src/main/java/com/enjoer
+          rm -rf app/src/main/res/values/*
+          rm -rf app/src/main/res/layout/*
+          
           mkdir -p app/src/main/java/com/enjoer/bypass
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
@@ -48,35 +51,34 @@ jobs:
           </manifest>
           EOF
 
-          # 2. UI
+          # 2. Единственный файл ресурсов (без дубликатов)
+          cat <<'EOF' > app/src/main/res/values/styles.xml
+          <resources>
+              <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="android:windowFullscreen">true</item>
+              </style>
+          </resources>
+          EOF
+
           cat <<'EOF' > app/src/main/res/layout/activity_main.xml
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent"
               android:orientation="vertical" android:gravity="center" android:background="#0A0F14">
               <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                  android:text="ENJOER DPI BYPASS" android:textColor="#00BFFF" android:textSize="24sp" android:layout_marginBottom="30dp"/>
+                  android:text="ENJOER DPI BYPASS" android:textColor="#00BFFF" android:textSize="22sp" android:layout_marginBottom="30dp"/>
               <Button android:id="@+id/btn_start" android:layout_width="220dp" android:layout_height="70dp"
                   android:text="START BYPASS" android:backgroundTint="#101820" android:textColor="#00BFFF"/>
           </LinearLayout>
           EOF
 
-          # Исправленный файл ресурсов (только один!)
-          cat <<'EOF' > app/src/main/res/values/styles.xml
-          <resources>
-              <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
-                  <item name="android:windowFullscreen">true</item>
-                  <item name="android:windowContentOverlay">@null</item>
-              </style>
-          </resources>
-          EOF
-
-          # 3. Логика VPN
+          # 3. Логика VPN с TCP SPLIT (Фрагментация)
           cat <<'EOF' > app/src/main/java/com/enjoer/bypass/BypassVpnService.java
           package com.enjoer.bypass;
           import android.net.VpnService;
           import android.os.ParcelFileDescriptor;
           import java.io.*;
-          import java.nio.charset.StandardCharsets;
+          import java.net.*;
+          import java.nio.ByteBuffer;
 
           public class BypassVpnService extends VpnService {
               private Thread worker;
@@ -101,11 +103,12 @@ jobs:
                               while (!Thread.interrupted()) {
                                   int len = in.read(buffer);
                                   if (len > 0) {
-                                      String s = new String(buffer, 0, len, StandardCharsets.US_ASCII);
-                                      // Модификация HTTP заголовка (Case Juggling)
-                                      if (s.contains("Host: ")) {
-                                          s = s.replace("Host: ", "hOsT: ");
-                                          out.write(s.getBytes(StandardCharsets.US_ASCII));
+                                      // ТЕХНИКА TCP SPLIT:
+                                      // Если это начало запроса (например, TLS Client Hello или HTTP GET),
+                                      // мы отправляем первые 2 байта отдельно, чтобы DPI не считал заголовок.
+                                      if (len > 10 && buffer[0] == 0x16) { // Пример для TLS
+                                          out.write(buffer, 0, 2);
+                                          out.write(buffer, 2, len - 2);
                                       } else {
                                           out.write(buffer, 0, len);
                                       }
@@ -163,5 +166,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_Bypass_v1.4
+          name: Enjoer_Bypass_v1.5_Final
           path: app/build/outputs/apk/debug/*.apk
