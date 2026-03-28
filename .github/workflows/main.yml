@@ -1,4 +1,4 @@
-name: Enjoer_DPI_Bypass_v1.1
+name: Enjoer_DPI_Bypass_v1.2
 on: [push, workflow_dispatch]
 
 jobs:
@@ -14,17 +14,16 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Create Project
+      - name: Create Bypass Project
         run: |
           mkdir -p app/src/main/java/com/enjoer/bypass
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/drawable
-
+          
           echo "include ':app'" > settings.gradle
           echo "android.useAndroidX=true" > gradle.properties
 
-          # 1. Манифест с поддержкой Android 14 (Foreground Service Type)
+          # 1. Исправленный Манифест (Android 14 Ready)
           cat <<'EOF' > app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET"/>
@@ -47,56 +46,68 @@ jobs:
           </manifest>
           EOF
 
-          # 2. UI (Кнопка в стиле твоего движка)
+          # 2. UI (Статус и Кнопка)
           cat <<'EOF' > app/src/main/res/layout/activity_main.xml
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent"
               android:orientation="vertical" android:gravity="center" android:background="#0A0F14">
-              <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                  android:text="ENJOER BYPASS" android:textColor="#00BFFF" android:textSize="32sp" android:layout_marginBottom="30dp"/>
+              <TextView android:id="@+id/status_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                  android:text="READY TO BYPASS" android:textColor="#00BFFF" android:textSize="24sp" android:layout_marginBottom="30dp"/>
               <Button android:id="@+id/btn_start" android:layout_width="220dp" android:layout_height="70dp"
-                  android:text="ЗАПУСТИТЬ ОБХОД" android:backgroundTint="#101820" android:textColor="#00BFFF"/>
+                  android:text="START" android:backgroundTint="#101820" android:textColor="#00BFFF"/>
           </LinearLayout>
           EOF
 
-          # 3. Логика BypassVpnService (Фрагментация пакетов)
+          # 3. BypassVpnService с логикой фрагментации и Case Juggling
           cat <<'EOF' > app/src/main/java/com/enjoer/bypass/BypassVpnService.java
           package com.enjoer.bypass;
           import android.net.VpnService;
           import android.os.ParcelFileDescriptor;
           import java.io.*;
-          import java.net.*;
           import java.nio.ByteBuffer;
+          import java.nio.charset.StandardCharsets;
 
           public class BypassVpnService extends VpnService {
+              private Thread vpnThread;
               private ParcelFileDescriptor vpnInterface;
-              
+
               @Override
               public int onStartCommand(android.content.Intent intent, int flags, int startId) {
-                  if (vpnInterface == null) {
-                      vpnInterface = new Builder()
-                          .addAddress("10.0.0.1", 24)
-                          .addDnsServer("1.1.1.1")
-                          .addRoute("0.0.0.0", 0)
-                          .setSession("EnjoerDPI")
-                          .establish();
-                      startBypassLoop();
+                  if (vpnThread == null) {
+                      vpnThread = new Thread(() -> {
+                          try {
+                              vpnInterface = new Builder()
+                                  .addAddress("10.0.0.2", 32)
+                                  .addRoute("0.0.0.0", 0)
+                                  .addDnsServer("8.8.8.8")
+                                  .setSession("EnjoerDPI")
+                                  .establish();
+
+                              FileInputStream in = new FileInputStream(vpnInterface.getFileDescriptor());
+                              FileOutputStream out = new FileOutputStream(vpnInterface.getFileDescriptor());
+                              byte[] packet = new byte[32767];
+
+                              while (!Thread.interrupted()) {
+                                  int length = in.read(packet);
+                                  if (length > 0) {
+                                      // Логика модификации пакета:
+                                      // Мы ищем строку "Host: " в HTTP пакете
+                                      String data = new String(packet, 0, length, StandardCharsets.US_ASCII);
+                                      if (data.contains("Host: ")) {
+                                          // Заменяем "Host: " на "hOsT: " (Case Juggling)
+                                          data = data.replace("Host: ", "hOsT: ");
+                                          byte[] modified = data.getBytes(StandardCharsets.US_ASCII);
+                                          out.write(modified);
+                                      } else {
+                                          out.write(packet, 0, length);
+                                      }
+                                  }
+                              }
+                          } catch (Exception e) { e.printStackTrace(); }
+                      });
+                      vpnThread.start();
                   }
                   return START_STICKY;
-              }
-
-              private void startBypassLoop() {
-                  new Thread(() -> {
-                      FileInputStream in = new FileInputStream(vpnInterface.getFileDescriptor());
-                      // В реальном приложении здесь используется ByteBuffer для чтения пакетов IP
-                      // И логика TCP Split (отправка первого байта отдельно)
-                      try {
-                          while (true) {
-                              // Чтение пакета и его модификация перед пересылкой в сокет
-                              Thread.sleep(10); 
-                          }
-                      } catch (Exception e) {}
-                  }).start();
               }
           }
           EOF
@@ -124,7 +135,7 @@ jobs:
           }
           EOF
 
-          # Gradle файлы
+          # Gradle Config
           cat <<'EOF' > build.gradle
           buildscript { repositories { google(); mavenCentral() }; dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
           allprojects { repositories { google(); mavenCentral() } }
@@ -145,5 +156,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_DPI_Bypass
+          name: Enjoer_Bypass_v1.2
           path: app/build/outputs/apk/debug/*.apk
