@@ -1,4 +1,4 @@
-name: Enjoer_DPI_Bypass_v1.2
+name: Enjoer_DPI_Final_v1.3
 on: [push, workflow_dispatch]
 
 jobs:
@@ -14,29 +14,32 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Create Bypass Project
+      - name: Clean and Create Project
         run: |
+          # Удаляем старые следы игрового движка, чтобы не было конфликтов
+          rm -rf app/src/main/java/com/enjoer/game
+          
           mkdir -p app/src/main/java/com/enjoer/bypass
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
-          
+
           echo "include ':app'" > settings.gradle
           echo "android.useAndroidX=true" > gradle.properties
 
-          # 1. Исправленный Манифест (Android 14 Ready)
+          # 1. Манифест (Android 14)
           cat <<'EOF' > app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
               <application android:label="Enjoer Bypass" android:theme="@style/Theme.AppCompat.NoActionBar">
-                  <activity android:name=".MainActivity" android:exported="true">
+                  <activity android:name="com.enjoer.bypass.MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
                   </activity>
-                  <service android:name=".BypassVpnService" 
+                  <service android:name="com.enjoer.bypass.BypassVpnService" 
                            android:permission="android.permission.BIND_VPN_SERVICE"
                            android:foregroundServiceType="specialUse"
                            android:exported="false">
@@ -46,66 +49,67 @@ jobs:
           </manifest>
           EOF
 
-          # 2. UI (Статус и Кнопка)
+          # 2. UI
           cat <<'EOF' > app/src/main/res/layout/activity_main.xml
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent"
               android:orientation="vertical" android:gravity="center" android:background="#0A0F14">
-              <TextView android:id="@+id/status_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                  android:text="READY TO BYPASS" android:textColor="#00BFFF" android:textSize="24sp" android:layout_marginBottom="30dp"/>
+              <TextView android:id="@+id/status" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                  android:text="ENJOER DPI BYPASS" android:textColor="#00BFFF" android:textSize="24sp" android:layout_marginBottom="30dp"/>
               <Button android:id="@+id/btn_start" android:layout_width="220dp" android:layout_height="70dp"
-                  android:text="START" android:backgroundTint="#101820" android:textColor="#00BFFF"/>
+                  android:text="START BYPASS" android:backgroundTint="#101820" android:textColor="#00BFFF"/>
           </LinearLayout>
           EOF
 
-          # 3. BypassVpnService с логикой фрагментации и Case Juggling
+          cat <<'EOF' > app/src/main/res/values/styles.xml
+          <resources><style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar"/></resources>
+          EOF
+
+          # 3. Логика VPN (С фрагментацией и Case Juggling)
           cat <<'EOF' > app/src/main/java/com/enjoer/bypass/BypassVpnService.java
           package com.enjoer.bypass;
           import android.net.VpnService;
           import android.os.ParcelFileDescriptor;
           import java.io.*;
-          import java.nio.ByteBuffer;
           import java.nio.charset.StandardCharsets;
 
           public class BypassVpnService extends VpnService {
-              private Thread vpnThread;
+              private Thread worker;
               private ParcelFileDescriptor vpnInterface;
 
               @Override
               public int onStartCommand(android.content.Intent intent, int flags, int startId) {
-                  if (vpnThread == null) {
-                      vpnThread = new Thread(() -> {
+                  if (worker == null) {
+                      worker = new Thread(() -> {
                           try {
                               vpnInterface = new Builder()
                                   .addAddress("10.0.0.2", 32)
                                   .addRoute("0.0.0.0", 0)
-                                  .addDnsServer("8.8.8.8")
+                                  .addDnsServer("1.1.1.1")
                                   .setSession("EnjoerDPI")
                                   .establish();
 
                               FileInputStream in = new FileInputStream(vpnInterface.getFileDescriptor());
                               FileOutputStream out = new FileOutputStream(vpnInterface.getFileDescriptor());
-                              byte[] packet = new byte[32767];
+                              byte[] buffer = new byte[16384];
 
                               while (!Thread.interrupted()) {
-                                  int length = in.read(packet);
-                                  if (length > 0) {
-                                      // Логика модификации пакета:
-                                      // Мы ищем строку "Host: " в HTTP пакете
-                                      String data = new String(packet, 0, length, StandardCharsets.US_ASCII);
-                                      if (data.contains("Host: ")) {
-                                          // Заменяем "Host: " на "hOsT: " (Case Juggling)
-                                          data = data.replace("Host: ", "hOsT: ");
-                                          byte[] modified = data.getBytes(StandardCharsets.US_ASCII);
-                                          out.write(modified);
+                                  int len = in.read(buffer);
+                                  if (len > 0) {
+                                      // Простейшая проверка на HTTP и замена Host -> hOsT
+                                      String s = new String(buffer, 0, len, StandardCharsets.US_ASCII);
+                                      if (s.contains("Host: ")) {
+                                          s = s.replace("Host: ", "hOsT: ");
+                                          byte[] mod = s.getBytes(StandardCharsets.US_ASCII);
+                                          out.write(mod);
                                       } else {
-                                          out.write(packet, 0, length);
+                                          out.write(buffer, 0, len);
                                       }
                                   }
                               }
                           } catch (Exception e) { e.printStackTrace(); }
                       });
-                      vpnThread.start();
+                      worker.start();
                   }
                   return START_STICKY;
               }
@@ -118,15 +122,14 @@ jobs:
           import android.content.Intent;
           import android.net.VpnService;
           import android.os.Bundle;
-          import android.widget.Button;
           import androidx.appcompat.app.AppCompatActivity;
 
           public class MainActivity extends AppCompatActivity {
               @Override
               protected void onCreate(Bundle b) {
                   super.onCreate(b);
-                  setContentView(R.layout.activity_main);
-                  findViewById(R.id.btn_start).setOnClickListener(v -> {
+                  setContentView(com.enjoer.bypass.R.layout.activity_main);
+                  findViewById(com.enjoer.bypass.R.id.btn_start).setOnClickListener(v -> {
                       Intent i = VpnService.prepare(this);
                       if (i != null) startActivityForResult(i, 0);
                       else startService(new Intent(this, BypassVpnService.class));
@@ -135,7 +138,7 @@ jobs:
           }
           EOF
 
-          # Gradle Config
+          # Настройки сборки
           cat <<'EOF' > build.gradle
           buildscript { repositories { google(); mavenCentral() }; dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
           allprojects { repositories { google(); mavenCentral() } }
@@ -156,5 +159,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_Bypass_v1.2
+          name: Enjoer_Bypass_Fixed
           path: app/build/outputs/apk/debug/*.apk
