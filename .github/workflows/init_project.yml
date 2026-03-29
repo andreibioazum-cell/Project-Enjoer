@@ -1,5 +1,7 @@
-name: STEP 1 - Create Source
-on: workflow_dispatch
+name: STEP 1 - Initialize Source
+on: 
+  push:      # Запуск при любом пуше в репозиторий
+  workflow_dispatch: # Оставляем кнопку на всякий случай
 
 jobs:
   init:
@@ -9,14 +11,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Generate Code
+      - name: Generate Source Files
         run: |
-          mkdir -p src_files/java src_files/layout src_files/values src_files/drawable
+          mkdir -p src_files/java src_files/layout
           
-          # Рендерер со звездами и логикой движка
+          # Код движка
           cat <<'EOF' > src_files/java/GameRenderer.java
           package com.enjoer.game;
           import android.opengl.*;
@@ -48,8 +48,7 @@ jobs:
                   update(); GLES30.glClearColor(0,0,0.01f,1); GLES30.glClear(16640);
                   float vx=(float)(Math.sin(Math.toRadians(rY))*Math.cos(Math.toRadians(rX))), vy=(float)Math.sin(Math.toRadians(rX)), vz=(float)(-Math.cos(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
                   Matrix.setLookAtM(view,0,pX,pY,pZ,pX+vx,pY+vy,pZ+vz,0,1,0);
-                  GLES30.glUseProgram(prog);
-                  int uMVP=GLES30.glGetUniformLocation(prog,"uMVP"), uC=GLES30.glGetUniformLocation(prog,"uC");
+                  GLES30.glUseProgram(prog); int uMVP=GLES30.glGetUniformLocation(prog,"uMVP"), uC=GLES30.glGetUniformLocation(prog,"uC");
                   GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,vBuf); GLES30.glEnableVertexAttribArray(0);
                   for(Block b : blocks){
                       Matrix.setIdentityM(model,0); Matrix.translateM(model,0,b.x,b.y,b.z); Matrix.scaleM(model,0,b.sx,b.sy,b.sz);
@@ -69,62 +68,20 @@ jobs:
           class Block { public float x,y,z,sx,sy,sz,r,g,b; Block(float x,float y,float z,float sx,float sy,float sz,float r,float g,float b){this.x=x;this.y=y;this.z=z;this.sx=sx;this.sy=sy;this.sz=sz;this.r=r;this.g=g;this.b=b;} }
           EOF
 
-          # Главное меню (Черный фон)
           cat <<'EOF' > src_files/layout/activity_main.xml
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000">
               <android.opengl.GLSurfaceView android:id="@+id/gl_view" android:layout_width="match_parent" android:layout_height="match_parent"/>
-              <RelativeLayout android:id="@+id/game_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-                  <View android:id="@+id/look_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
-                  <FrameLayout android:id="@+id/joy_base" android:layout_width="140dp" android:layout_height="140dp" android:layout_alignParentBottom="true" android:layout_margin="30dp" android:background="@drawable/joy_base"/>
-              </RelativeLayout>
-              <RelativeLayout android:id="@+id/engine_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-                  <Button android:id="@+id/btn_place" android:layout_width="120dp" android:layout_height="60dp" android:text="ADD BLOCK" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_margin="20dp"/>
-              </RelativeLayout>
               <LinearLayout android:id="@+id/menu_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:background="#02050A">
-                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ENJOER SPACE" android:textSize="35sp" android:textColor="#00BFFF" android:layout_marginBottom="40dp"/>
-                  <Button android:id="@+id/btn_play" android:layout_width="220dp" android:layout_height="60dp" android:text="START" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginBottom="15dp"/>
-                  <Button android:id="@+id/btn_engine" android:layout_width="220dp" android:layout_height="60dp" android:text="EDITOR" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ENJOER AUTO-V6" android:textSize="30sp" android:textColor="#00BFFF"/>
+                  <Button android:id="@+id/btn_play" android:layout_width="200dp" android:layout_height="60dp" android:text="START" android:background="@drawable/btn_blue" android:textColor="#FFF" android:layout_marginTop="20dp"/>
               </LinearLayout>
           </FrameLayout>
           EOF
-          
-          # MainActivity
-          cat <<'EOF' > src_files/java/MainActivity.java
-          package com.enjoer.game;
-          import android.os.Bundle;
-          import android.view.*;
-          import android.widget.*;
-          import androidx.appcompat.app.AppCompatActivity;
-          public class MainActivity extends AppCompatActivity {
-              private GameRenderer ren;
-              private View menuUI, gameUI, engineUI;
-              private float lx, ly;
-              @Override protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  setContentView(R.layout.activity_main);
-                  android.opengl.GLSurfaceView gv=findViewById(R.id.gl_view);
-                  gv.setEGLContextClientVersion(3); ren=new GameRenderer(); gv.setRenderer(ren);
-                  menuUI=findViewById(R.id.menu_ui); gameUI=findViewById(R.id.game_ui); engineUI=findViewById(R.id.engine_ui);
-                  findViewById(R.id.btn_play).setOnClickListener(v->{ menuUI.setVisibility(View.GONE); gameUI.setVisibility(View.VISIBLE); ren.isEngineMode=false; });
-                  findViewById(R.id.btn_engine).setOnClickListener(v->{ menuUI.setVisibility(View.GONE); engineUI.setVisibility(View.VISIBLE); ren.isEngineMode=true; });
-                  findViewById(R.id.btn_place).setOnClickListener(v->ren.place());
-                  findViewById(R.id.joy_base).setOnTouchListener((v,e)->{
-                      if(e.getAction()==MotionEvent.ACTION_MOVE){ ren.jX=(e.getX()-v.getWidth()/2)/60f; ren.jY=(e.getY()-v.getHeight()/2)/60f; }
-                      else { ren.jX=0; ren.jY=0; } return true;
-                  });
-                  findViewById(R.id.look_zone).setOnTouchListener((v,e)->{
-                      if(e.getAction()==MotionEvent.ACTION_DOWN){ lx=e.getX(); ly=e.getY(); }
-                      if(e.getAction()==MotionEvent.ACTION_MOVE){ ren.rY+=(e.getX()-lx)*0.3f; ren.rX-=(e.getY()-ly)*0.3f; lx=e.getX(); ly=e.getY(); }
-                      return true;
-                  });
-              }
-          }
-          EOF
 
-      - name: Push to Repo
+      - name: Push Changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "Force Init Source with Engine" || echo "No changes"
-          git push origin main
+          git add src_files/
+          git commit -m "Automatic Source Update" || echo "No changes"
+          git push
