@@ -1,49 +1,73 @@
 name: STEP 2 - Auto Build APK
+
 on:
   workflow_run:
-    workflows: ["STEP 1 - Initialize Source"]
+    workflows: ["STEP 1 - Initialize Source"] # ПРОВЕРЬ: это имя должно быть в Step 1
     types:
       - completed
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Запускать только если STEP 1 прошел успешно
+    # Запуск только если Инициализатор (Step 1) завершился успешно
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: JDK 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
-        with: { java-version: '17', distribution: 'temurin' }
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Assemble
+      - name: Prepare Android Project
         run: |
-          mkdir -p app/src/main/java/com/enjoer/game app/src/main/res/layout app/src/main/res/values app/src/main/res/drawable
+          # 1. Создаем структуру папок
+          mkdir -p app/src/main/java/com/enjoer/game
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+
+          # 2. Копируем исходники из хранилища в проект
+          # Если папки src_files нет, билд остановится здесь
           cp src_files/java/*.java app/src/main/java/com/enjoer/game/
           cp src_files/layout/*.xml app/src/main/res/layout/
+
+          # 3. Генерируем служебные файлы (Resources, Manifest, Gradle)
           echo "<resources><style name='AppTheme' parent='Theme.AppCompat.Light.NoActionBar'><item name='android:windowFullscreen'>true</item></style></resources>" > app/src/main/res/values/themes.xml
-          echo "<shape xmlns:android='http://schemas.android.com/apk/res/android'><solid android:color='#101820'/><stroke android:width='2dp' android:color='#00BFFF'/></shape>" > app/src/main/res/drawable/btn_blue.xml
+          echo "<shape xmlns:android='http://schemas.android.com/apk/res/android'><corners android:radius='10dp'/><solid android:color='#101820'/><stroke android:width='2dp' android:color='#00BFFF'/></shape>" > app/src/main/res/drawable/btn_blue.xml
+          echo "<shape xmlns:android='http://schemas.android.com/apk/res/android' android:shape='oval'><solid android:color='#CC101820'/><stroke android:width='2dp' android:color='#00BFFF'/></shape>" > app/src/main/res/drawable/joy_base.xml
+          
           cat <<'EOF' > app/src/main/AndroidManifest.xml
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Enjoer Auto" android:theme="@style/AppTheme">
-          <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:screenOrientation="landscape">
-          <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-          </activity></application></manifest>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application android:label="Enjoer Auto" android:theme="@style/AppTheme">
+                  <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:screenOrientation="landscape">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
           EOF
+
           echo "include ':app'" > settings.gradle
           echo "android.useAndroidX=true" > gradle.properties
+          
           echo "plugins { id 'com.android.application' } android { namespace 'com.enjoer.game'; compileSdk 34; defaultConfig { applicationId 'com.enjoer.game'; minSdk 24; targetSdk 34 } } dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }" > app/build.gradle
+          
           echo "buildscript { repositories { google(); mavenCentral() }; dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } } allprojects { repositories { google(); mavenCentral() } }" > build.gradle
 
-      - name: Build
+      - name: Build with Gradle
         run: |
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Final APK
+      - name: Upload Result APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_Fully_Automatic
+          name: Enjoer_Final_Build
           path: app/build/outputs/apk/debug/app-debug.apk
