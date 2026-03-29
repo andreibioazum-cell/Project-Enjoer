@@ -1,11 +1,11 @@
 name: STEP 1 - Initialize Engine Source
-on: workflow_dispatch # Запускается только кнопкой
+on: workflow_dispatch
 
 jobs:
   init-source:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Разрешаем запись в репозиторий
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -13,8 +13,9 @@ jobs:
       - name: Create Folders
         run: mkdir -p src_files/java src_files/layout src_files/values src_files/drawable
 
-      - name: Write Game Logic (Engine & Stars)
+      - name: Write Logic
         run: |
+          # Java Renderer с движком и звездами
           cat <<'EOF' > src_files/java/GameRenderer.java
           package com.enjoer.game;
           import android.opengl.*;
@@ -22,7 +23,6 @@ jobs:
           import java.util.concurrent.CopyOnWriteArrayList;
           import javax.microedition.khronos.egl.EGLConfig;
           import javax.microedition.khronos.opengles.GL10;
-
           public class GameRenderer implements GLSurfaceView.Renderer {
               private final float[] proj=new float[16], view=new float[16], model=new float[16];
               public float pX=0, pY=6, pZ=15, rY=0, rX=0, jX=0, jY=0, vY=0;
@@ -30,74 +30,59 @@ jobs:
               private int prog;
               private FloatBuffer vBuf;
               public CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
-              public int selectedIndex = -1;
-
-              @Override
-              public void onSurfaceCreated(GL10 gl, EGLConfig cfg) {
+              @Override public void onSurfaceCreated(GL10 gl, EGLConfig cfg) {
                   GLES30.glEnable(GLES30.GL_DEPTH_TEST);
                   String vs="#version 300 es\nlayout(location=0)in vec4 aP;uniform mat4 uMVP;void main(){gl_Position=uMVP*aP;}";
-                  // Шейдер со звездами
-                  String fs="#version 300 es\nprecision highp float;uniform vec4 uC;uniform float uSel;out vec4 fC;"+
-                      "void main(){ vec3 col=uC.rgb; if(uSel>0.5) col+=vec3(0.0,0.5,1.0); fC=vec4(col,uC.a); }";
+                  String fs="#version 300 es\nprecision highp float;uniform vec4 uC;out vec4 fC;void main(){fC=uC;}";
                   prog=GLES30.glCreateProgram();
                   int vsh=GLES30.glCreateShader(35633); GLES30.glShaderSource(vsh,vs); GLES30.glCompileShader(vsh);
                   int fsh=GLES30.glCreateShader(35632); GLES30.glShaderSource(fsh,fs); GLES30.glCompileShader(fsh);
                   GLES30.glAttachShader(prog,vsh); GLES30.glAttachShader(prog,fsh); GLES30.glLinkProgram(prog);
                   float[] vc={-.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f, -.5f,.5f,-.5f, -.5f,.5f,.5f, .5f,.5f,-.5f, .5f,.5f,.5f, -.5f,-.5f,-.5f, -.5f,-.5f,.5f, .5f,-.5f,-.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, -.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f, .5f,.5f,.5f, .5f,-.5f,.5f};
                   vBuf=ByteBuffer.allocateDirect(vc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(vc); vBuf.position(0);
-                  blocks.add(new Block(0,1,-10, 15,2,15, 0.3f,0.3f,0.4f));
+                  blocks.add(new Block(0,1,-5, 20,2,20, 0.2f,0.2f,0.3f));
               }
-
               @Override public void onSurfaceChanged(GL10 gl,int w,int h){ GLES30.glViewport(0,0,w,h); Matrix.perspectiveM(proj,0,60,(float)w/h,0.1f,500f); }
               @Override public void onDrawFrame(GL10 gl) {
-                  update();
-                  GLES30.glClearColor(0,0,0.01f,1); GLES30.glClear(16640);
-                  float vx=(float)(Math.sin(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
-                  float vy=(float)Math.sin(Math.toRadians(rX));
-                  float vz=(float)(-Math.cos(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
+                  update(); GLES30.glClearColor(0,0,0.01f,1); GLES30.glClear(16640);
+                  float vx=(float)(Math.sin(Math.toRadians(rY))*Math.cos(Math.toRadians(rX))), vy=(float)Math.sin(Math.toRadians(rX)), vz=(float)(-Math.cos(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
                   Matrix.setLookAtM(view,0,pX,pY,pZ,pX+vx,pY+vy,pZ+vz,0,1,0);
-                  GLES30.glUseProgram(prog);
-                  int uMVP=GLES30.glGetUniformLocation(prog,"uMVP"), uC=GLES30.glGetUniformLocation(prog,"uC"), uSel=GLES30.glGetUniformLocation(prog,"uSel");
+                  GLES30.glUseProgram(prog); int uMVP=GLES30.glGetUniformLocation(prog,"uMVP"), uC=GLES30.glGetUniformLocation(prog,"uC");
                   GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,vBuf); GLES30.glEnableVertexAttribArray(0);
-                  for(int i=0;i<blocks.size();i++){
-                      Block b=blocks.get(i); Matrix.setIdentityM(model,0); Matrix.translateM(model,0,b.x,b.y,b.z); Matrix.scaleM(model,0,b.sx,b.sy,b.sz);
+                  for(Block b : blocks){
+                      Matrix.setIdentityM(model,0); Matrix.translateM(model,0,b.x,b.y,b.z); Matrix.scaleM(model,0,b.sx,b.sy,b.sz);
                       float[] mvp=new float[16]; Matrix.multiplyMM(mvp,0,proj,0,view,0); Matrix.multiplyMM(mvp,0,mvp,0,model,0);
-                      GLES30.glUniformMatrix4fv(uMVP,1,false,mvp,0); GLES30.glUniform1f(uSel,(i==selectedIndex)?1f:0f); GLES30.glUniform4f(uC,b.r,b.g,b.b,1);
+                      GLES30.glUniformMatrix4fv(uMVP,1,false,mvp,0); GLES30.glUniform4f(uC,b.r,b.g,b.b,1);
                       for(int f=0;f<6;f++) GLES30.glDrawArrays(5,f*4,4);
                   }
               }
               private void update(){
-                  float s=0.35f, rad=(float)Math.toRadians(rY);
+                  float s=0.3f, rad=(float)Math.toRadians(rY);
                   pX+=((float)Math.sin(rad)*-jY+(float)Math.cos(rad)*jX)*s;
                   pZ+=((float)-Math.cos(rad)*-jY+(float)Math.sin(rad)*jX)*s;
-                  if(!isEngineMode){ vY-=0.02f; pY+=vY; if(pY<4.2f){pY=4.2f; vY=0;} }
+                  if(!isEngineMode){vY-=0.02f; pY+=vY; if(pY<4.2f){pY=4.2f; vY=0;}}
               }
-              public void place(){ blocks.add(new Block(pX,pY,pZ-5, 2,2,2, 0.2f,0.6f,1.0f)); }
+              public void place(){ blocks.add(new Block(pX,pY,pZ-5, 2,2,2, 0,0.6f,1)); }
           }
-          class Block {
-              public float x,y,z,sx,sy,sz,r,g,b;
-              Block(float x,float y,float z,float sx,float sy,float sz,float r,float g,float b){this.x=x;this.y=y;this.z=z;this.sx=sx;this.sy=sy;this.sz=sz;this.r=r;this.g=g;this.b=b;}
-          }
+          class Block { public float x,y,z,sx,sy,sz,r,g,b; Block(float x,float y,float z,float sx,float sy,float sz,float r,float g,float b){this.x=x;this.y=y;this.z=z;this.sx=sx;this.sy=sy;this.sz=sz;this.r=r;this.g=g;this.b=b;} }
           EOF
 
+          # Остальные файлы (MainActivity и Layout)
           cat <<'EOF' > src_files/java/MainActivity.java
           package com.enjoer.game;
           import android.os.Bundle;
           import android.view.*;
           import android.widget.*;
           import androidx.appcompat.app.AppCompatActivity;
-
           public class MainActivity extends AppCompatActivity {
               private GameRenderer ren;
               private View menuUI, gameUI, engineUI;
               private float lx, ly;
-
               @Override protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   setContentView(R.layout.activity_main);
                   android.opengl.GLSurfaceView gv=findViewById(R.id.gl_view);
-                  gv.setEGLContextClientVersion(3);
-                  ren=new GameRenderer(); gv.setRenderer(ren);
+                  gv.setEGLContextClientVersion(3); ren=new GameRenderer(); gv.setRenderer(ren);
                   menuUI=findViewById(R.id.menu_ui); gameUI=findViewById(R.id.game_ui); engineUI=findViewById(R.id.engine_ui);
                   findViewById(R.id.btn_play).setOnClickListener(v->{ menuUI.setVisibility(View.GONE); gameUI.setVisibility(View.VISIBLE); ren.isEngineMode=false; });
                   findViewById(R.id.btn_engine).setOnClickListener(v->{ menuUI.setVisibility(View.GONE); engineUI.setVisibility(View.VISIBLE); ren.isEngineMode=true; });
@@ -115,8 +100,6 @@ jobs:
           }
           EOF
 
-      - name: Write Layout (Black Menu)
-        run: |
           cat <<'EOF' > src_files/layout/activity_main.xml
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000">
               <android.opengl.GLSurfaceView android:id="@+id/gl_view" android:layout_width="match_parent" android:layout_height="match_parent"/>
@@ -125,7 +108,7 @@ jobs:
                   <FrameLayout android:id="@+id/joy_base" android:layout_width="140dp" android:layout_height="140dp" android:layout_alignParentBottom="true" android:layout_margin="30dp" android:background="@drawable/joy_base"/>
               </RelativeLayout>
               <RelativeLayout android:id="@+id/engine_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-                  <Button android:id="@+id/btn_place" android:layout_width="120dp" android:height="60dp" android:text="ADD BLOCK" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                  <Button android:id="@+id/btn_place" android:layout_width="120dp" android:layout_height="60dp" android:text="ADD BLOCK" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_margin="20dp"/>
               </RelativeLayout>
               <LinearLayout android:id="@+id/menu_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:background="#02050A">
                   <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ENJOER ENGINE" android:textSize="35sp" android:textColor="#00BFFF" android:layout_marginBottom="40dp"/>
@@ -135,10 +118,10 @@ jobs:
           </FrameLayout>
           EOF
 
-      - name: Commit and Push
+      - name: Push Files
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add src_files/
-          git commit -m "Initialize Enjoer 6.2 Source" || echo "No changes"
+          git commit -m "Initialize Engine Source" || echo "No changes"
           git push origin main
