@@ -1,9 +1,13 @@
 name: STEP 1 - Split Enjoer to Files
-on: workflow_dispatch
+on: 
+  push: # Запустится сам при сохранении файла
+  workflow_dispatch: # И кнопка тоже останется
 
 jobs:
   unpack:
     runs-on: ubuntu-latest
+    permissions: # Важно для записи файлов в репозиторий
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -13,8 +17,6 @@ jobs:
 
       - name: Write Java Files
         run: |
-          # Здесь мы создаем файлы. Я использую 'EOF', чтобы символы внутри кода не сломали скрипт.
-          
           cat <<'EOF' > src_files/java/Block.java
           package com.enjoer.game;
           public class Block {
@@ -217,12 +219,8 @@ jobs:
           public class MainActivity extends AppCompatActivity {
               private GameRenderer ren;
               private float lx,ly;
-              private Button[] shapeBtn,sizeBtn,distBtn;
-              private View[] colorBtn;
-              private View axisPanel,menuUI,gameUI,engineUI,playtestUI;
-              private ActivityResultLauncher<Intent> saveLauncher,loadLauncher;
+              private View menuUI,gameUI,engineUI;
               private Handler handler = new Handler(Looper.getMainLooper());
-              private int pendingMode = 0;
 
               @SuppressLint("ClickableViewAccessibility")
               @Override protected void onCreate(Bundle savedInstanceState) {
@@ -237,40 +235,14 @@ jobs:
                   menuUI=findViewById(R.id.menu_ui);
                   gameUI=findViewById(R.id.game_ui);
                   engineUI=findViewById(R.id.engine_ui);
-                  playtestUI=findViewById(R.id.playtest_ui);
-                  axisPanel=findViewById(R.id.axis_panel);
-
-                  saveLauncher=registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),res->{
-                      if(res.getResultCode()==RESULT_OK&&res.getData()!=null){
-                          try{OutputStream out=getContentResolver().openOutputStream(res.getData().getData());
-                          JSONArray arr=new JSONArray();for(Block b:ren.blocks){JSONObject o=new JSONObject();o.put("x",b.x);o.put("y",b.y);o.put("z",b.z);o.put("sx",b.sx);o.put("sy",b.sy);o.put("sz",b.sz);o.put("r",b.r);o.put("g",b.g);o.put("b",b.b);arr.put(o);}
-                          JSONObject root=new JSONObject();root.put("blocks",arr);out.write(root.toString().getBytes());out.close();Toast.makeText(this,"Exported!",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,"Error",Toast.LENGTH_SHORT).show();}}});
-
-                  loadLauncher=registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),res->{
-                      if(res.getResultCode()==RESULT_OK&&res.getData()!=null){
-                          try{InputStream in=getContentResolver().openInputStream(res.getData().getData());BufferedReader rd=new BufferedReader(new InputStreamReader(in));StringBuilder sb=new StringBuilder();String ln;while((ln=rd.readLine())!=null)sb.append(ln);in.close();
-                          JSONObject root=new JSONObject(sb.toString());JSONArray arr=root.getJSONArray("blocks");ren.blocks.clear();
-                          for(int i=0;i<arr.length();i++){JSONObject o=arr.getJSONObject(i);ren.blocks.add(new Block((float)o.getDouble("x"),(float)o.getDouble("y"),(float)o.getDouble("z"),(float)o.getDouble("sx"),(float)o.getDouble("sy"),(float)o.getDouble("sz"),(float)o.getDouble("r"),(float)o.getDouble("g"),(float)o.getDouble("b")));}
-                          pendingMode = 1;
-                          ren.isEngineMode=false;ren.isPlayingLevel=false;resetP();
-                          menuUI.setVisibility(View.GONE);gameUI.setVisibility(View.VISIBLE);
-                          setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-                          Toast.makeText(this,"Loaded!",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,"Invalid file",Toast.LENGTH_SHORT).show();}}});
 
                   findViewById(R.id.btn_play).setOnClickListener(v->{
-                      pendingMode = 1; ren.isEngineMode=false; ren.isPlayingLevel=false; ren.loadBuiltInLevel(); resetP(); ren.selectedIndex=-1;
+                      ren.isEngineMode=false; ren.loadBuiltInLevel(); ren.pX=0;ren.pY=7;ren.pZ=15;
                       menuUI.setVisibility(View.GONE); gameUI.setVisibility(View.VISIBLE);
                       handler.postDelayed(() -> setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE), 50);
                   });
                   
-                  findViewById(R.id.btn_engine).setOnClickListener(v->{
-                      pendingMode = 2; ren.isEngineMode=true; ren.isPlayingLevel=false; ren.blocks.clear(); ren.pX=0;ren.pY=20;ren.pZ=35; ren.selectedIndex=-1;
-                      menuUI.setVisibility(View.GONE); engineUI.setVisibility(View.VISIBLE);
-                      handler.postDelayed(() -> setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE), 50);
-                  });
-                  
-                  findViewById(R.id.btn_menu).setOnClickListener(v->{ pendingMode = 0; menuUI.setVisibility(View.VISIBLE); gameUI.setVisibility(View.GONE); setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT); });
-                  findViewById(R.id.btn_engine_menu).setOnClickListener(v->{ pendingMode = 0; menuUI.setVisibility(View.VISIBLE); engineUI.setVisibility(View.GONE); setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT); });
+                  findViewById(R.id.btn_menu).setOnClickListener(v->{ menuUI.setVisibility(View.VISIBLE); gameUI.setVisibility(View.GONE); setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT); });
 
                   setupJoy(findViewById(R.id.joy_base),findViewById(R.id.joy_stick));
                   setupLook(findViewById(R.id.look_zone));
@@ -281,7 +253,6 @@ jobs:
                   });
               }
 
-              private void resetP(){ren.pX=0;ren.pY=7;ren.pZ=15;ren.vY=0;}
               private void setupJoy(View base,View stick){base.setOnTouchListener((v,e)->{float cx=v.getWidth()/2f,cy=v.getHeight()/2f;if(e.getAction()==MotionEvent.ACTION_MOVE||e.getAction()==MotionEvent.ACTION_DOWN){float dx=e.getX()-cx,dy=e.getY()-cy,d=(float)Math.sqrt(dx*dx+dy*dy),lim=cx-stick.getWidth()/2f;if(d>lim){dx*=lim/d;dy*=lim/d;}stick.setTranslationX(dx);stick.setTranslationY(dy);ren.jX=dx/lim;ren.jY=dy/lim;}else if(e.getAction()==MotionEvent.ACTION_UP){stick.setTranslationX(0);stick.setTranslationY(0);ren.jX=0;ren.jY=0;}return true;});}
               private void setupLook(View z){z.setOnTouchListener((v,e)->{if(e.getAction()==MotionEvent.ACTION_DOWN){lx=e.getX();ly=e.getY();}else if(e.getAction()==MotionEvent.ACTION_MOVE){ren.rY+=(e.getX()-lx)*.25f;ren.rX=Math.max(-85,Math.min(85,ren.rX-(e.getY()-ly)*.25f));lx=e.getX();ly=e.getY();}return true;});}
           }
@@ -303,7 +274,6 @@ jobs:
               </RelativeLayout>
               <LinearLayout android:id="@+id/menu_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center">
                   <Button android:id="@+id/btn_play" android:layout_width="200dp" android:layout_height="60dp" android:text="PLAY" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
-                  <Button android:id="@+id/btn_engine" android:layout_width="200dp" android:layout_height="60dp" android:text="EDITOR" android:layout_marginTop="20dp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
               </LinearLayout>
           </FrameLayout>
           EOF
