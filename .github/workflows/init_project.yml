@@ -16,16 +16,15 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build Pure Project
+      - name: Build High-End Project
         run: |
-          # 1. Сносим всё и создаем чистый скелет
           rm -rf app build.gradle settings.gradle gradle.properties
           mkdir -p app/src/main/java/com/enjoer/game
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
 
-          # 2. РЕНДЕРЕР (Голубое небо, движок, без звезд)
+          # 1. РЕНДЕРЕР С КРУТОЙ ГРАФИКОЙ
           cat <<'EOF' > app/src/main/java/com/enjoer/game/GameRenderer.java
           package com.enjoer.game;
           import android.opengl.*;
@@ -36,58 +35,82 @@ jobs:
           public class GameRenderer implements GLSurfaceView.Renderer {
               private int prg; private FloatBuffer b;
               private float[] proj=new float[16], view=new float[16], model=new float[16];
-              public float pX=0, pY=5, pZ=10, rY=0, jX=0, jY=0, vY=0;
+              public float pX=0, pY=5, pZ=15, rY=0, jX=0, jY=0, vY=0;
 
               public boolean isOnGround() { return pY <= 4.21f; }
 
               @Override public void onSurfaceCreated(GL10 gl, EGLConfig cfg) {
                   GLES30.glEnable(GLES30.GL_DEPTH_TEST);
-                  GLES30.glClearColor(0.5f, 0.8f, 1.0f, 1.0f); // Голубое небо
                   
-                  String vs="#version 300 es\nlayout(location=0)in vec4 aP;uniform mat4 uM;void main(){gl_Position=uM*aP;}";
-                  String fs="#version 300 es\nprecision highp float;uniform vec4 uC;out vec4 fC;void main(){fC=uC;}";
+                  // ШЕЙДЕРЫ С ОСВЕЩЕНИЕМ И ГРАДИЕНТОМ НЕБА
+                  String vs="#version 300 es\n" +
+                            "layout(location=0)in vec4 aP; layout(location=1)in vec3 aN;\n" +
+                            "uniform mat4 uM; out vec3 vN; out vec3 vP;\n" +
+                            "void main(){vP=aP.xyz; vN=aN; gl_Position=uM*aP;}";
+                            
+                  String fs="#version 300 es\n" +
+                            "precision highp float; in vec3 vN; in vec3 vP; uniform vec4 uC; uniform vec3 sun; out vec4 fC;\n" +
+                            "void main(){\n" +
+                            "  if(length(vP)>90.0){ \n" + // Рендерим небо
+                            "    float h=normalize(vP).y*0.5+0.5;\n" +
+                            "    fC=mix(vec4(0.4,0.7,1.0,1.0), vec4(0.0,0.3,0.7,1.0), h); return;\n" +
+                            "  }\n" +
+                            "  float d=max(dot(normalize(vN),normalize(sun)), 0.2);\n" + // Свет
+                            "  fC=vec4(uC.rgb*d, 1.0);\n" +
+                            "}";
                   
                   int vsh=GLES30.glCreateShader(35633); GLES30.glShaderSource(vsh,vs); GLES30.glCompileShader(vsh);
                   int fsh=GLES30.glCreateShader(35632); GLES30.glShaderSource(fsh,fs); GLES30.glCompileShader(fsh);
                   prg=GLES30.glCreateProgram(); GLES30.glAttachShader(prg,vsh); GLES30.glAttachShader(prg,fsh); GLES30.glLinkProgram(prg);
                   
-                  float[] v={-.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f};
+                  // Данные куба: Позиции (location 0) + Нормали для света (location 1)
+                  float[] v={
+                      -.5f,.5f,.5f, 0,0,1, -.5f,-.5f,.5f, 0,0,1, .5f,.5f,.5f, 0,0,1, .5f,-.5f,.5f, 0,0,1, // Front
+                      -.5f,.5f,-.5f,0,0,-1, -.5f,-.5f,-.5f,0,0,-1, .5f,.5f,-.5f,0,0,-1, .5f,-.5f,-.5f,0,0,-1 // Back
+                  };
                   b=ByteBuffer.allocateDirect(v.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(v); b.position(0);
               }
 
-              @Override public void onSurfaceChanged(GL10 gl,int w,int h){ GLES30.glViewport(0,0,w,h); Matrix.perspectiveM(proj,0,60,(float)w/h,0.1f,200f); }
+              @Override public void onSurfaceChanged(GL10 gl,int w,int h){ GLES30.glViewport(0,0,w,h); Matrix.perspectiveM(proj,0,60,(float)w/h,0.1f,300f); }
               
               @Override public void onDrawFrame(GL10 gl) {
                   update();
-                  GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT | GLES30.GL_DEPTH_BUFFER_BIT);
+                  GLES30.glClear(16640);
                   float vx=(float)Math.sin(Math.toRadians(rY)), vz=(float)-Math.cos(Math.toRadians(rY));
                   Matrix.setLookAtM(view,0,pX,pY,pZ,pX+vx,pY,pZ+vz,0,1,0);
                   GLES30.glUseProgram(prg);
                   
-                  int uM=GLES30.glGetUniformLocation(prg,"uM"), uC=GLES30.glGetUniformLocation(prg,"uC");
-                  GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,b); GLES30.glEnableVertexAttribArray(0);
+                  int uM=GLES30.glGetUniformLocation(prg,"uM"), uC=GLES30.glGetUniformLocation(prg,"uC"), uS=GLES30.glGetUniformLocation(prg,"sun");
+                  GLES30.glUniform3f(uS, 5.0f, 10.0f, 2.0f); // Позиция солнца
                   
-                  drawObj(uM, uC, 0,0,0, 100,1,100, 0.3f,0.3f,0.3f); // Земля
-                  drawObj(uM, uC, 0,5,0, 1,1,1, 1.0f,0.2f,0.2f);    // Куб
+                  GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,24,b); GLES30.glEnableVertexAttribArray(0);
+                  b.position(3); GLES30.glVertexAttribPointer(1,3,GLES30.GL_FLOAT,false,24,b); GLES30.glEnableVertexAttribArray(1); b.position(0);
+                  
+                  // Земля
+                  drawObj(uM, uC, 0,0,0, 200,1,200, 0.2f,0.5f,0.2f);
+                  // Главный герой (Куб)
+                  drawObj(uM, uC, 0,5,0, 1.2f,1.2f,1.2f, 1.0f,0.8f,0.0f);
+                  // Небо (Гигантский куб вокруг нас)
+                  drawObj(uM, uC, pX,pY,pZ, 250,250,250, 0,0,0);
               }
 
-              private void drawObj(int uM, int uC, float x, float y, float z, float sx, float sy, float sz, float r, float g, float b_col){
+              private void drawObj(int uM, int uC, float x, float y, float z, float sx, float sy, float sz, float r, float g, float bl){
                   Matrix.setIdentityM(model,0); Matrix.translateM(model,0,x,y,z); Matrix.scaleM(model,0,sx,sy,sz);
                   float[] mvp=new float[16]; Matrix.multiplyMM(mvp,0,proj,0,view,0); Matrix.multiplyMM(mvp,0,mvp,0,model,0);
-                  GLES30.glUniformMatrix4fv(uM,1,false,mvp,0); GLES30.glUniform4f(uC,r,g,b_col,1);
-                  for(int i=0;i<6;i++) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,i*4,4);
+                  GLES30.glUniformMatrix4fv(uM,1,false,mvp,0); GLES30.glUniform4f(uC,r,g,bl,1);
+                  for(int i=0;i<2;i++) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,i*4,4);
               }
 
               private void update(){
-                  float s=0.15f, rad=(float)Math.toRadians(rY);
+                  float s=0.2f, rad=(float)Math.toRadians(rY);
                   pX+=((float)Math.sin(rad)*-jY+(float)Math.cos(rad)*jX)*s;
                   pZ+=((float)-Math.cos(rad)*-jY+(float)Math.sin(rad)*jX)*s;
-                  vY-=0.015f; pY+=vY; if(pY<4.2f){pY=4.2f; vY=0;}
+                  vY-=0.02f; pY+=vY; if(pY<4.2f){pY=4.2f; vY=0;}
               }
           }
           EOF
 
-          # 3. АКТИВНОСТЬ
+          # 2. АКТИВНОСТЬ И УПРАВЛЕНИЕ
           cat <<'EOF' > app/src/main/java/com/enjoer/game/MainActivity.java
           package com.enjoer.game;
           import android.os.Bundle;
@@ -113,32 +136,25 @@ jobs:
                       if(e.getAction()==MotionEvent.ACTION_MOVE){ ren.rY+=(e.getX()-lx)*0.4f; lx=e.getX(); }
                       return true;
                   });
-                  findViewById(R.id.btn_jump).setOnClickListener(v->{ if(ren.isOnGround()) ren.vY=0.45f; });
+                  findViewById(R.id.btn_jump).setOnClickListener(v->{ if(ren.isOnGround()) ren.vY=0.55f; });
               }
           }
           EOF
 
-          # 4. РЕСУРСЫ
+          # 3. РЕСУРСЫ С КРАСИВЫМ ИНТЕРФЕЙСОМ
           cat <<'EOF' > app/src/main/res/layout/activity_main.xml
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent">
               <android.opengl.GLSurfaceView android:id="@+id/gl_view" android:layout_width="match_parent" android:layout_height="match_parent"/>
-              <View android:id="@+id/joy" android:layout_width="140dp" android:layout_height="140dp" android:layout_gravity="bottom|left" android:layout_margin="30dp" android:background="@drawable/joy_bg"/>
-              <Button android:id="@+id/btn_jump" android:layout_width="80dp" android:layout_height="80dp" android:layout_gravity="bottom|right" android:layout_margin="40dp" android:text="JUMP" android:background="@drawable/btn_style"/>
+              <View android:id="@+id/joy" android:layout_width="160dp" android:layout_height="160dp" android:layout_gravity="bottom|left" android:layout_margin="30dp" android:background="@drawable/joy_bg"/>
+              <Button android:id="@+id/btn_jump" android:layout_width="90dp" android:layout_height="90dp" android:layout_gravity="bottom|right" android:layout_margin="40dp" android:text="JUMP" android:textColor="#FFFFFF" android:background="@drawable/btn_style"/>
           </FrameLayout>
           EOF
 
           echo "<resources><style name='Theme.App' parent='Theme.AppCompat.Light.NoActionBar'/></resources>" > app/src/main/res/values/styles.xml
-          echo "<shape xmlns:android='http://schemas.android.com/apk/res/android' android:shape='oval'><solid android:color='#4400BFFF'/></shape>" > app/src/main/res/drawable/joy_bg.xml
-          echo "<shape xmlns:android='http://schemas.android.com/apk/res/android'><corners android:radius='10dp'/><solid android:color='#00BFFF'/></shape>" > app/src/main/res/drawable/btn_style.xml
+          echo "<shape xmlns:android='http://schemas.android.com/apk/res/android' android:shape='oval'><solid android:color='#66000000'/><stroke android:width='2dp' android:color='#00BFFF'/></shape>" > app/src/main/res/drawable/joy_bg.xml
+          echo "<shape xmlns:android='http://schemas.android.com/apk/res/android'><corners android:radius='45dp'/><solid android:color='#00BFFF'/><stroke android:width='2dp' android:color='#FFFFFF'/></shape>" > app/src/main/res/drawable/btn_style.xml
 
-          # 5. МАНИФЕСТ И КОНФИГИ
-          cat <<'EOF' > app/src/main/AndroidManifest.xml
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@style/Theme.App">
-          <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:screenOrientation="landscape">
-          <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-          </activity></application></manifest>
-          EOF
-
+          # 4. КОНФИГИ СБОРКИ
           echo "include ':app'" > settings.gradle
           echo "android.useAndroidX=true" > gradle.properties
           cat <<'EOF' > build.gradle
@@ -150,15 +166,21 @@ jobs:
           android { namespace 'com.enjoer.game'; compileSdk 34; defaultConfig { applicationId 'com.enjoer.game'; minSdk 24; targetSdk 34 } }
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
+          cat <<'EOF' > app/src/main/AndroidManifest.xml
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@style/Theme.App">
+          <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:screenOrientation="landscape">
+          <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+          </activity></application></manifest>
+          EOF
 
-      - name: Build and Upload
+      - name: Compile APK
         run: |
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Save APK
+      - name: Upload High-End APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_V6_Final
+          name: CubicBattle_Engine_V1
           path: app/build/outputs/apk/debug/app-debug.apk
