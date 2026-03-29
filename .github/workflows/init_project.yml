@@ -1,22 +1,20 @@
-name: Initialize Enjoer Project Structure
+name: STEP 1 - Split Enjoer to Files
 on: workflow_dispatch
 
 jobs:
-  split_files:
+  unpack:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create Directories
-        run: |
-          mkdir -p src_files/java
-          mkdir -p src_files/layout
-          mkdir -p src_files/values
-          mkdir -p src_files/drawable
+      - name: Create Folders
+        run: mkdir -p src_files/java src_files/layout src_files/values src_files/drawable
 
-      - name: Extract Java Classes
+      - name: Write Java Files
         run: |
+          # Здесь мы создаем файлы. Я использую 'EOF', чтобы символы внутри кода не сломали скрипт.
+          
           cat <<'EOF' > src_files/java/Block.java
           package com.enjoer.game;
           public class Block {
@@ -202,7 +200,6 @@ jobs:
           import android.content.Intent;
           import android.content.pm.ActivityInfo;
           import android.graphics.drawable.GradientDrawable;
-          import android.net.Uri;
           import android.os.Bundle;
           import android.os.Handler;
           import android.os.Looper;
@@ -243,24 +240,6 @@ jobs:
                   playtestUI=findViewById(R.id.playtest_ui);
                   axisPanel=findViewById(R.id.axis_panel);
 
-                  if(savedInstanceState != null) {
-                      int mode = savedInstanceState.getInt("mode", 0);
-                      if(mode == 1) {
-                          ren.isEngineMode = false;
-                          ren.isPlayingLevel = false;
-                          ren.loadBuiltInLevel();
-                          resetP();
-                          menuUI.setVisibility(View.GONE);
-                          gameUI.setVisibility(View.VISIBLE);
-                      } else if(mode == 2) {
-                          ren.isEngineMode = true;
-                          ren.isPlayingLevel = false;
-                          ren.pX=0; ren.pY=20; ren.pZ=35;
-                          menuUI.setVisibility(View.GONE);
-                          engineUI.setVisibility(View.VISIBLE);
-                      }
-                  }
-
                   saveLauncher=registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),res->{
                       if(res.getResultCode()==RESULT_OK&&res.getData()!=null){
                           try{OutputStream out=getContentResolver().openOutputStream(res.getData().getData());
@@ -279,163 +258,36 @@ jobs:
                           Toast.makeText(this,"Loaded!",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,"Invalid file",Toast.LENGTH_SHORT).show();}}});
 
                   findViewById(R.id.btn_play).setOnClickListener(v->{
-                      pendingMode = 1;
-                      ren.isEngineMode=false;
-                      ren.isPlayingLevel=false;
-                      ren.loadBuiltInLevel();
-                      resetP();
-                      ren.selectedIndex=-1;
-                      menuUI.setVisibility(View.GONE);
-                      gameUI.setVisibility(View.VISIBLE);
-                      engineUI.setVisibility(View.GONE);
-                      playtestUI.setVisibility(View.GONE);
-                      handler.postDelayed(() -> {
-                          setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-                      }, 50);
+                      pendingMode = 1; ren.isEngineMode=false; ren.isPlayingLevel=false; ren.loadBuiltInLevel(); resetP(); ren.selectedIndex=-1;
+                      menuUI.setVisibility(View.GONE); gameUI.setVisibility(View.VISIBLE);
+                      handler.postDelayed(() -> setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE), 50);
                   });
                   
                   findViewById(R.id.btn_engine).setOnClickListener(v->{
-                      pendingMode = 2;
-                      ren.isEngineMode=true;
-                      ren.isPlayingLevel=false;
-                      ren.blocks.clear();
-                      ren.pX=0;ren.pY=20;ren.pZ=35;
-                      ren.selectedIndex=-1;
-                      menuUI.setVisibility(View.GONE);
-                      gameUI.setVisibility(View.GONE);
-                      engineUI.setVisibility(View.VISIBLE);
-                      playtestUI.setVisibility(View.GONE);
-                      updAxis();
-                      handler.postDelayed(() -> {
-                          setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-                      }, 50);
+                      pendingMode = 2; ren.isEngineMode=true; ren.isPlayingLevel=false; ren.blocks.clear(); ren.pX=0;ren.pY=20;ren.pZ=35; ren.selectedIndex=-1;
+                      menuUI.setVisibility(View.GONE); engineUI.setVisibility(View.VISIBLE);
+                      handler.postDelayed(() -> setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE), 50);
                   });
                   
-                  findViewById(R.id.btn_load_file).setOnClickListener(v->{
-                      Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                      i.addCategory(Intent.CATEGORY_OPENABLE);
-                      i.setType("*/*");
-                      loadLauncher.launch(i);
-                  });
+                  findViewById(R.id.btn_menu).setOnClickListener(v->{ pendingMode = 0; menuUI.setVisibility(View.VISIBLE); gameUI.setVisibility(View.GONE); setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT); });
+                  findViewById(R.id.btn_engine_menu).setOnClickListener(v->{ pendingMode = 0; menuUI.setVisibility(View.VISIBLE); engineUI.setVisibility(View.GONE); setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT); });
 
-                  View.OnClickListener back=v->{
-                      pendingMode = 0;
-                      ren.isPlayingLevel=false;
-                      gameUI.setVisibility(View.GONE);
-                      engineUI.setVisibility(View.GONE);
-                      playtestUI.setVisibility(View.GONE);
-                      menuUI.setVisibility(View.VISIBLE);
-                      setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-                  };
-                  findViewById(R.id.btn_menu).setOnClickListener(back);
-                  findViewById(R.id.btn_engine_menu).setOnClickListener(back);
-
-                  findViewById(R.id.btn_play_level).setOnClickListener(v->{
-                      ren.isPlayingLevel=true;
-                      resetP();
-                      ren.selectedIndex=-1;
-                      engineUI.setVisibility(View.GONE);
-                      playtestUI.setVisibility(View.VISIBLE);
-                  });
-                  
-                  findViewById(R.id.btn_stop_playtest).setOnClickListener(v->{
-                      ren.isPlayingLevel=false;
-                      ren.pX=0;ren.pY=20;ren.pZ=35;
-                      playtestUI.setVisibility(View.GONE);
-                      engineUI.setVisibility(View.VISIBLE);
-                      updAxis();
-                  });
-                  
-                  findViewById(R.id.btn_save).setOnClickListener(v->{
-                      Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
-                      i.addCategory(Intent.CATEGORY_OPENABLE);
-                      i.setType("application/json");
-                      i.putExtra(Intent.EXTRA_TITLE,"level.json");
-                      saveLauncher.launch(i);
-                  });
+                  setupJoy(findViewById(R.id.joy_base),findViewById(R.id.joy_stick));
+                  setupLook(findViewById(R.id.look_zone));
 
                   findViewById(R.id.btn_jump).setOnTouchListener((v,e)->{
                       if(e.getAction()==MotionEvent.ACTION_DOWN&&ren.isOnGround())ren.vY=.55f;
                       return true;
                   });
-                  findViewById(R.id.btn_playtest_jump).setOnTouchListener((v,e)->{
-                      if(e.getAction()==MotionEvent.ACTION_DOWN&&ren.isOnGround())ren.vY=.55f;
-                      return true;
-                  });
-
-                  findViewById(R.id.btn_place).setOnClickListener(v->{if(ren.selectedIndex<0)ren.placeBlock();});
-                  findViewById(R.id.btn_delete).setOnClickListener(v->{ren.deleteSelected();updAxis();});
-                  findViewById(R.id.btn_deselect).setOnClickListener(v->{ren.selectedIndex=-1;updAxis();});
-
-                  axisBtn(R.id.axis_x_plus,1,0,0);axisBtn(R.id.axis_x_minus,-1,0,0);
-                  axisBtn(R.id.axis_y_plus,0,1,0);axisBtn(R.id.axis_y_minus,0,-1,0);
-                  axisBtn(R.id.axis_z_plus,0,0,1);axisBtn(R.id.axis_z_minus,0,0,-1);
-
-                  findViewById(R.id.btn_up).setOnTouchListener((v,e)->{
-                      if(e.getAction()==MotionEvent.ACTION_DOWN||e.getAction()==MotionEvent.ACTION_MOVE)ren.pY+=.5f;
-                      return true;
-                  });
-                  findViewById(R.id.btn_down).setOnTouchListener((v,e)->{
-                      if(e.getAction()==MotionEvent.ACTION_DOWN||e.getAction()==MotionEvent.ACTION_MOVE){ren.pY-=.5f;if(ren.pY<1)ren.pY=1;}
-                      return true;
-                  });
-
-                  shapeBtn=new Button[]{findViewById(R.id.shape_cube),findViewById(R.id.shape_flat),findViewById(R.id.shape_tall)};
-                  float[][] shapes={{4,4,4},{8,1,8},{2,8,2}};
-                  for(int i=0;i<3;i++){final int idx=i;shapeBtn[i].setOnClickListener(v->{ren.blockSX=shapes[idx][0];ren.blockSY=shapes[idx][1];ren.blockSZ=shapes[idx][2];updBtnGrp(shapeBtn,idx);});}
-
-                  sizeBtn=new Button[]{findViewById(R.id.size_s),findViewById(R.id.size_m),findViewById(R.id.size_l)};
-                  float[] sizes={.5f,1f,2f};
-                  for(int i=0;i<3;i++){final int idx=i;sizeBtn[i].setOnClickListener(v->{float m=sizes[idx];ren.blockSX=4*m;ren.blockSY=4*m;ren.blockSZ=4*m;updBtnGrp(sizeBtn,idx);updBtnGrp(shapeBtn,0);});}
-
-                  distBtn=new Button[]{findViewById(R.id.dist_near),findViewById(R.id.dist_mid),findViewById(R.id.dist_far)};
-                  float[] dists={3f,6f,12f};
-                  for(int i=0;i<3;i++){final int idx=i;distBtn[i].setOnClickListener(v->{ren.placeDist=dists[idx];updBtnGrp(distBtn,idx);});}
-
-                  colorBtn=new View[]{findViewById(R.id.color_red),findViewById(R.id.color_green),findViewById(R.id.color_blue),findViewById(R.id.color_yellow),findViewById(R.id.color_white)};
-                  float[][] colors={{1f,.2f,.2f},{.2f,1f,.2f},{.2f,.5f,1f},{1f,1f,.2f},{1f,1f,1f}};
-                  for(int i=0;i<5;i++){final int idx=i;colorBtn[i].setOnClickListener(v->{ren.blockR=colors[idx][0];ren.blockG=colors[idx][1];ren.blockB=colors[idx][2];if(ren.selectedIndex>=0&&ren.selectedIndex<ren.blocks.size()){Block b=ren.blocks.get(ren.selectedIndex);b.r=ren.blockR;b.g=ren.blockG;b.b=ren.blockB;}updColSel(idx);});}
-
-                  setupJoy(findViewById(R.id.joy_base),findViewById(R.id.joy_stick));
-                  setupJoy(findViewById(R.id.engine_joy_base),findViewById(R.id.engine_joy_stick));
-                  setupJoy(findViewById(R.id.playtest_joy_base),findViewById(R.id.playtest_joy_stick));
-                  setupLook(findViewById(R.id.look_zone));
-                  setupLook(findViewById(R.id.playtest_look_zone));
-
-                  findViewById(R.id.engine_touch_zone).setOnTouchListener((v,e)->{
-                      if(e.getAction()==MotionEvent.ACTION_DOWN){lx=e.getX();ly=e.getY();}
-                      else if(e.getAction()==MotionEvent.ACTION_UP){
-                          if(Math.abs(e.getX()-lx)<25&&Math.abs(e.getY()-ly)<25){
-                              ren.selectedIndex=ren.raycastBlock(e.getX(),e.getY());
-                              updAxis();
-                          }
-                      }
-                      else if(e.getAction()==MotionEvent.ACTION_MOVE){
-                          ren.rY+=(e.getX()-lx)*.2f;
-                          ren.rX=Math.max(-85,Math.min(85,ren.rX-(e.getY()-ly)*.2f));
-                          lx=e.getX();ly=e.getY();
-                      }
-                      return true;
-                  });
-              }
-              
-              @Override
-              protected void onSaveInstanceState(Bundle outState) {
-                  super.onSaveInstanceState(outState);
-                  outState.putInt("mode", pendingMode);
               }
 
               private void resetP(){ren.pX=0;ren.pY=7;ren.pZ=15;ren.vY=0;}
-              private void axisBtn(int id,float dx,float dy,float dz){findViewById(id).setOnTouchListener((v,e)->{if(e.getAction()==MotionEvent.ACTION_DOWN||e.getAction()==MotionEvent.ACTION_MOVE)ren.moveSelected(dx*.5f,dy*.5f,dz*.5f);return true;});}
-              private void updAxis(){runOnUiThread(()->axisPanel.setVisibility(ren.selectedIndex>=0?View.VISIBLE:View.GONE));}
               private void setupJoy(View base,View stick){base.setOnTouchListener((v,e)->{float cx=v.getWidth()/2f,cy=v.getHeight()/2f;if(e.getAction()==MotionEvent.ACTION_MOVE||e.getAction()==MotionEvent.ACTION_DOWN){float dx=e.getX()-cx,dy=e.getY()-cy,d=(float)Math.sqrt(dx*dx+dy*dy),lim=cx-stick.getWidth()/2f;if(d>lim){dx*=lim/d;dy*=lim/d;}stick.setTranslationX(dx);stick.setTranslationY(dy);ren.jX=dx/lim;ren.jY=dy/lim;}else if(e.getAction()==MotionEvent.ACTION_UP){stick.setTranslationX(0);stick.setTranslationY(0);ren.jX=0;ren.jY=0;}return true;});}
               private void setupLook(View z){z.setOnTouchListener((v,e)->{if(e.getAction()==MotionEvent.ACTION_DOWN){lx=e.getX();ly=e.getY();}else if(e.getAction()==MotionEvent.ACTION_MOVE){ren.rY+=(e.getX()-lx)*.25f;ren.rX=Math.max(-85,Math.min(85,ren.rX-(e.getY()-ly)*.25f));lx=e.getX();ly=e.getY();}return true;});}
-              private void updBtnGrp(Button[] btns,int sel){for(int i=0;i<btns.length;i++){if(i==sel){btns[i].setBackgroundResource(R.drawable.btn_blue_filled);btns[i].setTextColor(0xFF000000);}else{btns[i].setBackgroundResource(R.drawable.btn_blue);btns[i].setTextColor(0xFF00BFFF);}}}
-              private void updColSel(int sel){for(int i=0;i<colorBtn.length;i++){try{GradientDrawable bg=(GradientDrawable)colorBtn[i].getBackground();if(i==sel)bg.setStroke(6,0xFFFFFFFF);else bg.setStroke(2,0xFF00BFFF);}catch(Exception ignored){}}}
           }
           EOF
 
-      - name: Extract Resources & Configs
+      - name: Write Resources
         run: |
           cat <<'EOF' > src_files/layout/activity_main.xml
           <?xml version="1.0" encoding="utf-8"?>
@@ -444,122 +296,41 @@ jobs:
               <android.opengl.GLSurfaceView android:id="@+id/gl_view" android:layout_width="match_parent" android:layout_height="match_parent"/>
               <RelativeLayout android:id="@+id/game_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
                   <View android:id="@+id/look_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
-                  <Button android:id="@+id/btn_menu" android:layout_width="50dp" android:layout_height="50dp" android:layout_margin="10dp" android:text="≡" android:textSize="24sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                  <Button android:id="@+id/btn_menu" android:layout_width="50dp" android:layout_height="50dp" android:layout_margin="10dp" android:text="≡" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
                   <FrameLayout android:id="@+id/joy_base" android:layout_width="140dp" android:layout_height="140dp" android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" android:layout_marginLeft="40dp" android:layout_marginBottom="40dp" android:background="@drawable/joy_base"/>
                   <View android:id="@+id/joy_stick" android:layout_width="60dp" android:layout_height="60dp" android:layout_alignLeft="@id/joy_base" android:layout_alignTop="@id/joy_base" android:layout_marginLeft="40dp" android:layout_marginTop="40dp" android:background="@drawable/joy_stick"/>
-                  <Button android:id="@+id/btn_jump" android:layout_width="90dp" android:layout_height="90dp" android:layout_alignParentRight="true" android:layout_alignParentBottom="true" android:layout_marginRight="40dp" android:layout_marginBottom="40dp" android:text="▲" android:textSize="28sp" android:background="@drawable/btn_blue" android:textColor="#FFF"/>
+                  <Button android:id="@+id/btn_jump" android:layout_width="90dp" android:layout_height="90dp" android:layout_alignParentRight="true" android:layout_alignParentBottom="true" android:layout_marginRight="40dp" android:layout_marginBottom="40dp" android:text="▲" android:background="@drawable/btn_blue" android:textColor="#FFF"/>
               </RelativeLayout>
-              <RelativeLayout android:id="@+id/engine_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-                  <View android:id="@+id/engine_touch_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
-                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_alignParentTop="true" android:orientation="horizontal" android:padding="10dp">
-                      <Button android:id="@+id/btn_engine_menu" android:layout_width="50dp" android:layout_height="50dp" android:text="≡" android:textSize="24sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
-                      <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
-                      <Button android:id="@+id/btn_save" android:layout_width="90dp" android:layout_height="50dp" android:text="EXPORT" android:textSize="12sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
-                      <Button android:id="@+id/btn_play_level" android:layout_width="50dp" android:layout_height="50dp" android:text="▶" android:textSize="20sp" android:background="@drawable/btn_green" android:textColor="#000" android:layout_marginLeft="10dp"/>
-                  </LinearLayout>
-                  <FrameLayout android:id="@+id/engine_joy_base" android:layout_width="120dp" android:layout_height="120dp" android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" android:layout_marginLeft="30dp" android:layout_marginBottom="30dp" android:background="@drawable/joy_base"/>
-                  <View android:id="@+id/engine_joy_stick" android:layout_width="50dp" android:layout_height="50dp" android:layout_alignLeft="@id/engine_joy_base" android:layout_alignTop="@id/engine_joy_base" android:layout_marginLeft="35dp" android:layout_marginTop="35dp" android:background="@drawable/joy_stick"/>
-                  <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_above="@id/engine_joy_base" android:layout_alignParentLeft="true" android:layout_marginLeft="35dp" android:layout_marginBottom="10dp" android:orientation="horizontal">
-                      <Button android:id="@+id/btn_down" android:layout_width="50dp" android:layout_height="50dp" android:text="▼" android:textSize="20sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
-                      <Button android:id="@+id/btn_up" android:layout_width="50dp" android:layout_height="50dp" android:text="▲" android:textSize="20sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="10dp"/>
-                  </LinearLayout>
-                  <ScrollView android:id="@+id/tools_scroll" android:layout_width="170dp" android:layout_height="match_parent" android:layout_alignParentRight="true" android:layout_marginRight="10dp" android:layout_marginTop="70dp" android:layout_marginBottom="10dp">
-                      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/panel_bg" android:padding="10dp">
-                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-                              <Button android:id="@+id/shape_cube" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:text="■" android:background="@drawable/btn_blue_filled" android:textColor="#000"/>
-                              <Button android:id="@+id/shape_flat" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:text="▬" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
-                              <Button android:id="@+id/shape_tall" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:text="▮" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
-                          </LinearLayout>
-                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
-                              <Button android:id="@+id/size_s" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:text="S" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
-                              <Button android:id="@+id/size_m" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:text="M" android:background="@drawable/btn_blue_filled" android:textColor="#000" android:layout_marginLeft="4dp"/>
-                              <Button android:id="@+id/size_l" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:text="L" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
-                          </LinearLayout>
-                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center" android:layout_marginTop="8dp">
-                              <View android:id="@+id/color_red" android:layout_width="26dp" android:layout_height="26dp" android:background="@drawable/color_btn" android:backgroundTint="#FF2222"/>
-                              <View android:id="@+id/color_green" android:layout_width="26dp" android:layout_height="26dp" android:background="@drawable/color_btn" android:backgroundTint="#22FF22" android:layout_marginLeft="5dp"/>
-                              <View android:id="@+id/color_blue" android:layout_width="26dp" android:layout_height="26dp" android:background="@drawable/color_btn" android:backgroundTint="#2288FF" android:layout_marginLeft="5dp"/>
-                              <View android:id="@+id/color_yellow" android:layout_width="26dp" android:layout_height="26dp" android:background="@drawable/color_btn" android:backgroundTint="#FFFF22" android:layout_marginLeft="5dp"/>
-                              <View android:id="@+id/color_white" android:layout_width="26dp" android:layout_height="26dp" android:background="@drawable/color_btn" android:backgroundTint="#FFFFFF" android:layout_marginLeft="5dp"/>
-                          </LinearLayout>
-                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
-                              <Button android:id="@+id/dist_near" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:text="3" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
-                              <Button android:id="@+id/dist_mid" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:text="6" android:background="@drawable/btn_blue_filled" android:textColor="#000" android:layout_marginLeft="4dp"/>
-                              <Button android:id="@+id/dist_far" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:text="12" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
-                          </LinearLayout>
-                          <Button android:id="@+id/btn_place" android:layout_width="match_parent" android:layout_height="44dp" android:text="+ PLACE" android:background="@drawable/btn_blue_filled" android:textColor="#000" android:layout_marginTop="12dp"/>
-                          <Button android:id="@+id/btn_delete" android:layout_width="match_parent" android:layout_height="36dp" android:text="DELETE" android:background="@drawable/btn_red" android:textColor="#FF4444" android:layout_marginTop="8dp"/>
-                          <Button android:id="@+id/btn_deselect" android:layout_width="match_parent" android:layout_height="36dp" android:text="DESELECT" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginTop="8dp"/>
-                      </LinearLayout>
-                  </ScrollView>
-                  <LinearLayout android:id="@+id/axis_panel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentBottom="true" android:layout_centerHorizontal="true" android:layout_marginBottom="20dp" android:orientation="horizontal" android:background="@drawable/panel_bg" android:padding="6dp" android:visibility="gone">
-                      <Button android:id="@+id/axis_x_minus" android:layout_width="44dp" android:layout_height="44dp" android:text="X-" android:background="@drawable/btn_blue" android:textColor="#FF4444" android:textSize="12sp"/>
-                      <Button android:id="@+id/axis_x_plus" android:layout_width="44dp" android:layout_height="44dp" android:text="X+" android:background="@drawable/btn_blue" android:textColor="#FF4444" android:textSize="12sp" android:layout_marginLeft="4dp"/>
-                      <Button android:id="@+id/axis_y_minus" android:layout_width="44dp" android:layout_height="44dp" android:text="Y-" android:background="@drawable/btn_blue" android:textColor="#44FF44" android:textSize="12sp" android:layout_marginLeft="10dp"/>
-                      <Button android:id="@+id/axis_y_plus" android:layout_width="44dp" android:layout_height="44dp" android:text="Y+" android:background="@drawable/btn_blue" android:textColor="#44FF44" android:textSize="12sp" android:layout_marginLeft="4dp"/>
-                      <Button android:id="@+id/axis_z_minus" android:layout_width="44dp" android:layout_height="44dp" android:text="Z-" android:background="@drawable/btn_blue" android:textColor="#4488FF" android:textSize="12sp" android:layout_marginLeft="10dp"/>
-                      <Button android:id="@+id/axis_z_plus" android:layout_width="44dp" android:layout_height="44dp" android:text="Z+" android:background="@drawable/btn_blue" android:textColor="#4488FF" android:textSize="12sp" android:layout_marginLeft="4dp"/>
-                  </LinearLayout>
-                  <View android:id="@+id/crosshair" android:layout_width="6dp" android:layout_height="6dp" android:layout_centerInParent="true" android:background="#00BFFF"/>
-              </RelativeLayout>
-              <RelativeLayout android:id="@+id/playtest_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-                  <View android:id="@+id/playtest_look_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
-                  <Button android:id="@+id/btn_stop_playtest" android:layout_width="50dp" android:layout_height="50dp" android:layout_margin="10dp" android:text="■" android:textSize="20sp" android:background="@drawable/btn_red" android:textColor="#FFF"/>
-                  <FrameLayout android:id="@+id/playtest_joy_base" android:layout_width="140dp" android:layout_height="140dp" android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" android:layout_marginLeft="40dp" android:layout_marginBottom="40dp" android:background="@drawable/joy_base"/>
-                  <View android:id="@+id/playtest_joy_stick" android:layout_width="60dp" android:layout_height="60dp" android:layout_alignLeft="@id/playtest_joy_base" android:layout_alignTop="@id/playtest_joy_base" android:layout_marginLeft="40dp" android:layout_marginTop="40dp" android:background="@drawable/joy_stick"/>
-                  <Button android:id="@+id/btn_playtest_jump" android:layout_width="90dp" android:layout_height="90dp" android:layout_alignParentRight="true" android:layout_alignParentBottom="true" android:layout_marginRight="40dp" android:layout_marginBottom="40dp" android:text="▲" android:textSize="28sp" android:background="@drawable/btn_blue" android:textColor="#FFF"/>
-              </RelativeLayout>
-              <LinearLayout android:id="@+id/menu_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:background="#02050A">
-                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ENJOER" android:textSize="52sp" android:textColor="#00BFFF" android:textStyle="bold"/>
-                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ENGINE 6.1" android:textSize="18sp" android:textColor="#0088CC" android:layout_marginBottom="80dp"/>
-                  <Button android:id="@+id/btn_play" android:layout_width="240dp" android:layout_height="60dp" android:text="PLAY" android:textSize="18sp" android:textColor="#000" android:background="@drawable/btn_blue_filled" android:layout_marginBottom="16dp"/>
-                  <Button android:id="@+id/btn_engine" android:layout_width="240dp" android:layout_height="60dp" android:text="EDITOR" android:textSize="18sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue" android:layout_marginBottom="16dp"/>
-                  <Button android:id="@+id/btn_load_file" android:layout_width="240dp" android:layout_height="60dp" android:text="IMPORT .JSON" android:textSize="16sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue"/>
+              <LinearLayout android:id="@+id/menu_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center">
+                  <Button android:id="@+id/btn_play" android:layout_width="200dp" android:layout_height="60dp" android:text="PLAY" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                  <Button android:id="@+id/btn_engine" android:layout_width="200dp" android:layout_height="60dp" android:text="EDITOR" android:layout_marginTop="20dp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
               </LinearLayout>
           </FrameLayout>
           EOF
 
           cat <<'EOF' > src_files/values/themes.xml
-          <resources>
-            <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
-              <item name="android:windowFullscreen">true</item>
-            </style>
-          </resources>
+          <resources><style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar"><item name="android:windowFullscreen">true</item></style></resources>
           EOF
 
-          # Генерируем Drawable
           cat <<'EOF' > src_files/drawable/btn_blue.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle"><corners android:radius="12dp"/><solid android:color="#101820"/><stroke android:width="2dp" android:color="#00BFFF"/></shape>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><corners android:radius="12dp"/><solid android:color="#101820"/><stroke android:width="2dp" android:color="#00BFFF"/></shape>
           EOF
-          cat <<'EOF' > src_files/drawable/btn_blue_filled.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle"><corners android:radius="12dp"/><solid android:color="#00BFFF"/></shape>
-          EOF
-          cat <<'EOF' > src_files/drawable/btn_red.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle"><corners android:radius="12dp"/><solid android:color="#101820"/><stroke android:width="2dp" android:color="#FF4444"/></shape>
-          EOF
-          cat <<'EOF' > src_files/drawable/btn_green.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle"><corners android:radius="12dp"/><solid android:color="#44FF44"/></shape>
-          EOF
+
           cat <<'EOF' > src_files/drawable/joy_base.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><solid android:color="#CC101820"/><stroke android:width="2dp" android:color="#00BFFF"/></shape>
           EOF
+
           cat <<'EOF' > src_files/drawable/joy_stick.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><solid android:color="#00BFFF"/></shape>
           EOF
-          cat <<'EOF' > src_files/drawable/panel_bg.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle"><corners android:radius="8dp"/><solid android:color="#E6101820"/><stroke android:width="1dp" android:color="#00BFFF"/></shape>
-          EOF
-          cat <<'EOF' > src_files/drawable/color_btn.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><solid android:color="#FFF"/><stroke android:width="2dp" android:color="#00BFFF"/></shape>
-          EOF
 
-      - name: Extract Manifest and Build Scripts
+      - name: Write Manifest and Gradle
         run: |
           cat <<'EOF' > src_files/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application android:label="Enjoer 6.1" android:theme="@style/AppTheme">
-                  <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden">
+                  <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:configChanges="orientation|screenSize">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
               </application>
@@ -567,29 +338,20 @@ jobs:
           EOF
 
           echo "include ':app'" > src_files/settings.gradle
-
           cat <<'EOF' > src_files/build.gradle
-          buildscript {
-              repositories { google(); mavenCentral() }
-              dependencies { classpath 'com.android.tools.build:gradle:8.2.2' }
-          }
+          buildscript { repositories { google(); mavenCentral() }; dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
           allprojects { repositories { google(); mavenCentral() } }
           EOF
-
           cat <<'EOF' > src_files/app_build.gradle
           plugins { id 'com.android.application' }
-          android {
-              namespace 'com.enjoer.game'
-              compileSdk 34
-              defaultConfig { applicationId 'com.enjoer.game'; minSdk 24; targetSdk 34 }
-          }
+          android { namespace 'com.enjoer.game'; compileSdk 34; defaultConfig { applicationId 'com.enjoer.game'; minSdk 24; targetSdk 34 } }
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
 
-      - name: Commit and Push
+      - name: Push to Repository
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add src_files/
-          git commit -m "Initialize project: Extract Enjoer 6.1 source files"
+          git commit -m "Initialize project structure"
           git push
