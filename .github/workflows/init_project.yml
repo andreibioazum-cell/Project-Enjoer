@@ -14,9 +14,15 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Create Firebase config
+      - name: Create project structure
         run: |
-          mkdir -p app
+          mkdir -p app/src/main/java/com/enjoer/game
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+
+      - name: Create google-services.json (FIXED package name)
+        run: |
           cat <<'EOF' > app/google-services.json
           {
             "project_info": {
@@ -30,7 +36,7 @@ jobs:
                 "client_info": {
                   "mobilesdk_app_id": "1:1035095493283:android:a206d298551b4027e20d16",
                   "android_client_info": {
-                    "package_name": "com.enjoer"
+                    "package_name": "com.enjoer.game"
                   }
                 },
                 "api_key": [
@@ -44,18 +50,14 @@ jobs:
           }
           EOF
 
-      - name: Create full project structure
-        run: |
-          mkdir -p app/src/main/java/com/enjoer/game
-          mkdir -p app/src/main/res/layout
-          mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/drawable
-          mkdir -p app/src/main/res/raw
-
-      - name: Create gradle properties
+      - name: Create gradle.properties
         run: |
           echo "android.useAndroidX=true" > gradle.properties
           echo "android.enableJetifier=true" >> gradle.properties
+
+      - name: Create settings.gradle
+        run: |
+          echo "include ':app'" > settings.gradle
 
       - name: Create build.gradle (root)
         run: |
@@ -78,7 +80,7 @@ jobs:
           }
           EOF
 
-      - name: Create app/build.gradle
+      - name: Create app/build.gradle (FIXED package name)
         run: |
           cat <<EOF > app/build.gradle
           plugins {
@@ -103,23 +105,9 @@ jobs:
               implementation 'com.google.firebase:firebase-database:20.3.0'
               implementation 'com.google.firebase:firebase-auth:22.3.0'
               implementation 'com.google.android.gms:play-services-auth:20.7.0'
-              implementation 'com.google.code.gson:gson:2.10.1'
-              implementation 'com.squareup.picasso:picasso:2.8'
           }
           apply plugin: 'com.google.gms.google-services'
           EOF
-
-          echo "include ':app'" > settings.gradle
-
-      - name: Create drawable resources
-        run: |
-          # (все ваши существующие drawable XML файлы)
-          cat <<EOF > app/src/main/res/drawable/btn_blue.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-            <corners android:radius="12dp"/><solid android:color="#101820"/><stroke android:width="2dp" android:color="#00BFFF"/>
-          </shape>
-          EOF
-          # ... (остальные drawable файлы такие же как у вас)
 
       - name: Create themes.xml
         run: |
@@ -130,6 +118,217 @@ jobs:
             </style>
           </resources>
           EOF
+
+      - name: Create drawable resources
+        run: |
+          cat <<EOF > app/src/main/res/drawable/btn_blue.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <corners android:radius="12dp"/><solid android:color="#101820"/><stroke android:width="2dp" android:color="#00BFFF"/>
+          </shape>
+          EOF
+          cat <<EOF > app/src/main/res/drawable/btn_blue_filled.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <corners android:radius="12dp"/><solid android:color="#00BFFF"/>
+          </shape>
+          EOF
+          cat <<EOF > app/src/main/res/drawable/btn_red.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <corners android:radius="12dp"/><solid android:color="#101820"/><stroke android:width="2dp" android:color="#FF4444"/>
+          </shape>
+          EOF
+          cat <<EOF > app/src/main/res/drawable/btn_green.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <corners android:radius="12dp"/><solid android:color="#44FF44"/>
+          </shape>
+          EOF
+          cat <<EOF > app/src/main/res/drawable/joy_base.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+            <solid android:color="#CC101820"/><stroke android:width="2dp" android:color="#00BFFF"/>
+          </shape>
+          EOF
+          cat <<EOF > app/src/main/res/drawable/joy_stick.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+            <solid android:color="#00BFFF"/>
+          </shape>
+          EOF
+          cat <<EOF > app/src/main/res/drawable/panel_bg.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <corners android:radius="8dp"/><solid android:color="#E6101820"/><stroke android:width="1dp" android:color="#00BFFF"/>
+          </shape>
+          EOF
+          cat <<EOF > app/src/main/res/drawable/color_btn.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+            <solid android:color="#FFF"/><stroke android:width="2dp" android:color="#00BFFF"/>
+          </shape>
+          EOF
+
+      - name: Create layout
+        run: |
+          cat <<'LAYOUT' > app/src/main/res/layout/activity_main.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent" android:layout_height="match_parent" android:background="#02050A">
+              
+              <android.opengl.GLSurfaceView android:id="@+id/gl_view"
+                  android:layout_width="match_parent" android:layout_height="match_parent"/>
+              
+              <RelativeLayout android:id="@+id/game_ui" android:layout_width="match_parent" 
+                  android:layout_height="match_parent" android:visibility="gone">
+                  <View android:id="@+id/look_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
+                  <Button android:id="@+id/btn_menu" android:layout_width="50dp" android:layout_height="50dp"
+                      android:layout_margin="10dp" android:text="≡" android:textSize="24sp" 
+                      android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                  <FrameLayout android:id="@+id/joy_base" android:layout_width="140dp" android:layout_height="140dp"
+                      android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" 
+                      android:layout_marginLeft="40dp" android:layout_marginBottom="40dp" android:background="@drawable/joy_base"/>
+                  <View android:id="@+id/joy_stick" android:layout_width="60dp" android:layout_height="60dp"
+                      android:layout_alignLeft="@id/joy_base" android:layout_alignTop="@id/joy_base" 
+                      android:layout_marginLeft="40dp" android:layout_marginTop="40dp" android:background="@drawable/joy_stick"/>
+                  <Button android:id="@+id/btn_jump" android:layout_width="90dp" android:layout_height="90dp"
+                      android:layout_alignParentRight="true" android:layout_alignParentBottom="true" 
+                      android:layout_marginRight="40dp" android:layout_marginBottom="40dp" 
+                      android:text="▲" android:textSize="28sp" android:background="@drawable/btn_blue" android:textColor="#FFF"/>
+              </RelativeLayout>
+
+              <RelativeLayout android:id="@+id/engine_ui" android:layout_width="match_parent" 
+                  android:layout_height="match_parent" android:visibility="gone">
+                  <View android:id="@+id/engine_touch_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
+                      android:layout_alignParentTop="true" android:orientation="horizontal" android:padding="10dp">
+                      <Button android:id="@+id/btn_engine_menu" android:layout_width="50dp" android:layout_height="50dp" 
+                          android:text="≡" android:textSize="24sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                      <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
+                      <Button android:id="@+id/btn_save_cloud" android:layout_width="90dp" android:layout_height="50dp" 
+                          android:text="☁ SAVE" android:textSize="10sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                      <Button android:id="@+id/btn_load_cloud" android:layout_width="90dp" android:layout_height="50dp" 
+                          android:text="☁ LOAD" android:textSize="10sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="5dp"/>
+                      <Button android:id="@+id/btn_save" android:layout_width="70dp" android:layout_height="50dp" 
+                          android:text="EXPORT" android:textSize="10sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="5dp"/>
+                      <Button android:id="@+id/btn_play_level" android:layout_width="50dp" android:layout_height="50dp" 
+                          android:text="▶" android:textSize="20sp" android:background="@drawable/btn_green" android:textColor="#000" android:layout_marginLeft="5dp"/>
+                  </LinearLayout>
+                  <FrameLayout android:id="@+id/engine_joy_base" android:layout_width="120dp" android:layout_height="120dp"
+                      android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" 
+                      android:layout_marginLeft="30dp" android:layout_marginBottom="30dp" android:background="@drawable/joy_base"/>
+                  <View android:id="@+id/engine_joy_stick" android:layout_width="50dp" android:layout_height="50dp"
+                      android:layout_alignLeft="@id/engine_joy_base" android:layout_alignTop="@id/engine_joy_base" 
+                      android:layout_marginLeft="35dp" android:layout_marginTop="35dp" android:background="@drawable/joy_stick"/>
+                  <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+                      android:layout_above="@id/engine_joy_base" android:layout_alignParentLeft="true" 
+                      android:layout_marginLeft="35dp" android:layout_marginBottom="10dp" android:orientation="horizontal">
+                      <Button android:id="@+id/btn_down" android:layout_width="50dp" android:layout_height="50dp" 
+                          android:text="▼" android:textSize="20sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                      <Button android:id="@+id/btn_up" android:layout_width="50dp" android:layout_height="50dp" 
+                          android:text="▲" android:textSize="20sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="10dp"/>
+                  </LinearLayout>
+                  <ScrollView android:id="@+id/tools_scroll" android:layout_width="170dp" android:layout_height="match_parent"
+                      android:layout_alignParentRight="true" android:layout_marginRight="10dp" 
+                      android:layout_marginTop="70dp" android:layout_marginBottom="10dp">
+                      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
+                          android:orientation="vertical" android:background="@drawable/panel_bg" android:padding="10dp">
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                              <Button android:id="@+id/shape_cube" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="■" android:background="@drawable/btn_blue_filled" android:textColor="#000"/>
+                              <Button android:id="@+id/shape_flat" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="▬" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
+                              <Button android:id="@+id/shape_tall" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="▮" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
+                          </LinearLayout>
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
+                              android:orientation="horizontal" android:layout_marginTop="8dp">
+                              <Button android:id="@+id/size_s" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="S" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                              <Button android:id="@+id/size_m" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="M" android:background="@drawable/btn_blue_filled" android:textColor="#000" android:layout_marginLeft="4dp"/>
+                              <Button android:id="@+id/size_l" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="L" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
+                          </LinearLayout>
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
+                              android:orientation="horizontal" android:gravity="center" android:layout_marginTop="8dp">
+                              <View android:id="@+id/color_red" android:layout_width="26dp" android:layout_height="26dp" 
+                                  android:background="@drawable/color_btn" android:backgroundTint="#FF2222"/>
+                              <View android:id="@+id/color_green" android:layout_width="26dp" android:layout_height="26dp" 
+                                  android:background="@drawable/color_btn" android:backgroundTint="#22FF22" android:layout_marginLeft="5dp"/>
+                              <View android:id="@+id/color_blue" android:layout_width="26dp" android:layout_height="26dp" 
+                                  android:background="@drawable/color_btn" android:backgroundTint="#2288FF" android:layout_marginLeft="5dp"/>
+                              <View android:id="@+id/color_yellow" android:layout_width="26dp" android:layout_height="26dp" 
+                                  android:background="@drawable/color_btn" android:backgroundTint="#FFFF22" android:layout_marginLeft="5dp"/>
+                              <View android:id="@+id/color_white" android:layout_width="26dp" android:layout_height="26dp" 
+                                  android:background="@drawable/color_btn" android:backgroundTint="#FFFFFF" android:layout_marginLeft="5dp"/>
+                          </LinearLayout>
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
+                              android:orientation="horizontal" android:layout_marginTop="8dp">
+                              <Button android:id="@+id/dist_near" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="3" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                              <Button android:id="@+id/dist_mid" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="6" android:background="@drawable/btn_blue_filled" android:textColor="#000" android:layout_marginLeft="4dp"/>
+                              <Button android:id="@+id/dist_far" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="12" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
+                          </LinearLayout>
+                          <Button android:id="@+id/btn_place" android:layout_width="match_parent" android:layout_height="44dp" 
+                              android:text="+ PLACE" android:background="@drawable/btn_blue_filled" android:textColor="#000" android:layout_marginTop="12dp"/>
+                          <Button android:id="@+id/btn_delete" android:layout_width="match_parent" android:layout_height="36dp" 
+                              android:text="DELETE" android:background="@drawable/btn_red" android:textColor="#FF4444" android:layout_marginTop="8dp"/>
+                          <Button android:id="@+id/btn_deselect" android:layout_width="match_parent" android:layout_height="36dp" 
+                              android:text="DESELECT" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginTop="8dp"/>
+                          <Button android:id="@+id/btn_share_cloud" android:layout_width="match_parent" android:layout_height="36dp" 
+                              android:text="🌍 SHARE LEVEL" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginTop="8dp"/>
+                      </LinearLayout>
+                  </ScrollView>
+                  <LinearLayout android:id="@+id/axis_panel" android:layout_width="wrap_content" android:layout_height="wrap_content" 
+                      android:layout_alignParentBottom="true" android:layout_centerHorizontal="true" android:layout_marginBottom="20dp" 
+                      android:orientation="horizontal" android:background="@drawable/panel_bg" android:padding="6dp" android:visibility="gone">
+                      <Button android:id="@+id/axis_x_minus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="X-" android:background="@drawable/btn_blue" android:textColor="#FF4444" android:textSize="12sp"/>
+                      <Button android:id="@+id/axis_x_plus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="X+" android:background="@drawable/btn_blue" android:textColor="#FF4444" android:textSize="12sp" android:layout_marginLeft="4dp"/>
+                      <Button android:id="@+id/axis_y_minus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="Y-" android:background="@drawable/btn_blue" android:textColor="#44FF44" android:textSize="12sp" android:layout_marginLeft="10dp"/>
+                      <Button android:id="@+id/axis_y_plus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="Y+" android:background="@drawable/btn_blue" android:textColor="#44FF44" android:textSize="12sp" android:layout_marginLeft="4dp"/>
+                      <Button android:id="@+id/axis_z_minus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="Z-" android:background="@drawable/btn_blue" android:textColor="#4488FF" android:textSize="12sp" android:layout_marginLeft="10dp"/>
+                      <Button android:id="@+id/axis_z_plus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="Z+" android:background="@drawable/btn_blue" android:textColor="#4488FF" android:textSize="12sp" android:layout_marginLeft="4dp"/>
+                  </LinearLayout>
+                  <View android:id="@+id/crosshair" android:layout_width="6dp" android:layout_height="6dp" 
+                      android:layout_centerInParent="true" android:background="#00BFFF"/>
+              </RelativeLayout>
+
+              <RelativeLayout android:id="@+id/playtest_ui" android:layout_width="match_parent" 
+                  android:layout_height="match_parent" android:visibility="gone">
+                  <View android:id="@+id/playtest_look_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
+                  <Button android:id="@+id/btn_stop_playtest" android:layout_width="50dp" android:layout_height="50dp" 
+                      android:layout_margin="10dp" android:text="■" android:textSize="20sp" android:background="@drawable/btn_red" android:textColor="#FFF"/>
+                  <FrameLayout android:id="@+id/playtest_joy_base" android:layout_width="140dp" android:layout_height="140dp" 
+                      android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" 
+                      android:layout_marginLeft="40dp" android:layout_marginBottom="40dp" android:background="@drawable/joy_base"/>
+                  <View android:id="@+id/playtest_joy_stick" android:layout_width="60dp" android:layout_height="60dp" 
+                      android:layout_alignLeft="@id/playtest_joy_base" android:layout_alignTop="@id/playtest_joy_base" 
+                      android:layout_marginLeft="40dp" android:layout_marginTop="40dp" android:background="@drawable/joy_stick"/>
+                  <Button android:id="@+id/btn_playtest_jump" android:layout_width="90dp" android:layout_height="90dp" 
+                      android:layout_alignParentRight="true" android:layout_alignParentBottom="true" 
+                      android:layout_marginRight="40dp" android:layout_marginBottom="40dp" 
+                      android:text="▲" android:textSize="28sp" android:background="@drawable/btn_blue" android:textColor="#FFF"/>
+              </RelativeLayout>
+
+              <LinearLayout android:id="@+id/menu_ui" android:layout_width="match_parent" android:layout_height="match_parent"
+                  android:orientation="vertical" android:gravity="center" android:background="#02050A">
+                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" 
+                      android:text="ENJOER" android:textSize="52sp" android:textColor="#00BFFF" android:textStyle="bold"/>
+                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" 
+                      android:text="ENGINE 6.1" android:textSize="18sp" android:textColor="#0088CC" android:layout_marginBottom="80dp"/>
+                  <Button android:id="@+id/btn_play" android:layout_width="240dp" android:layout_height="60dp" 
+                      android:text="PLAY" android:textSize="18sp" android:textColor="#000" android:background="@drawable/btn_blue_filled" android:layout_marginBottom="16dp"/>
+                  <Button android:id="@+id/btn_engine" android:layout_width="240dp" android:layout_height="60dp" 
+                      android:text="EDITOR" android:textSize="18sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue" android:layout_marginBottom="16dp"/>
+                  <Button android:id="@+id/btn_load_file" android:layout_width="240dp" android:layout_height="60dp" 
+                      android:text="IMPORT .JSON" android:textSize="16sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue" android:layout_marginBottom="16dp"/>
+                  <Button android:id="@+id/btn_online_levels" android:layout_width="240dp" android:layout_height="60dp" 
+                      android:text="🌍 ONLINE LEVELS" android:textSize="16sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue"/>
+              </LinearLayout>
+          </FrameLayout>
+          LAYOUT
 
       - name: Create Block.java
         run: |
@@ -146,7 +345,7 @@ jobs:
           }
           EOF
 
-      - name: Create PlayerData.java (для мультиплеера)
+      - name: Create PlayerData.java
         run: |
           cat <<'EOF' > app/src/main/java/com/enjoer/game/PlayerData.java
           package com.enjoer.game;
@@ -159,229 +358,7 @@ jobs:
           }
           EOF
 
-      - name: Create FirebaseManager.java (полный)
-        run: |
-          cat <<'FIREBASE' > app/src/main/java/com/enjoer/game/FirebaseManager.java
-          package com.enjoer.game;
-          
-          import android.util.Log;
-          import androidx.annotation.NonNull;
-          import com.google.firebase.database.*;
-          import com.google.firebase.auth.FirebaseAuth;
-          import com.google.firebase.auth.FirebaseUser;
-          import org.json.JSONArray;
-          import org.json.JSONObject;
-          import java.util.*;
-          import java.util.concurrent.CopyOnWriteArrayList;
-          
-          public class FirebaseManager {
-              private static final String TAG = "FirebaseManager";
-              private DatabaseReference databaseRef;
-              private FirebaseAuth auth;
-              private FirebaseUser currentUser;
-              private MultiplayerCallback multiplayerCallback;
-              private LevelsCallback levelsCallback;
-              
-              public interface MultiplayerCallback {
-                  void onPlayerJoined(PlayerData player);
-                  void onPlayerMoved(PlayerData player);
-                  void onPlayerLeft(String playerId);
-                  void onConnected(String roomId);
-              }
-              
-              public interface LevelsCallback {
-                  void onLevelsLoaded(List<LevelInfo> levels);
-                  void onLevelSaved(String levelId);
-                  void onLevelLoaded(CopyOnWriteArrayList<Block> blocks);
-                  void onError(String error);
-              }
-              
-              public static class LevelInfo {
-                  public String id, name, author;
-                  public int likes, plays;
-                  public long timestamp;
-                  public LevelInfo(String id, String name, String author, int likes, int plays, long timestamp) {
-                      this.id = id; this.name = name; this.author = author; this.likes = likes; this.plays = plays; this.timestamp = timestamp;
-                  }
-              }
-              
-              public FirebaseManager() {
-                  databaseRef = FirebaseDatabase.getInstance().getReference();
-                  auth = FirebaseAuth.getInstance();
-                  signInAnonymously();
-              }
-              
-              private void signInAnonymously() {
-                  if (auth.getCurrentUser() == null) {
-                      auth.signInAnonymously().addOnCompleteListener(task -> {
-                          if (task.isSuccessful()) {
-                              currentUser = auth.getCurrentUser();
-                              Log.d(TAG, "Signed in: " + currentUser.getUid());
-                          }
-                      });
-                  } else {
-                      currentUser = auth.getCurrentUser();
-                  }
-              }
-              
-              public String getUserId() { return currentUser != null ? currentUser.getUid() : "anonymous"; }
-              
-              // ============ ONLINE LEVELS ============
-              public void saveLevel(String levelName, CopyOnWriteArrayList<Block> blocks, LevelsCallback callback) {
-                  if (currentUser == null) { callback.onError("Not authenticated"); return; }
-                  String levelId = databaseRef.child("levels").push().getKey();
-                  try {
-                      JSONArray blocksJson = new JSONArray();
-                      for (Block b : blocks) {
-                          JSONObject obj = new JSONObject();
-                          obj.put("x", b.x); obj.put("y", b.y); obj.put("z", b.z);
-                          obj.put("sx", b.sx); obj.put("sy", b.sy); obj.put("sz", b.sz);
-                          obj.put("r", b.r); obj.put("g", b.g); obj.put("b", b.b);
-                          blocksJson.put(obj);
-                      }
-                      Map<String, Object> levelData = new HashMap<>();
-                      levelData.put("name", levelName);
-                      levelData.put("author", currentUser.getUid());
-                      levelData.put("authorName", "Player");
-                      levelData.put("blocks", blocksJson.toString());
-                      levelData.put("likes", 0);
-                      levelData.put("plays", 0);
-                      levelData.put("timestamp", System.currentTimeMillis());
-                      databaseRef.child("levels").child(levelId).setValue(levelData)
-                          .addOnSuccessListener(aVoid -> callback.onLevelSaved(levelId))
-                          .addOnFailureListener(e -> callback.onError(e.getMessage()));
-                  } catch (Exception e) {
-                      callback.onError(e.getMessage());
-                  }
-              }
-              
-              public void loadLevel(String levelId, LevelsCallback callback) {
-                  databaseRef.child("levels").child(levelId).addListenerForSingleValueEvent(new ValueEventListener() {
-                      @Override
-                      public void onDataChange(@NonNull DataSnapshot snapshot) {
-                          CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
-                          try {
-                              String blocksStr = snapshot.child("blocks").getValue(String.class);
-                              if (blocksStr != null) {
-                                  JSONArray arr = new JSONArray(blocksStr);
-                                  for (int i = 0; i < arr.length(); i++) {
-                                      JSONObject obj = arr.getJSONObject(i);
-                                      blocks.add(new Block(
-                                          (float)obj.getDouble("x"), (float)obj.getDouble("y"), (float)obj.getDouble("z"),
-                                          (float)obj.getDouble("sx"), (float)obj.getDouble("sy"), (float)obj.getDouble("sz"),
-                                          (float)obj.getDouble("r"), (float)obj.getDouble("g"), (float)obj.getDouble("b")
-                                      ));
-                                  }
-                              }
-                              databaseRef.child("levels").child(levelId).child("plays").setValue(snapshot.child("plays").getValue(Long.class, 0L) + 1);
-                              callback.onLevelLoaded(blocks);
-                          } catch (Exception e) {
-                              callback.onError(e.getMessage());
-                          }
-                      }
-                      @Override public void onCancelled(@NonNull DatabaseError error) { callback.onError(error.getMessage()); }
-                  });
-              }
-              
-              public void getAllLevels(LevelsCallback callback) {
-                  databaseRef.child("levels").orderByChild("timestamp").limitToLast(50).addListenerForSingleValueEvent(new ValueEventListener() {
-                      @Override
-                      public void onDataChange(@NonNull DataSnapshot snapshot) {
-                          List<LevelInfo> levels = new ArrayList<>();
-                          for (DataSnapshot child : snapshot.getChildren()) {
-                              String name = child.child("name").getValue(String.class);
-                              String author = child.child("authorName").getValue(String.class);
-                              int likes = child.child("likes").getValue(Integer.class, 0);
-                              int plays = child.child("plays").getValue(Integer.class, 0);
-                              long timestamp = child.child("timestamp").getValue(Long.class, 0L);
-                              levels.add(new LevelInfo(child.getKey(), name != null ? name : "Unnamed", author != null ? author : "Unknown", likes, plays, timestamp));
-                          }
-                          callback.onLevelsLoaded(levels);
-                      }
-                      @Override public void onCancelled(@NonNull DatabaseError error) { callback.onError(error.getMessage()); }
-                  });
-              }
-              
-              public void likeLevel(String levelId) {
-                  databaseRef.child("levels").child(levelId).child("likes").runTransaction(new Transaction.Handler() {
-                      @NonNull @Override public Transaction.Result doTransaction(@NonNull MutableData currentData) {
-                          Long likes = currentData.getValue(Long.class);
-                          currentData.setValue(likes != null ? likes + 1 : 1);
-                          return Transaction.success(currentData);
-                      }
-                      @Override public void onComplete(DatabaseError error, boolean committed, DataSnapshot currentData) {}
-                  });
-              }
-              
-              // ============ ONLINE MULTIPLAYER ============
-              public void joinMultiplayer(String roomId, MultiplayerCallback callback) {
-                  this.multiplayerCallback = callback;
-                  DatabaseReference roomRef = databaseRef.child("multiplayer").child(roomId);
-                  String playerId = getUserId();
-                  
-                  Map<String, Object> playerData = new HashMap<>();
-                  playerData.put("x", 0); playerData.put("y", 6); playerData.put("z", 15);
-                  playerData.put("rY", 0); playerData.put("rX", 0);
-                  playerData.put("lastSeen", System.currentTimeMillis());
-                  
-                  roomRef.child("players").child(playerId).setValue(playerData);
-                  roomRef.child("players").child(playerId).onDisconnect().removeValue();
-                  
-                  // Слушаем других игроков
-                  roomRef.child("players").addChildEventListener(new ChildEventListener() {
-                      @Override public void onChildAdded(@NonNull DataSnapshot snapshot, String prevKey) {
-                          if (!snapshot.getKey().equals(playerId)) {
-                              PlayerData p = new PlayerData(snapshot.getKey(),
-                                  snapshot.child("x").getValue(Float.class, 0f),
-                                  snapshot.child("y").getValue(Float.class, 6f),
-                                  snapshot.child("z").getValue(Float.class, 15f),
-                                  snapshot.child("rY").getValue(Float.class, 0f),
-                                  snapshot.child("rX").getValue(Float.class, 0f));
-                              callback.onPlayerJoined(p);
-                          }
-                      }
-                      @Override public void onChildChanged(@NonNull DataSnapshot snapshot, String prevKey) {
-                          if (!snapshot.getKey().equals(playerId)) {
-                              PlayerData p = new PlayerData(snapshot.getKey(),
-                                  snapshot.child("x").getValue(Float.class, 0f),
-                                  snapshot.child("y").getValue(Float.class, 6f),
-                                  snapshot.child("z").getValue(Float.class, 15f),
-                                  snapshot.child("rY").getValue(Float.class, 0f),
-                                  snapshot.child("rX").getValue(Float.class, 0f));
-                              callback.onPlayerMoved(p);
-                          }
-                      }
-                      @Override public void onChildRemoved(@NonNull DataSnapshot snapshot) { if (!snapshot.getKey().equals(playerId)) callback.onPlayerLeft(snapshot.getKey()); }
-                      @Override public void onChildMoved(@NonNull DataSnapshot snapshot, String prevKey) {}
-                      @Override public void onCancelled(@NonNull DatabaseError error) { callback.onError(error.getMessage()); }
-                  });
-                  
-                  callback.onConnected(roomId);
-              }
-              
-              public void updatePlayerPosition(float x, float y, float z, float rY, float rX) {
-                  if (currentUser == null) return;
-                  Map<String, Object> updates = new HashMap<>();
-                  updates.put("x", x); updates.put("y", y); updates.put("z", z);
-                  updates.put("rY", rY); updates.put("rX", rX);
-                  updates.put("lastSeen", System.currentTimeMillis());
-                  databaseRef.child("multiplayer").child("global").child("players").child(getUserId()).updateChildren(updates);
-              }
-              
-              public void createMultiplayerRoom(String roomName, MultiplayerCallback callback) {
-                  String roomId = databaseRef.child("multiplayer").push().getKey();
-                  Map<String, Object> room = new HashMap<>();
-                  room.put("name", roomName);
-                  room.put("createdBy", getUserId());
-                  room.put("createdAt", System.currentTimeMillis());
-                  room.put("maxPlayers", 4);
-                  databaseRef.child("multiplayer").child(roomId).updateChildren(room)
-                      .addOnSuccessListener(aVoid -> joinMultiplayer(roomId, callback));
-              }
-          }
-          FIREBASE
-
-      - name: Create GameRenderer.java (обновленный с поддержкой мультиплеера)
+      - name: Create GameRenderer.java
         run: |
           cat <<'RENDERER' > app/src/main/java/com/enjoer/game/GameRenderer.java
           package com.enjoer.game;
@@ -396,12 +373,11 @@ jobs:
           public class GameRenderer implements GLSurfaceView.Renderer {
               private final float[] proj=new float[16], view=new float[16], model=new float[16];
               public float pX=0, pY=6, pZ=15, rY=0, rX=0, jX=0, jY=0, vY=0;
-              public boolean isEngineMode=false, isPlayingLevel=false, isMultiplayer=false;
+              public boolean isEngineMode=false, isPlayingLevel=false;
               private int prog;
               private FloatBuffer vBuf, nBuf;
               public float blockR=0.8f, blockG=0.3f, blockB=0.3f, blockSX=4, blockSY=4, blockSZ=4, placeDist=6f;
               public CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
-              public CopyOnWriteArrayList<PlayerData> otherPlayers = new CopyOnWriteArrayList<>();
               public int selectedIndex = -1;
               public float screenW=1, screenH=1;
               private static final float FLOOR_Y=0f, PLAYER_HEIGHT=3.2f, PLAYER_RADIUS=0.5f;
@@ -506,15 +482,15 @@ jobs:
                       "c=(c*(2.51*c+.03))/(c*(2.43*c+.59)+.14);"+
                       "fC=vec4(c,uC.a);}";
                   
-                  prog = mkProg(vs, fs);
+                  prog=mkProg(vs,fs);
                   float[] vc={-.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f, -.5f,.5f,-.5f, -.5f,.5f,.5f, .5f,.5f,-.5f, .5f,.5f,.5f, -.5f,-.5f,-.5f, -.5f,-.5f,.5f, .5f,-.5f,-.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, -.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f, .5f,.5f,.5f, .5f,-.5f,.5f};
                   float[] nc={0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0, -1,0,0, -1,0,0, -1,0,0, -1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0};
-                  vBuf=ByteBuffer.allocateDirect(vc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(vc); vBuf.position(0);
-                  nBuf=ByteBuffer.allocateDirect(nc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(nc); nBuf.position(0);
+                  vBuf=ByteBuffer.allocateDirect(vc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(vc);vBuf.position(0);
+                  nBuf=ByteBuffer.allocateDirect(nc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(nc);nBuf.position(0);
                   loadBuiltInLevel();
               }
               
-              @Override public void onSurfaceChanged(GL10 gl, int w, int h) { GLES30.glViewport(0,0,w,h); Matrix.perspectiveM(proj,0,55,(float)w/h,.1f,500f); screenW=w; screenH=h; }
+              @Override public void onSurfaceChanged(GL10 gl,int w,int h){GLES30.glViewport(0,0,w,h);Matrix.perspectiveM(proj,0,55,(float)w/h,.1f,500f);screenW=w;screenH=h;}
               
               @Override public void onDrawFrame(GL10 gl) {
                   update();
@@ -525,94 +501,177 @@ jobs:
                   float vz=(float)(-Math.cos(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
                   Matrix.setLookAtM(view,0,pX,pY,pZ,pX+vx,pY+vy,pZ+vz,0,1,0);
                   GLES30.glUseProgram(prog);
-                  int uMVP=GLES30.glGetUniformLocation(prog,"uMVP"), uM=GLES30.glGetUniformLocation(prog,"uM");
-                  int uC=GLES30.glGetUniformLocation(prog,"uC"), uSel=GLES30.glGetUniformLocation(prog,"uSel");
-                  int uFloor=GLES30.glGetUniformLocation(prog,"isFloor");
-                  GLES30.glUniform3f(GLES30.glGetUniformLocation(prog,"camP"), pX, pY, pZ);
-                  GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,vBuf); GLES30.glEnableVertexAttribArray(0);
-                  GLES30.glVertexAttribPointer(1,3,GLES30.GL_FLOAT,false,0,nBuf); GLES30.glEnableVertexAttribArray(1);
-                  
-                  // Пол
-                  Matrix.setIdentityM(model,0); Matrix.translateM(model,0,0,-.05f,0); Matrix.scaleM(model,0,800,.1f,800);
-                  GLES30.glUniform1f(uSel,0f); GLES30.glUniform1f(uFloor,1f); draw(uM,uMVP,uC,.04f,.06f,.1f,1f);
+                  int uMVP=GLES30.glGetUniformLocation(prog,"uMVP"),uM=GLES30.glGetUniformLocation(prog,"uM"),uC=GLES30.glGetUniformLocation(prog,"uC");
+                  int uSel=GLES30.glGetUniformLocation(prog,"uSel"),uFloor=GLES30.glGetUniformLocation(prog,"isFloor");
+                  GLES30.glUniform3f(GLES30.glGetUniformLocation(prog,"camP"),pX,pY,pZ);
+                  GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,vBuf);GLES30.glEnableVertexAttribArray(0);
+                  GLES30.glVertexAttribPointer(1,3,GLES30.GL_FLOAT,false,0,nBuf);GLES30.glEnableVertexAttribArray(1);
+                  Matrix.setIdentityM(model,0);Matrix.translateM(model,0,0,-.05f,0);Matrix.scaleM(model,0,800,.1f,800);
+                  GLES30.glUniform1f(uSel,0f);GLES30.glUniform1f(uFloor,1f);draw(uM,uMVP,uC,.04f,.06f,.1f,1f);
                   GLES30.glUniform1f(uFloor,0f);
-                  
-                  // Блоки
-                  for(int i=0;i<blocks.size();i++) { Block b=blocks.get(i); Matrix.setIdentityM(model,0); Matrix.translateM(model,0,b.x,b.y,b.z); Matrix.scaleM(model,0,b.sx,b.sy,b.sz); GLES30.glUniform1f(uSel,(i==selectedIndex&&isEngineMode&&!isPlayingLevel)?1f:0f); draw(uM,uMVP,uC,b.r,b.g,b.b,1f); }
-                  
-                  // Другие игроки (красные кубы)
-                  for(PlayerData p : otherPlayers) {
-                      Matrix.setIdentityM(model,0); Matrix.translateM(model,0,p.x,p.y-1.6f,p.z); Matrix.scaleM(model,0,1f,3.2f,1f);
-                      GLES30.glUniform1f(uSel,0f); draw(uM,uMVP,uC,1f,0.2f,0.2f,1f);
-                      // Имя над игроком (упрощенно - просто желтая метка)
-                      Matrix.setIdentityM(model,0); Matrix.translateM(model,0,p.x,p.y+1f,p.z); Matrix.scaleM(model,0,.5f,.5f,.5f);
-                      draw(uM,uMVP,uC,1f,1f,0.2f,1f);
-                  }
-                  
-                  if(isEngineMode&&!isPlayingLevel&&selectedIndex<0) {
-                      float vx2=(float)(Math.sin(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
-                      float vy2=(float)Math.sin(Math.toRadians(rX));
-                      float vz2=(float)(-Math.cos(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
-                      float px=pX+vx2*placeDist, py=pY+vy2*placeDist, pz=pZ+vz2*placeDist;
-                      if(py-blockSY/2<FLOOR_Y) py=FLOOR_Y+blockSY/2;
-                      Matrix.setIdentityM(model,0); Matrix.translateM(model,0,px,py,pz); Matrix.scaleM(model,0,blockSX,blockSY,blockSZ);
-                      GLES30.glEnable(GLES30.GL_BLEND); GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA,GLES30.GL_ONE_MINUS_SRC_ALPHA);
-                      GLES30.glUniform1f(uSel,0f); draw(uM,uMVP,uC,blockR,blockG,blockB,.4f);
-                      GLES30.glDisable(GLES30.GL_BLEND);
-                  }
+                  for(int i=0;i<blocks.size();i++){Block b=blocks.get(i);Matrix.setIdentityM(model,0);Matrix.translateM(model,0,b.x,b.y,b.z);Matrix.scaleM(model,0,b.sx,b.sy,b.sz);GLES30.glUniform1f(uSel,(i==selectedIndex&&isEngineMode&&!isPlayingLevel)?1f:0f);draw(uM,uMVP,uC,b.r,b.g,b.b,1f);}
+                  if(isEngineMode&&!isPlayingLevel&&selectedIndex<0){float px=pX+vx*placeDist,py=pY+vy*placeDist,pz=pZ+vz*placeDist;if(py-blockSY/2<FLOOR_Y)py=FLOOR_Y+blockSY/2;Matrix.setIdentityM(model,0);Matrix.translateM(model,0,px,py,pz);Matrix.scaleM(model,0,blockSX,blockSY,blockSZ);GLES30.glEnable(GLES30.GL_BLEND);GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA,GLES30.GL_ONE_MINUS_SRC_ALPHA);GLES30.glUniform1f(uSel,0f);draw(uM,uMVP,uC,blockR,blockG,blockB,.4f);GLES30.glDisable(GLES30.GL_BLEND);}
               }
               
-              private void update() {
-                  float s=.35f, rad=(float)Math.toRadians(rY), pitch=(float)Math.toRadians(rX);
-                  if(isEngineMode && !isPlayingLevel) {
-                      float fx=(float)Math.sin(rad), fz=(float)-Math.cos(rad), fy=(float)Math.sin(pitch);
-                      pX+=(fx*-jY+(float)Math.cos(rad)*jX)*s;
-                      pZ+=(fz*-jY+(float)Math.sin(rad)*jX)*s;
-                      pY+=(fy*-jY)*s; if(pY<1) pY=1;
-                  } else {
-                      float mX=((float)Math.sin(rad)*-jY+(float)Math.cos(rad)*jX)*s;
-                      float mZ=((float)-Math.cos(rad)*-jY+(float)Math.sin(rad)*jX)*s;
-                      vY-=.025f; float nX=pX+mX, nY=pY+vY, nZ=pZ+mZ, fY=nY-PLAYER_HEIGHT, hY=nY;
-                      if(fY<FLOOR_Y){ nY=FLOOR_Y+PLAYER_HEIGHT; vY=0; }
-                      for(Block b:blocks){
-                          if(nX+PLAYER_RADIUS>b.minX() && nX-PLAYER_RADIUS<b.maxX() && nZ+PLAYER_RADIUS>b.minZ() && nZ-PLAYER_RADIUS<b.maxZ()){
-                              if(pY-PLAYER_HEIGHT>=b.maxY()-.15f && fY<b.maxY()){ nY=b.maxY()+PLAYER_HEIGHT; vY=0; }
-                              else if(pY<b.minY() && hY>b.minY()){ nY=b.minY(); vY=0; }
-                              else if(fY<b.maxY()-.1f && hY>b.minY()+.1f){
-                                  float oX1=(nX+PLAYER_RADIUS)-b.minX(), oX2=b.maxX()-(nX-PLAYER_RADIUS);
-                                  float oZ1=(nZ+PLAYER_RADIUS)-b.minZ(), oZ2=b.maxZ()-(nZ-PLAYER_RADIUS);
-                                  float minO=Math.min(Math.min(oX1,oX2),Math.min(oZ1,oZ2));
-                                  if(minO==oX1) nX=b.minX()-PLAYER_RADIUS;
-                                  else if(minO==oX2) nX=b.maxX()+PLAYER_RADIUS;
-                                  else if(minO==oZ1) nZ=b.minZ()-PLAYER_RADIUS;
-                                  else nZ=b.maxZ()+PLAYER_RADIUS;
-                              }
-                          }
-                      }
-                      pX=nX; pY=nY; pZ=nZ;
-                  }
+              private void update(){
+                  float s=.35f,rad=(float)Math.toRadians(rY),pitch=(float)Math.toRadians(rX);
+                  if(isEngineMode&&!isPlayingLevel){float fx=(float)Math.sin(rad),fz=(float)-Math.cos(rad),fy=(float)Math.sin(pitch);pX+=(fx*-jY+(float)Math.cos(rad)*jX)*s;pZ+=(fz*-jY+(float)Math.sin(rad)*jX)*s;pY+=(fy*-jY)*s;if(pY<1)pY=1;}
+                  else{float mX=((float)Math.sin(rad)*-jY+(float)Math.cos(rad)*jX)*s,mZ=((float)-Math.cos(rad)*-jY+(float)Math.sin(rad)*jX)*s;vY-=.025f;float nX=pX+mX,nY=pY+vY,nZ=pZ+mZ,fY=nY-PLAYER_HEIGHT,hY=nY;if(fY<FLOOR_Y){nY=FLOOR_Y+PLAYER_HEIGHT;vY=0;}for(Block b:blocks){if(nX+PLAYER_RADIUS>b.minX()&&nX-PLAYER_RADIUS<b.maxX()&&nZ+PLAYER_RADIUS>b.minZ()&&nZ-PLAYER_RADIUS<b.maxZ()){if(pY-PLAYER_HEIGHT>=b.maxY()-.15f&&fY<b.maxY()){nY=b.maxY()+PLAYER_HEIGHT;vY=0;}else if(pY<b.minY()&&hY>b.minY()){nY=b.minY();vY=0;}else if(fY<b.maxY()-.1f&&hY>b.minY()+.1f){float oX1=(nX+PLAYER_RADIUS)-b.minX(),oX2=b.maxX()-(nX-PLAYER_RADIUS),oZ1=(nZ+PLAYER_RADIUS)-b.minZ(),oZ2=b.maxZ()-(nZ-PLAYER_RADIUS),minO=Math.min(Math.min(oX1,oX2),Math.min(oZ1,oZ2));if(minO==oX1)nX=b.minX()-PLAYER_RADIUS;else if(minO==oX2)nX=b.maxX()+PLAYER_RADIUS;else if(minO==oZ1)nZ=b.minZ()-PLAYER_RADIUS;else nZ=b.maxZ()+PLAYER_RADIUS;}}}pX=nX;pY=nY;pZ=nZ;}
               }
               
-              public boolean isOnGround() {
-                  if(pY-PLAYER_HEIGHT<=FLOOR_Y+.1f) return true;
-                  for(Block b:blocks) if(pX+PLAYER_RADIUS>b.minX() && pX-PLAYER_RADIUS<b.maxX() && pZ+PLAYER_RADIUS>b.minZ() && pZ-PLAYER_RADIUS<b.maxZ() && Math.abs((pY-PLAYER_HEIGHT)-b.maxY())<.15f) return true;
-                  return false;
-              }
-              
-              private void draw(int uM, int uMVP, int uC, float r, float g, float b, float a) {
-                  GLES30.glUniformMatrix4fv(uM,1,false,model,0);
-                  float[] res=new float[16]; Matrix.multiplyMM(res,0,proj,0,view,0); Matrix.multiplyMM(res,0,res,0,model,0);
-                  GLES30.glUniformMatrix4fv(uMVP,1,false,res,0);
-                  GLES30.glUniform4f(uC,r,g,b,a);
-                  for(int i=0;i<6;i++) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,i*4,4);
-              }
-              
-              private int mkProg(String v, String f) { int p=GLES30.glCreateProgram(); GLES30.glAttachShader(p,mkSh(35633,v)); GLES30.glAttachShader(p,mkSh(35632,f)); GLES30.glLinkProgram(p); return p; }
-              private int mkSh(int t, String s) { int sh=GLES30.glCreateShader(t); GLES30.glShaderSource(sh,s); GLES30.glCompileShader(sh); return sh; }
+              public boolean isOnGround(){if(pY-PLAYER_HEIGHT<=FLOOR_Y+.1f)return true;for(Block b:blocks)if(pX+PLAYER_RADIUS>b.minX()&&pX-PLAYER_RADIUS<b.maxX()&&pZ+PLAYER_RADIUS>b.minZ()&&pZ-PLAYER_RADIUS<b.maxZ()&&Math.abs((pY-PLAYER_HEIGHT)-b.maxY())<.15f)return true;return false;}
+              private void draw(int uM,int uMVP,int uC,float r,float g,float b,float a){GLES30.glUniformMatrix4fv(uM,1,false,model,0);float[] res=new float[16];Matrix.multiplyMM(res,0,proj,0,view,0);Matrix.multiplyMM(res,0,res,0,model,0);GLES30.glUniformMatrix4fv(uMVP,1,false,res,0);GLES30.glUniform4f(uC,r,g,b,a);for(int i=0;i<6;i++)GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,i*4,4);}
+              private int mkProg(String v,String f){int p=GLES30.glCreateProgram();GLES30.glAttachShader(p,mkSh(35633,v));GLES30.glAttachShader(p,mkSh(35632,f));GLES30.glLinkProgram(p);return p;}
+              private int mkSh(int t,String s){int sh=GLES30.glCreateShader(t);GLES30.glShaderSource(sh,s);GLES30.glCompileShader(sh);return sh;}
           }
           RENDERER
 
-      - name: Create MainActivity.java (полный с UI для онлайн)
+      - name: Create FirebaseManager.java (упрощенный для начала)
+        run: |
+          cat <<'FIREBASE' > app/src/main/java/com/enjoer/game/FirebaseManager.java
+          package com.enjoer.game;
+          
+          import android.util.Log;
+          import androidx.annotation.NonNull;
+          import com.google.firebase.database.*;
+          import com.google.firebase.auth.FirebaseAuth;
+          import com.google.firebase.auth.FirebaseUser;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+          import java.util.*;
+          import java.util.concurrent.CopyOnWriteArrayList;
+          
+          public class FirebaseManager {
+              private DatabaseReference databaseRef;
+              private FirebaseAuth auth;
+              private FirebaseUser currentUser;
+              
+              public interface LevelsCallback {
+                  void onLevelsLoaded(List<LevelInfo> levels);
+                  void onLevelSaved(String levelId);
+                  void onLevelLoaded(CopyOnWriteArrayList<Block> blocks);
+                  void onError(String error);
+              }
+              
+              public static class LevelInfo {
+                  public String id, name, author;
+                  public int likes, plays;
+                  public long timestamp;
+                  public LevelInfo(String id, String name, String author, int likes, int plays, long timestamp) {
+                      this.id = id; this.name = name; this.author = author; this.likes = likes; this.plays = plays; this.timestamp = timestamp;
+                  }
+              }
+              
+              public FirebaseManager() {
+                  databaseRef = FirebaseDatabase.getInstance().getReference();
+                  auth = FirebaseAuth.getInstance();
+                  signInAnonymously();
+              }
+              
+              private void signInAnonymously() {
+                  if (auth.getCurrentUser() == null) {
+                      auth.signInAnonymously().addOnCompleteListener(task -> {
+                          if (task.isSuccessful()) {
+                              currentUser = auth.getCurrentUser();
+                              Log.d("Firebase", "Signed in: " + currentUser.getUid());
+                          }
+                      });
+                  } else {
+                      currentUser = auth.getCurrentUser();
+                  }
+              }
+              
+              public String getUserId() { return currentUser != null ? currentUser.getUid() : "anonymous"; }
+              
+              public void saveLevel(String levelName, CopyOnWriteArrayList<Block> blocks, LevelsCallback callback) {
+                  if (currentUser == null) { callback.onError("Not authenticated"); return; }
+                  String levelId = databaseRef.child("levels").push().getKey();
+                  try {
+                      JSONArray blocksJson = new JSONArray();
+                      for (Block b : blocks) {
+                          JSONObject obj = new JSONObject();
+                          obj.put("x", b.x); obj.put("y", b.y); obj.put("z", b.z);
+                          obj.put("sx", b.sx); obj.put("sy", b.sy); obj.put("sz", b.sz);
+                          obj.put("r", b.r); obj.put("g", b.g); obj.put("b", b.b);
+                          blocksJson.put(obj);
+                      }
+                      Map<String, Object> levelData = new HashMap<>();
+                      levelData.put("name", levelName);
+                      levelData.put("author", currentUser.getUid());
+                      levelData.put("authorName", "Player");
+                      levelData.put("blocks", blocksJson.toString());
+                      levelData.put("likes", 0);
+                      levelData.put("plays", 0);
+                      levelData.put("timestamp", System.currentTimeMillis());
+                      databaseRef.child("levels").child(levelId).setValue(levelData)
+                          .addOnSuccessListener(aVoid -> callback.onLevelSaved(levelId))
+                          .addOnFailureListener(e -> callback.onError(e.getMessage()));
+                  } catch (Exception e) {
+                      callback.onError(e.getMessage());
+                  }
+              }
+              
+              public void loadLevel(String levelId, LevelsCallback callback) {
+                  databaseRef.child("levels").child(levelId).addListenerForSingleValueEvent(new ValueEventListener() {
+                      @Override
+                      public void onDataChange(@NonNull DataSnapshot snapshot) {
+                          CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
+                          try {
+                              String blocksStr = snapshot.child("blocks").getValue(String.class);
+                              if (blocksStr != null) {
+                                  JSONArray arr = new JSONArray(blocksStr);
+                                  for (int i = 0; i < arr.length(); i++) {
+                                      JSONObject obj = arr.getJSONObject(i);
+                                      blocks.add(new Block(
+                                          (float)obj.getDouble("x"), (float)obj.getDouble("y"), (float)obj.getDouble("z"),
+                                          (float)obj.getDouble("sx"), (float)obj.getDouble("sy"), (float)obj.getDouble("sz"),
+                                          (float)obj.getDouble("r"), (float)obj.getDouble("g"), (float)obj.getDouble("b")
+                                      ));
+                                  }
+                              }
+                              databaseRef.child("levels").child(levelId).child("plays").setValue(snapshot.child("plays").getValue(Long.class, 0L) + 1);
+                              callback.onLevelLoaded(blocks);
+                          } catch (Exception e) {
+                              callback.onError(e.getMessage());
+                          }
+                      }
+                      @Override public void onCancelled(@NonNull DatabaseError error) { callback.onError(error.getMessage()); }
+                  });
+              }
+              
+              public void getAllLevels(LevelsCallback callback) {
+                  databaseRef.child("levels").orderByChild("timestamp").limitToLast(50).addListenerForSingleValueEvent(new ValueEventListener() {
+                      @Override
+                      public void onDataChange(@NonNull DataSnapshot snapshot) {
+                          List<LevelInfo> levels = new ArrayList<>();
+                          for (DataSnapshot child : snapshot.getChildren()) {
+                              String name = child.child("name").getValue(String.class);
+                              String author = child.child("authorName").getValue(String.class);
+                              int likes = child.child("likes").getValue(Integer.class, 0);
+                              int plays = child.child("plays").getValue(Integer.class, 0);
+                              long timestamp = child.child("timestamp").getValue(Long.class, 0L);
+                              levels.add(new LevelInfo(child.getKey(), name != null ? name : "Unnamed", author != null ? author : "Unknown", likes, plays, timestamp));
+                          }
+                          callback.onLevelsLoaded(levels);
+                      }
+                      @Override public void onCancelled(@NonNull DatabaseError error) { callback.onError(error.getMessage()); }
+                  });
+              }
+              
+              public void likeLevel(String levelId) {
+                  databaseRef.child("levels").child(levelId).child("likes").runTransaction(new Transaction.Handler() {
+                      @NonNull @Override public Transaction.Result doTransaction(@NonNull MutableData currentData) {
+                          Long likes = currentData.getValue(Long.class);
+                          currentData.setValue(likes != null ? likes + 1 : 1);
+                          return Transaction.success(currentData);
+                      }
+                      @Override public void onComplete(DatabaseError error, boolean committed, DataSnapshot currentData) {}
+                  });
+              }
+          }
+          FIREBASE
+
+      - name: Create MainActivity.java
         run: |
           cat <<'MAIN' > app/src/main/java/com/enjoer/game/MainActivity.java
           package com.enjoer.game;
@@ -621,7 +680,6 @@ jobs:
           import android.content.Intent;
           import android.content.pm.ActivityInfo;
           import android.graphics.drawable.GradientDrawable;
-          import android.net.Uri;
           import android.os.Bundle;
           import android.os.Handler;
           import android.os.Looper;
@@ -647,8 +705,6 @@ jobs:
               private Handler handler = new Handler(Looper.getMainLooper());
               private int pendingMode = 0;
               private FirebaseManager firebaseManager;
-              private String currentOnlineLevelId = null;
-              private boolean isOnlineMode = false;
               private Toast currentToast;
               
               private void showToast(String msg) {
@@ -721,7 +777,7 @@ jobs:
                   // MENU BUTTONS
                   findViewById(R.id.btn_play).setOnClickListener(v -> {
                       pendingMode = 1;
-                      ren.isEngineMode = false; ren.isPlayingLevel = false; isOnlineMode = false;
+                      ren.isEngineMode = false; ren.isPlayingLevel = false;
                       ren.loadBuiltInLevel();
                       ren.pX = 0; ren.pY = 7; ren.pZ = 15; ren.vY = 0;
                       ren.selectedIndex = -1;
@@ -732,7 +788,7 @@ jobs:
                   
                   findViewById(R.id.btn_engine).setOnClickListener(v -> {
                       pendingMode = 2;
-                      ren.isEngineMode = true; ren.isPlayingLevel = false; isOnlineMode = false;
+                      ren.isEngineMode = true; ren.isPlayingLevel = false;
                       ren.blocks.clear();
                       ren.pX = 0; ren.pY = 20; ren.pZ = 35;
                       ren.selectedIndex = -1;
@@ -759,8 +815,7 @@ jobs:
                   
                   View.OnClickListener back = v -> {
                       pendingMode = 0;
-                      ren.isPlayingLevel = false; isOnlineMode = false;
-                      ren.otherPlayers.clear();
+                      ren.isPlayingLevel = false;
                       gameUI.setVisibility(View.GONE);
                       engineUI.setVisibility(View.GONE);
                       playtestUI.setVisibility(View.GONE);
@@ -870,6 +925,10 @@ jobs:
                   firebaseManager.getAllLevels(new FirebaseManager.LevelsCallback() {
                       @Override
                       public void onLevelsLoaded(List<FirebaseManager.LevelInfo> levels) {
+                          if (levels.isEmpty()) {
+                              showToast("No levels found. Create one first!");
+                              return;
+                          }
                           String[] items = new String[levels.size()];
                           for (int i = 0; i < levels.size(); i++) {
                               FirebaseManager.LevelInfo l = levels.get(i);
@@ -905,7 +964,6 @@ jobs:
               }
               
               @Override protected void onSaveInstanceState(Bundle outState) { super.onSaveInstanceState(outState); outState.putInt("mode", pendingMode); }
-              private void resetP() { ren.pX = 0; ren.pY = 7; ren.pZ = 15; ren.vY = 0; }
               private void axisBtn(int id, float dx, float dy, float dz) { findViewById(id).setOnTouchListener((v, e) -> { if (e.getAction() == MotionEvent.ACTION_DOWN || e.getAction() == MotionEvent.ACTION_MOVE) ren.moveSelected(dx * .5f, dy * .5f, dz * .5f); return true; }); }
               private void updAxis() { runOnUiThread(() -> axisPanel.setVisibility(ren.selectedIndex >= 0 ? View.VISIBLE : View.GONE)); }
               private void setupJoy(View base, View stick) {
@@ -976,5 +1034,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_6.1_Full_Online
+          name: Enjoer_6.1_Online_Levels
           path: app/build/outputs/apk/debug/app-debug.apk
