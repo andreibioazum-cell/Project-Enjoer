@@ -16,16 +16,16 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Force Project Structure
+      - name: Build Pure Project
         run: |
-          # 1. Полная зачистка и создание структуры
-          rm -rf app build.gradle settings.gradle
+          # 1. Сносим всё и создаем чистый скелет
+          rm -rf app build.gradle settings.gradle gradle.properties
           mkdir -p app/src/main/java/com/enjoer/game
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
 
-          # 2. ДВИЖОК: Renderer (Голубое небо, без звезд, оптимизированный код)
+          # 2. РЕНДЕРЕР (Голубое небо, движок, без звезд)
           cat <<'EOF' > app/src/main/java/com/enjoer/game/GameRenderer.java
           package com.enjoer.game;
           import android.opengl.*;
@@ -42,8 +42,7 @@ jobs:
 
               @Override public void onSurfaceCreated(GL10 gl, EGLConfig cfg) {
                   GLES30.glEnable(GLES30.GL_DEPTH_TEST);
-                  // Голубое небо: ClearColor(0.5, 0.8, 1.0)
-                  GLES30.glClearColor(0.5f, 0.8f, 1.0f, 1.0f);
+                  GLES30.glClearColor(0.5f, 0.8f, 1.0f, 1.0f); // Голубое небо
                   
                   String vs="#version 300 es\nlayout(location=0)in vec4 aP;uniform mat4 uM;void main(){gl_Position=uM*aP;}";
                   String fs="#version 300 es\nprecision highp float;uniform vec4 uC;out vec4 fC;void main(){fC=uC;}";
@@ -68,10 +67,8 @@ jobs:
                   int uM=GLES30.glGetUniformLocation(prg,"uM"), uC=GLES30.glGetUniformLocation(prg,"uC");
                   GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,b); GLES30.glEnableVertexAttribArray(0);
                   
-                  // Рисуем землю (серую)
-                  drawObj(uM, uC, 0,0,0, 100,1,100, 0.4f,0.4f,0.4f);
-                  // Рисуем игрока/объект (синий)
-                  drawObj(uM, uC, 0,5,0, 1,1,1, 0.0f,0.4f,0.8f);
+                  drawObj(uM, uC, 0,0,0, 100,1,100, 0.3f,0.3f,0.3f); // Земля
+                  drawObj(uM, uC, 0,5,0, 1,1,1, 1.0f,0.2f,0.2f);    // Куб
               }
 
               private void drawObj(int uM, int uC, float x, float y, float z, float sx, float sy, float sz, float r, float g, float b_col){
@@ -82,15 +79,15 @@ jobs:
               }
 
               private void update(){
-                  float s=0.2f, rad=(float)Math.toRadians(rY);
+                  float s=0.15f, rad=(float)Math.toRadians(rY);
                   pX+=((float)Math.sin(rad)*-jY+(float)Math.cos(rad)*jX)*s;
                   pZ+=((float)-Math.cos(rad)*-jY+(float)Math.sin(rad)*jX)*s;
-                  vY-=0.02f; pY+=vY; if(pY<4.2f){pY=4.2f; vY=0;}
+                  vY-=0.015f; pY+=vY; if(pY<4.2f){pY=4.2f; vY=0;}
               }
           }
           EOF
 
-          # 3. MainActivity (управление джойстиком и обзором)
+          # 3. АКТИВНОСТЬ
           cat <<'EOF' > app/src/main/java/com/enjoer/game/MainActivity.java
           package com.enjoer.game;
           import android.os.Bundle;
@@ -107,27 +104,24 @@ jobs:
 
                   findViewById(R.id.joy).setOnTouchListener((v,e)->{
                       if(e.getAction()==MotionEvent.ACTION_MOVE){
-                          ren.jX=(e.getX()-v.getWidth()/2)/50f; ren.jY=(e.getY()-v.getHeight()/2)/50f;
+                          ren.jX=(e.getX()-v.getWidth()/2)/60f; ren.jY=(e.getY()-v.getHeight()/2)/60f;
                       } else { ren.jX=0; ren.jY=0; } return true;
                   });
 
-                  findViewById(R.id.look).setOnTouchListener((v,e)->{
+                  findViewById(R.id.gl_view).setOnTouchListener((v,e)->{
                       if(e.getAction()==MotionEvent.ACTION_DOWN) lx=e.getX();
-                      if(e.getAction()==MotionEvent.ACTION_MOVE){ ren.rY+=(e.getX()-lx)*0.3f; lx=e.getX(); }
+                      if(e.getAction()==MotionEvent.ACTION_MOVE){ ren.rY+=(e.getX()-lx)*0.4f; lx=e.getX(); }
                       return true;
                   });
-                  
-                  findViewById(R.id.btn_jump).setOnClickListener(v->{ if(ren.isOnGround()) ren.vY=0.5f; });
+                  findViewById(R.id.btn_jump).setOnClickListener(v->{ if(ren.isOnGround()) ren.vY=0.45f; });
               }
           }
           EOF
 
-      - name: Force Build Resources
-        run: |
+          # 4. РЕСУРСЫ
           cat <<'EOF' > app/src/main/res/layout/activity_main.xml
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent">
               <android.opengl.GLSurfaceView android:id="@+id/gl_view" android:layout_width="match_parent" android:layout_height="match_parent"/>
-              <View android:id="@+id/look" android:layout_width="match_parent" android:layout_height="match_parent"/>
               <View android:id="@+id/joy" android:layout_width="140dp" android:layout_height="140dp" android:layout_gravity="bottom|left" android:layout_margin="30dp" android:background="@drawable/joy_bg"/>
               <Button android:id="@+id/btn_jump" android:layout_width="80dp" android:layout_height="80dp" android:layout_gravity="bottom|right" android:layout_margin="40dp" android:text="JUMP" android:background="@drawable/btn_style"/>
           </FrameLayout>
@@ -137,8 +131,16 @@ jobs:
           echo "<shape xmlns:android='http://schemas.android.com/apk/res/android' android:shape='oval'><solid android:color='#4400BFFF'/></shape>" > app/src/main/res/drawable/joy_bg.xml
           echo "<shape xmlns:android='http://schemas.android.com/apk/res/android'><corners android:radius='10dp'/><solid android:color='#00BFFF'/></shape>" > app/src/main/res/drawable/btn_style.xml
 
-      - name: Config Gradle
-        run: |
+          # 5. МАНИФЕСТ И КОНФИГИ
+          cat <<'EOF' > app/src/main/AndroidManifest.xml
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@style/Theme.App">
+          <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:screenOrientation="landscape">
+          <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+          </activity></application></manifest>
+          EOF
+
+          echo "include ':app'" > settings.gradle
+          echo "android.useAndroidX=true" > gradle.properties
           cat <<'EOF' > build.gradle
           buildscript { repositories { google(); mavenCentral() }; dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
           allprojects { repositories { google(); mavenCentral() } }
@@ -148,23 +150,15 @@ jobs:
           android { namespace 'com.enjoer.game'; compileSdk 34; defaultConfig { applicationId 'com.enjoer.game'; minSdk 24; targetSdk 34 } }
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
-          echo "include ':app'" > settings.gradle
-          
-          cat <<'EOF' > app/src/main/AndroidManifest.xml
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@style/Theme.App">
-          <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:screenOrientation="landscape">
-          <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-          </activity></application></manifest>
-          EOF
 
-      - name: Final Build
+      - name: Build and Upload
         run: |
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Save APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_V6_Engine_BlueSky
+          name: Enjoer_V6_Final
           path: app/build/outputs/apk/debug/app-debug.apk
