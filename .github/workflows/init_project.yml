@@ -1,21 +1,22 @@
-name: STEP 1 - Initialize Engine Source
+name: STEP 1 - Create Source
 on: workflow_dispatch
 
 jobs:
-  init-source:
+  init:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Create Folders
-        run: mkdir -p src_files/java src_files/layout src_files/values src_files/drawable
-
-      - name: Write Logic
+      - name: Generate Code
         run: |
-          # Java Renderer с движком и звездами
+          mkdir -p src_files/java src_files/layout src_files/values src_files/drawable
+          
+          # Рендерер со звездами и логикой движка
           cat <<'EOF' > src_files/java/GameRenderer.java
           package com.enjoer.game;
           import android.opengl.*;
@@ -40,14 +41,15 @@ jobs:
                   GLES30.glAttachShader(prog,vsh); GLES30.glAttachShader(prog,fsh); GLES30.glLinkProgram(prog);
                   float[] vc={-.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f, -.5f,.5f,-.5f, -.5f,.5f,.5f, .5f,.5f,-.5f, .5f,.5f,.5f, -.5f,-.5f,-.5f, -.5f,-.5f,.5f, .5f,-.5f,-.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, -.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f, .5f,.5f,.5f, .5f,-.5f,.5f};
                   vBuf=ByteBuffer.allocateDirect(vc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(vc); vBuf.position(0);
-                  blocks.add(new Block(0,1,-5, 20,2,20, 0.2f,0.2f,0.3f));
+                  blocks.add(new Block(0,1,-5, 20,2,20, 0.1f,0.1f,0.2f));
               }
               @Override public void onSurfaceChanged(GL10 gl,int w,int h){ GLES30.glViewport(0,0,w,h); Matrix.perspectiveM(proj,0,60,(float)w/h,0.1f,500f); }
               @Override public void onDrawFrame(GL10 gl) {
                   update(); GLES30.glClearColor(0,0,0.01f,1); GLES30.glClear(16640);
                   float vx=(float)(Math.sin(Math.toRadians(rY))*Math.cos(Math.toRadians(rX))), vy=(float)Math.sin(Math.toRadians(rX)), vz=(float)(-Math.cos(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
                   Matrix.setLookAtM(view,0,pX,pY,pZ,pX+vx,pY+vy,pZ+vz,0,1,0);
-                  GLES30.glUseProgram(prog); int uMVP=GLES30.glGetUniformLocation(prog,"uMVP"), uC=GLES30.glGetUniformLocation(prog,"uC");
+                  GLES30.glUseProgram(prog);
+                  int uMVP=GLES30.glGetUniformLocation(prog,"uMVP"), uC=GLES30.glGetUniformLocation(prog,"uC");
                   GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,vBuf); GLES30.glEnableVertexAttribArray(0);
                   for(Block b : blocks){
                       Matrix.setIdentityM(model,0); Matrix.translateM(model,0,b.x,b.y,b.z); Matrix.scaleM(model,0,b.sx,b.sy,b.sz);
@@ -62,12 +64,31 @@ jobs:
                   pZ+=((float)-Math.cos(rad)*-jY+(float)Math.sin(rad)*jX)*s;
                   if(!isEngineMode){vY-=0.02f; pY+=vY; if(pY<4.2f){pY=4.2f; vY=0;}}
               }
-              public void place(){ blocks.add(new Block(pX,pY,pZ-5, 2,2,2, 0,0.6f,1)); }
+              public void place(){ blocks.add(new Block(pX,pY,pZ-5, 2,2,2, 0,0.7f,1)); }
           }
           class Block { public float x,y,z,sx,sy,sz,r,g,b; Block(float x,float y,float z,float sx,float sy,float sz,float r,float g,float b){this.x=x;this.y=y;this.z=z;this.sx=sx;this.sy=sy;this.sz=sz;this.r=r;this.g=g;this.b=b;} }
           EOF
 
-          # Остальные файлы (MainActivity и Layout)
+          # Главное меню (Черный фон)
+          cat <<'EOF' > src_files/layout/activity_main.xml
+          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000">
+              <android.opengl.GLSurfaceView android:id="@+id/gl_view" android:layout_width="match_parent" android:layout_height="match_parent"/>
+              <RelativeLayout android:id="@+id/game_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+                  <View android:id="@+id/look_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
+                  <FrameLayout android:id="@+id/joy_base" android:layout_width="140dp" android:layout_height="140dp" android:layout_alignParentBottom="true" android:layout_margin="30dp" android:background="@drawable/joy_base"/>
+              </RelativeLayout>
+              <RelativeLayout android:id="@+id/engine_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+                  <Button android:id="@+id/btn_place" android:layout_width="120dp" android:layout_height="60dp" android:text="ADD BLOCK" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_margin="20dp"/>
+              </RelativeLayout>
+              <LinearLayout android:id="@+id/menu_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:background="#02050A">
+                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ENJOER SPACE" android:textSize="35sp" android:textColor="#00BFFF" android:layout_marginBottom="40dp"/>
+                  <Button android:id="@+id/btn_play" android:layout_width="220dp" android:layout_height="60dp" android:text="START" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginBottom="15dp"/>
+                  <Button android:id="@+id/btn_engine" android:layout_width="220dp" android:layout_height="60dp" android:text="EDITOR" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+              </LinearLayout>
+          </FrameLayout>
+          EOF
+          
+          # MainActivity
           cat <<'EOF' > src_files/java/MainActivity.java
           package com.enjoer.game;
           import android.os.Bundle;
@@ -100,28 +121,10 @@ jobs:
           }
           EOF
 
-          cat <<'EOF' > src_files/layout/activity_main.xml
-          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000">
-              <android.opengl.GLSurfaceView android:id="@+id/gl_view" android:layout_width="match_parent" android:layout_height="match_parent"/>
-              <RelativeLayout android:id="@+id/game_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-                  <View android:id="@+id/look_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
-                  <FrameLayout android:id="@+id/joy_base" android:layout_width="140dp" android:layout_height="140dp" android:layout_alignParentBottom="true" android:layout_margin="30dp" android:background="@drawable/joy_base"/>
-              </RelativeLayout>
-              <RelativeLayout android:id="@+id/engine_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
-                  <Button android:id="@+id/btn_place" android:layout_width="120dp" android:layout_height="60dp" android:text="ADD BLOCK" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_margin="20dp"/>
-              </RelativeLayout>
-              <LinearLayout android:id="@+id/menu_ui" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:background="#02050A">
-                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ENJOER ENGINE" android:textSize="35sp" android:textColor="#00BFFF" android:layout_marginBottom="40dp"/>
-                  <Button android:id="@+id/btn_play" android:layout_width="220dp" android:layout_height="60dp" android:text="PLAY" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginBottom="15dp"/>
-                  <Button android:id="@+id/btn_engine" android:layout_width="220dp" android:layout_height="60dp" android:text="OPEN ENGINE" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
-              </LinearLayout>
-          </FrameLayout>
-          EOF
-
-      - name: Push Files
+      - name: Push to Repo
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add src_files/
-          git commit -m "Initialize Engine Source" || echo "No changes"
+          git add .
+          git commit -m "Force Init Source with Engine" || echo "No changes"
           git push origin main
