@@ -23,30 +23,34 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Prepare Android Project
+      - name: Clean and Prepare
         run: |
-          # 1. Чистим старое и создаем структуру
+          # 1. Сносим всё старое под корень
           rm -rf app build.gradle settings.gradle gradle.properties
+          
+          # 2. Создаем чистую структуру
           mkdir -p app/src/main/java/com/enjoer/game
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
 
-          # 2. Копируем исходники из Инициализатора (если они есть)
+          # 3. Копируем файлы из Инициализатора (только если они существуют)
           if [ -d "src_files" ]; then
-            cp -r src_files/java/. app/src/main/java/com/enjoer/game/ || true
-            cp -r src_files/layout/. app/src/main/res/layout/ || true
+            echo "--- Копирование исходников ---"
+            cp -v src_files/java/*.java app/src/main/java/com/enjoer/game/ || echo "Java файлы не найдены"
+            cp -v src_files/layout/*.xml app/src/main/res/layout/ || echo "XML файлы не найдены"
+          else
+            echo "ОШИБКА: Папка src_files не найдена! Проверь работу STEP 1."
+            exit 1
           fi
 
-          # 3. Генерируем ГРАВИЛЬНЫЕ конфиги Gradle (без ошибок null object)
+          # 4. Генерируем конфиги (используем проверенный формат)
           cat <<'EOF' > build.gradle
           buildscript {
               repositories { google(); mavenCentral() }
               dependencies { classpath 'com.android.tools.build:gradle:8.2.2' }
           }
-          allprojects {
-              repositories { google(); mavenCentral() }
-          }
+          allprojects { repositories { google(); mavenCentral() } }
           EOF
 
           cat <<'EOF' > app/build.gradle
@@ -68,7 +72,7 @@ jobs:
           echo "include ':app'" > settings.gradle
           echo "android.useAndroidX=true" > gradle.properties
 
-          # 4. Генерируем Manifest и Ресурсы
+          # 5. Ресурсы (минимальный набор для работы)
           cat <<'EOF' > app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application android:label="Enjoer 6.2" android:theme="@style/Theme.App">
@@ -90,10 +94,11 @@ jobs:
         run: |
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace --info
 
-      - name: Upload Result APK
+      - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_V6_2_Final
+          name: Enjoer_V6_2_Debug
           path: app/build/outputs/apk/debug/app-debug.apk
