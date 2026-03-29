@@ -21,23 +21,25 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Prepare Project
         run: |
-          # Создаем структуру
+          # Полная очистка перед сборкой
+          rm -rf app
           mkdir -p app/src/main/java/com/enjoer/game app/src/main/res/layout app/src/main/res/values app/src/main/res/drawable
           
-          # Копируем исходники (пропускаем если папки нет)
+          # Копируем исходники из Инициализатора
           if [ -d "src_files" ]; then
             cp -r src_files/java/. app/src/main/java/com/enjoer/game/ || true
             cp -r src_files/layout/. app/src/main/res/layout/ || true
           fi
 
-          # Чистая генерация файлов без лишних символов
+          # Конфиги
           echo "include ':app'" > settings.gradle
           echo "android.useAndroidX=true" > gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8" >> gradle.properties
 
-          # Корневой build.gradle
           cat <<EOF > build.gradle
           buildscript {
               repositories { google(); mavenCentral() }
@@ -48,7 +50,6 @@ jobs:
           }
           EOF
 
-          # build.gradle модуля app
           cat <<EOF > app/build.gradle
           plugins { id 'com.android.application' }
           android {
@@ -58,17 +59,24 @@ jobs:
                   applicationId 'com.enjoer.game'
                   minSdk 24
                   targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
               }
           }
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.9.0'
           }
           EOF
 
-          # Manifest
           cat <<EOF > app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="Enjoer Auto" android:theme="@style/AppTheme">
+              <application android:label="Enjoer Space" android:theme="@style/Theme.AppCompat.NoActionBar">
                   <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:screenOrientation="landscape">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
@@ -79,18 +87,15 @@ jobs:
           </manifest>
           EOF
 
-          # Ресурсы
-          echo "<resources><style name='AppTheme' parent='Theme.AppCompat.Light.NoActionBar'><item name='android:windowFullscreen'>true</item></style></resources>" > app/src/main/res/values/themes.xml
-          echo "<shape xmlns:android='http://schemas.android.com/apk/res/android'><solid android:color='#101820'/><stroke android:width='2dp' android:color='#00BFFF'/></shape>" > app/src/main/res/drawable/btn_blue.xml
+          echo "<resources><style name='AppTheme' parent='Theme.AppCompat.Light.NoActionBar'/></resources>" > app/src/main/res/values/themes.xml
 
       - name: Build APK
         run: |
-          gradle wrapper --gradle-version 8.5
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          chmod +x gradlew || (gradle wrapper --gradle-version 8.5 && chmod +x gradlew)
+          ./gradlew clean assembleDebug --stacktrace
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_Auto_Build
+          name: Enjoer_Final_Build
           path: app/build/outputs/apk/debug/app-debug.apk
