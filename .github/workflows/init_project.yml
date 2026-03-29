@@ -1,13 +1,13 @@
 name: STEP 2 - Build Enjoer APK
 on:
   push:
-    paths:
-      - 'src_files/**' # Запускать сборку только если изменился код в папке
-  workflow_dispatch: # Чтобы можно было запустить кнопкой
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Даем права на запись в репозиторий
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,38 +18,43 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Prepare Android Project Structure
+      - name: Prepare Project
         run: |
-          # Создаем стандартную структуру папок Android
           mkdir -p app/src/main/java/com/enjoer/game
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
-
-          # Копируем файлы из нашей папки src_files в проект
           cp src_files/java/*.java app/src/main/java/com/enjoer/game/
           cp src_files/layout/*.xml app/src/main/res/layout/
           cp src_files/values/*.xml app/src/main/res/values/
           cp src_files/drawable/*.xml app/src/main/res/drawable/
           cp src_files/AndroidManifest.xml app/src/main/AndroidManifest.xml
-          
-          # Копируем настройки сборки
           cp src_files/build.gradle ./build.gradle
           cp src_files/app_build.gradle app/build.gradle
           cp src_files/settings.gradle ./settings.gradle
-
-          # Настройки AndroidX
           echo "android.useAndroidX=true" > gradle.properties
           echo "android.enableJetifier=true" >> gradle.properties
 
-      - name: Setup Gradle
-        run: chmod +x gradlew || gradle wrapper --gradle-version 8.5
+      - name: Generate Wrapper
+        run: |
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
 
-      - name: Build with Gradle
+      # ЭТОТ БЛОК СОХРАНИТ GRADLEW В ТВОЙ РЕПОЗИТОРИЙ
+      - name: Commit & Push Gradle Wrapper
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # Добавляем только файлы обертки Gradle
+          git add gradlew gradlew.bat gradle/
+          git commit -m "Add Gradle Wrapper to repository" || echo "No changes to commit"
+          git push
+
+      - name: Build APK
         run: ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_6.1_Build
+          name: Enjoer_Build
           path: app/build/outputs/apk/debug/app-debug.apk
