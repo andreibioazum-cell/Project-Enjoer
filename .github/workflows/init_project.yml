@@ -20,22 +20,20 @@ jobs:
 
       - name: Generate Project Files
         run: |
-          # 1. Очистка
+          # 1. Очистка и создание структуры
           rm -rf app build.gradle settings.gradle gradle.properties
           mkdir -p app/src/main/java/com/enjoer/game
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
 
-          # 2. Корневой build.gradle (Исправленный синтаксис)
+          # 2. Корневой build.gradle
           cat <<'EOF' > build.gradle
           buildscript {
               repositories { google(); mavenCentral() }
               dependencies { classpath 'com.android.tools.build:gradle:8.2.2' }
           }
-          allprojects {
-              repositories { google(); mavenCentral() }
-          }
+          allprojects { repositories { google(); mavenCentral() } }
           EOF
 
           # 3. Настройки проекта
@@ -48,20 +46,12 @@ jobs:
           android {
               namespace 'com.enjoer.game'
               compileSdk 34
-              defaultConfig {
-                  applicationId 'com.enjoer.game'
-                  minSdk 24
-                  targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
-              }
+              defaultConfig { applicationId 'com.enjoer.game'; minSdk 24; targetSdk 34 }
           }
-          dependencies {
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-          }
+          dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
 
-          # 5. Java Код (Renderer + MainActivity)
+          # 5. Java Код (С фиксом шейдера звезд)
           cat <<'EOF' > app/src/main/java/com/enjoer/game/GameRenderer.java
           package com.enjoer.game;
           import android.opengl.*;
@@ -69,29 +59,39 @@ jobs:
           import java.util.concurrent.CopyOnWriteArrayList;
           import javax.microedition.khronos.egl.EGLConfig;
           import javax.microedition.khronos.opengles.GL10;
+
           public class GameRenderer implements GLSurfaceView.Renderer {
               private final float[] proj=new float[16], view=new float[16], model=new float[16];
-              public float pX=0, pY=7, pZ=15, rY=0, rX=0, jX=0, jY=0, vY=0;
+              public float pX=0, pY=7, pZ=15, rY=0, jX=0, jY=0, vY=0;
               public boolean isEngineMode=false;
               private int prog;
               private FloatBuffer vBuf;
               public CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
+
               @Override public void onSurfaceCreated(GL10 gl, EGLConfig cfg) {
                   GLES30.glEnable(GLES30.GL_DEPTH_TEST);
+                  GLES30.glEnable(GLES30.GL_BLEND);
+                  GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA);
+
                   String vs="#version 300 es\nlayout(location=0)in vec4 aP;uniform mat4 uMVP;out vec3 vP;void main(){vP=aP.xyz;gl_Position=uMVP*aP;}";
+                  
+                  // Фикс шейдера: точечные звезды без полос
                   String fs="#version 300 es\nprecision highp float;in vec3 vP;uniform vec4 uC;uniform vec3 camP;out vec4 fC;" +
                       "float h(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}" +
                       "vec3 sky(vec3 d){vec3 s=mix(vec3(.001,.002,.01),vec3(.0,.05,.15),clamp(d.y*.5+.5,0.,1.));" +
                       "if(d.y>-0.1){for(float i=1.;i<3.;i++){vec3 p=d*30.*i;vec3 id=floor(p);if(h(id)>.98){" +
                       "float dist=length(fract(p)-.5);s+=vec3(.8,.9,1.)*smoothstep(.15,0.,dist);}}}return s;}" +
                       "void main(){vec3 d=normalize(vP-camP);vec3 c=uC.rgb;if(length(vP)>90.){c=sky(d);}fC=vec4(c,1.);}";
+
                   int vsh=GLES30.glCreateShader(35633); GLES30.glShaderSource(vsh,vs); GLES30.glCompileShader(vsh);
                   int fsh=GLES30.glCreateShader(35632); GLES30.glShaderSource(fsh,fs); GLES30.glCompileShader(fsh);
                   prog=GLES30.glCreateProgram(); GLES30.glAttachShader(prog,vsh); GLES30.glAttachShader(prog,fsh); GLES30.glLinkProgram(prog);
+                  
                   float[] vc={-.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f};
                   vBuf=ByteBuffer.allocateDirect(vc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(vc); vBuf.position(0);
-                  blocks.add(new Block(0,0,0, 100,1,100, 0.1f,0.1f,0.15f));
+                  blocks.add(new Block(0,0,0, 100,1,100, 0.1f,0.1f,0.15f)); // Пол
               }
+
               @Override public void onSurfaceChanged(GL10 gl,int w,int h){ GLES30.glViewport(0,0,w,h); Matrix.perspectiveM(proj,0,60,(float)w/h,0.1f,500f); }
               @Override public void onDrawFrame(GL10 gl) {
                   update(); GLES30.glClear(16640);
@@ -152,7 +152,7 @@ jobs:
           }
           EOF
 
-          # 6. Ресурсы
+          # 6. XML Интерфейс и Ресурсы
           cat <<'EOF' > app/src/main/res/layout/activity_main.xml
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000">
               <android.opengl.GLSurfaceView android:id="@+id/gl_view" android:layout_width="match_parent" android:layout_height="match_parent"/>
@@ -180,7 +180,7 @@ jobs:
         run: |
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
