@@ -23,14 +23,12 @@ jobs:
 
       - name: Generate Project Base
         run: |
-          # 1. Стерилизация
           rm -rf app build.gradle settings.gradle gradle.properties
           mkdir -p app/src/main/java/com/enjoer/game
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
 
-          # 2. Создание Gradle файлов
           cat <<'EOF' > build.gradle
           buildscript {
               repositories { google(); mavenCentral() }
@@ -54,14 +52,12 @@ jobs:
 
       - name: Inject Source Files
         run: |
-          # Если есть файлы от Step 1 - берем их, если нет - создаем стабильный минимум
           if [ -d "src_files/java" ] && [ "$(ls -A src_files/java)" ]; then
-            echo "Использую внешние исходники..."
+            echo "Копирую твои исходники..."
             cp -r src_files/java/. app/src/main/java/com/enjoer/game/
             cp -r src_files/layout/. app/src/main/res/layout/
           else
-            echo "Внешние файлы не найдены, создаю встроенный код V6.2..."
-            
+            echo "Файлы не найдены, создаю базу..."
             cat <<'EOF' > app/src/main/java/com/enjoer/game/MainActivity.java
           package com.enjoer.game;
           import android.os.Bundle;
@@ -69,51 +65,45 @@ jobs:
           public class MainActivity extends AppCompatActivity {
               @Override protected void onCreate(Bundle b) {
                   super.onCreate(b);
-                  android.opengl.GLSurfaceView g = new android.opengl.GLSurfaceView(this);
-                  g.setEGLContextClientVersion(3);
-                  g.setRenderer(new GameRenderer());
-                  setContentView(g);
-              }
-          }
-          EOF
-
-            cat <<'EOF' > app/src/main/java/com/enjoer/game/GameRenderer.java
-          package com.enjoer.game;
-          import android.opengl.*;
-          import javax.microedition.khronos.egl.EGLConfig;
-          import javax.microedition.khronos.opengles.GL10;
-          import java.nio.*;
-          public class GameRenderer implements GLSurfaceView.Renderer {
-              private int prg; private FloatBuffer b;
-              private float[] p=new float[16], v=new float[16];
-              @Override public void onSurfaceCreated(GL10 g, EGLConfig c) {
-                  GLES30.glClearColor(0,0,0.1f,1);
-                  String vs="#version 300 es\nin vec4 aP;uniform mat4 uM;void main(){gl_Position=uM*aP;}",
-                         fs="#version 300 es\nprecision highp float;out vec4 oC;void main(){oC=vec4(0,0.6,1,1);}";
-                  int s1=GLES30.glCreateShader(35633), s2=GLES30.glCreateShader(35632);
-                  GLES30.glShaderSource(s1,vs); GLES30.glCompileShader(s1);
-                  GLES30.glShaderSource(s2,fs); GLES30.glCompileShader(s2);
-                  prg=GLES30.glCreateProgram(); GLES30.glAttachShader(prg,s1); GLES30.glAttachShader(prg,s2); GLES30.glLinkProgram(prg);
-                  float[] f={-0.5f,0.5f,0, -0.5f,-0.5f,0, 0.5f,0.5f,0, 0.5f,-0.5f,0};
-                  b=ByteBuffer.allocateDirect(48).order(ByteOrder.nativeOrder()).asFloatBuffer().put(f); b.position(0);
-              }
-              @Override public void onSurfaceChanged(GL10 g,int w,int h){ GLES30.glViewport(0,0,w,h); Matrix.perspectiveM(p,0,60,(float)w/h,0.1f,100); }
-              @Override public void onDrawFrame(GL10 g){
-                  GLES30.glClear(16640); GLES30.glUseProgram(prg); Matrix.setIdentityM(v,0); Matrix.translateM(v,0,0,0,-3);
-                  float[] m=new float[16]; Matrix.multiplyMM(m,0,p,0,v,0);
-                  GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(prg,"uM"),1,false,m,0);
-                  GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,b); GLES30.glEnableVertexAttribArray(0);
-                  GLES30.glDrawArrays(5,0,4);
+                  setContentView(R.layout.activity_main);
               }
           }
           EOF
           fi
 
-      - name: Finalize Resources
+      - name: Emergency Resources (FIX AAPT ERROR)
+        run: |
+          # Создаем все стили и drawable, которые могут упоминаться в activity_main.xml
+          cat <<'EOF' > app/src/main/res/values/styles.xml
+          <resources>
+              <style name="Theme.App" parent="Theme.AppCompat.Light.NoActionBar"/>
+              <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar"/>
+          </resources>
+          EOF
+
+          # Фикс ошибки: создаем btn_blue
+          cat <<'EOF' > app/src/main/res/drawable/btn_blue.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+              <corners android:radius="10dp"/><solid android:color="#00BFFF"/>
+          </shape>
+          EOF
+
+          # Фикс: создаем joy_base (если он нужен)
+          cat <<'EOF' > app/src/main/res/drawable/joy_base.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+              <solid android:color="#4400BFFF"/><stroke android:width="2dp" android:color="#00BFFF"/>
+          </shape>
+          EOF
+
+          # На всякий случай добавим btn_style и joy_bg из прошлой версии
+          cp app/src/main/res/drawable/btn_blue.xml app/src/main/res/drawable/btn_style.xml
+          cp app/src/main/res/drawable/joy_base.xml app/src/main/res/drawable/joy_bg.xml
+
+      - name: Finalize Manifest
         run: |
           cat <<'EOF' > app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="Enjoer V6" android:theme="@style/Theme.AppCompat.NoActionBar">
+              <application android:label="Enjoer V6" android:theme="@style/Theme.App">
                   <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:screenOrientation="landscape">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
@@ -130,5 +120,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_V6_Build
+          name: Enjoer_V6_Fixed
           path: app/build/outputs/apk/debug/app-debug.apk
