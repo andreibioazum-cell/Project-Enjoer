@@ -1,4 +1,4 @@
-name: Enjoer_6.1_Full_Online
+name: Enjoer_6.1_Build
 on: [push, workflow_dispatch]
 
 jobs:
@@ -14,41 +14,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Create project structure
+      - name: Create Project Structure
         run: |
           mkdir -p app/src/main/java/com/enjoer/game
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
-
-      - name: Create google-services.json (FIXED package name)
-        run: |
-          cat <<'EOF' > app/google-services.json
-          {
-            "project_info": {
-              "project_number": "1035095493283",
-              "firebase_url": "https://enjoer-eb8ba-default-rtdb.firebaseio.com",
-              "project_id": "enjoer-eb8ba",
-              "storage_bucket": "enjoer-eb8ba.firebasestorage.app"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:1035095493283:android:a206d298551b4027e20d16",
-                  "android_client_info": {
-                    "package_name": "com.enjoer.game"
-                  }
-                },
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyDGZzHHH2ooSiw8zk6xF-0lbebNVT0yQXQ"
-                  }
-                ]
-              }
-            ],
-            "configuration_version": "1"
-          }
-          EOF
 
       - name: Create gradle.properties
         run: |
@@ -69,7 +40,6 @@ jobs:
               }
               dependencies {
                   classpath 'com.android.tools.build:gradle:8.2.2'
-                  classpath 'com.google.gms:google-services:4.4.0'
               }
           }
           allprojects {
@@ -80,7 +50,7 @@ jobs:
           }
           EOF
 
-      - name: Create app/build.gradle (FIXED package name)
+      - name: Create app/build.gradle
         run: |
           cat <<EOF > app/build.gradle
           plugins {
@@ -96,17 +66,10 @@ jobs:
                   versionCode 1
                   versionName "6.1"
               }
-              buildFeatures {
-                  viewBinding true
-              }
           }
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
-              implementation 'com.google.firebase:firebase-database:20.3.0'
-              implementation 'com.google.firebase:firebase-auth:22.3.0'
-              implementation 'com.google.android.gms:play-services-auth:20.7.0'
           }
-          apply plugin: 'com.google.gms.google-services'
           EOF
 
       - name: Create themes.xml
@@ -198,14 +161,10 @@ jobs:
                       <Button android:id="@+id/btn_engine_menu" android:layout_width="50dp" android:layout_height="50dp" 
                           android:text="≡" android:textSize="24sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
                       <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
-                      <Button android:id="@+id/btn_save_cloud" android:layout_width="90dp" android:layout_height="50dp" 
-                          android:text="☁ SAVE" android:textSize="10sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
-                      <Button android:id="@+id/btn_load_cloud" android:layout_width="90dp" android:layout_height="50dp" 
-                          android:text="☁ LOAD" android:textSize="10sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="5dp"/>
-                      <Button android:id="@+id/btn_save" android:layout_width="70dp" android:layout_height="50dp" 
-                          android:text="EXPORT" android:textSize="10sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="5dp"/>
+                      <Button android:id="@+id/btn_save" android:layout_width="90dp" android:layout_height="50dp" 
+                          android:text="EXPORT" android:textSize="12sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
                       <Button android:id="@+id/btn_play_level" android:layout_width="50dp" android:layout_height="50dp" 
-                          android:text="▶" android:textSize="20sp" android:background="@drawable/btn_green" android:textColor="#000" android:layout_marginLeft="5dp"/>
+                          android:text="▶" android:textSize="20sp" android:background="@drawable/btn_green" android:textColor="#000" android:layout_marginLeft="10dp"/>
                   </LinearLayout>
                   <FrameLayout android:id="@+id/engine_joy_base" android:layout_width="120dp" android:layout_height="120dp"
                       android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" 
@@ -271,8 +230,6 @@ jobs:
                               android:text="DELETE" android:background="@drawable/btn_red" android:textColor="#FF4444" android:layout_marginTop="8dp"/>
                           <Button android:id="@+id/btn_deselect" android:layout_width="match_parent" android:layout_height="36dp" 
                               android:text="DESELECT" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginTop="8dp"/>
-                          <Button android:id="@+id/btn_share_cloud" android:layout_width="match_parent" android:layout_height="36dp" 
-                              android:text="🌍 SHARE LEVEL" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginTop="8dp"/>
                       </LinearLayout>
                   </ScrollView>
                   <LinearLayout android:id="@+id/axis_panel" android:layout_width="wrap_content" android:layout_height="wrap_content" 
@@ -323,9 +280,7 @@ jobs:
                   <Button android:id="@+id/btn_engine" android:layout_width="240dp" android:layout_height="60dp" 
                       android:text="EDITOR" android:textSize="18sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue" android:layout_marginBottom="16dp"/>
                   <Button android:id="@+id/btn_load_file" android:layout_width="240dp" android:layout_height="60dp" 
-                      android:text="IMPORT .JSON" android:textSize="16sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue" android:layout_marginBottom="16dp"/>
-                  <Button android:id="@+id/btn_online_levels" android:layout_width="240dp" android:layout_height="60dp" 
-                      android:text="🌍 ONLINE LEVELS" android:textSize="16sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue"/>
+                      android:text="IMPORT .JSON" android:textSize="16sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue"/>
               </LinearLayout>
           </FrameLayout>
           LAYOUT
@@ -345,19 +300,6 @@ jobs:
           }
           EOF
 
-      - name: Create PlayerData.java
-        run: |
-          cat <<'EOF' > app/src/main/java/com/enjoer/game/PlayerData.java
-          package com.enjoer.game;
-          public class PlayerData {
-              public String id;
-              public float x, y, z, rY, rX;
-              public PlayerData(String id, float x, float y, float z, float rY, float rX) {
-                  this.id = id; this.x = x; this.y = y; this.z = z; this.rY = rY; this.rX = rX;
-              }
-          }
-          EOF
-
       - name: Create GameRenderer.java
         run: |
           cat <<'RENDERER' > app/src/main/java/com/enjoer/game/GameRenderer.java
@@ -369,7 +311,7 @@ jobs:
           import java.util.concurrent.CopyOnWriteArrayList;
           import javax.microedition.khronos.egl.EGLConfig;
           import javax.microedition.khronos.opengles.GL10;
-          
+
           public class GameRenderer implements GLSurfaceView.Renderer {
               private final float[] proj=new float[16], view=new float[16], model=new float[16];
               public float pX=0, pY=6, pZ=15, rY=0, rX=0, jX=0, jY=0, vY=0;
@@ -381,7 +323,7 @@ jobs:
               public int selectedIndex = -1;
               public float screenW=1, screenH=1;
               private static final float FLOOR_Y=0f, PLAYER_HEIGHT=3.2f, PLAYER_RADIUS=0.5f;
-              
+
               public void loadBuiltInLevel() {
                   blocks.clear();
                   blocks.add(new Block(0,2,-10, 6,4,6, 0.9f,0.2f,0.2f));
@@ -390,7 +332,7 @@ jobs:
                   blocks.add(new Block(0,1,-38, 14,2,14, 0.9f,0.9f,0.3f));
                   blocks.add(new Block(0,0.5f,-60, 18,1,18, 0.95f,0.95f,0.95f));
               }
-              
+
               public void placeBlock() {
                   float vx=(float)(Math.sin(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
                   float vy=(float)Math.sin(Math.toRadians(rX));
@@ -399,7 +341,7 @@ jobs:
                   if(ny-blockSY/2<FLOOR_Y) ny=FLOOR_Y+blockSY/2;
                   blocks.add(new Block(nx,ny,nz, blockSX,blockSY,blockSZ, blockR,blockG,blockB));
               }
-              
+
               public void deleteSelected() { if(selectedIndex>=0 && selectedIndex<blocks.size()) { blocks.remove(selectedIndex); selectedIndex=-1; } }
               
               public void moveSelected(float dx, float dy, float dz) {
@@ -408,7 +350,7 @@ jobs:
                       if(b.y-b.sy/2<FLOOR_Y) b.y=FLOOR_Y+b.sy/2;
                   }
               }
-              
+
               public int raycastBlock(float tx, float ty) {
                   float ndcX=(2f*tx/screenW)-1f, ndcY=1f-(2f*ty/screenH);
                   float[] invP=new float[16], invV=new float[16];
@@ -437,7 +379,7 @@ jobs:
                   }
                   return closest;
               }
-              
+
               @Override
               public void onSurfaceCreated(GL10 gl, EGLConfig cfg) {
                   GLES30.glEnable(GLES30.GL_DEPTH_TEST);
@@ -489,9 +431,9 @@ jobs:
                   nBuf=ByteBuffer.allocateDirect(nc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(nc);nBuf.position(0);
                   loadBuiltInLevel();
               }
-              
+
               @Override public void onSurfaceChanged(GL10 gl,int w,int h){GLES30.glViewport(0,0,w,h);Matrix.perspectiveM(proj,0,55,(float)w/h,.1f,500f);screenW=w;screenH=h;}
-              
+
               @Override public void onDrawFrame(GL10 gl) {
                   update();
                   GLES30.glClearColor(.005f,.01f,.025f,1f);
@@ -512,164 +454,19 @@ jobs:
                   for(int i=0;i<blocks.size();i++){Block b=blocks.get(i);Matrix.setIdentityM(model,0);Matrix.translateM(model,0,b.x,b.y,b.z);Matrix.scaleM(model,0,b.sx,b.sy,b.sz);GLES30.glUniform1f(uSel,(i==selectedIndex&&isEngineMode&&!isPlayingLevel)?1f:0f);draw(uM,uMVP,uC,b.r,b.g,b.b,1f);}
                   if(isEngineMode&&!isPlayingLevel&&selectedIndex<0){float px=pX+vx*placeDist,py=pY+vy*placeDist,pz=pZ+vz*placeDist;if(py-blockSY/2<FLOOR_Y)py=FLOOR_Y+blockSY/2;Matrix.setIdentityM(model,0);Matrix.translateM(model,0,px,py,pz);Matrix.scaleM(model,0,blockSX,blockSY,blockSZ);GLES30.glEnable(GLES30.GL_BLEND);GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA,GLES30.GL_ONE_MINUS_SRC_ALPHA);GLES30.glUniform1f(uSel,0f);draw(uM,uMVP,uC,blockR,blockG,blockB,.4f);GLES30.glDisable(GLES30.GL_BLEND);}
               }
-              
+
               private void update(){
                   float s=.35f,rad=(float)Math.toRadians(rY),pitch=(float)Math.toRadians(rX);
                   if(isEngineMode&&!isPlayingLevel){float fx=(float)Math.sin(rad),fz=(float)-Math.cos(rad),fy=(float)Math.sin(pitch);pX+=(fx*-jY+(float)Math.cos(rad)*jX)*s;pZ+=(fz*-jY+(float)Math.sin(rad)*jX)*s;pY+=(fy*-jY)*s;if(pY<1)pY=1;}
                   else{float mX=((float)Math.sin(rad)*-jY+(float)Math.cos(rad)*jX)*s,mZ=((float)-Math.cos(rad)*-jY+(float)Math.sin(rad)*jX)*s;vY-=.025f;float nX=pX+mX,nY=pY+vY,nZ=pZ+mZ,fY=nY-PLAYER_HEIGHT,hY=nY;if(fY<FLOOR_Y){nY=FLOOR_Y+PLAYER_HEIGHT;vY=0;}for(Block b:blocks){if(nX+PLAYER_RADIUS>b.minX()&&nX-PLAYER_RADIUS<b.maxX()&&nZ+PLAYER_RADIUS>b.minZ()&&nZ-PLAYER_RADIUS<b.maxZ()){if(pY-PLAYER_HEIGHT>=b.maxY()-.15f&&fY<b.maxY()){nY=b.maxY()+PLAYER_HEIGHT;vY=0;}else if(pY<b.minY()&&hY>b.minY()){nY=b.minY();vY=0;}else if(fY<b.maxY()-.1f&&hY>b.minY()+.1f){float oX1=(nX+PLAYER_RADIUS)-b.minX(),oX2=b.maxX()-(nX-PLAYER_RADIUS),oZ1=(nZ+PLAYER_RADIUS)-b.minZ(),oZ2=b.maxZ()-(nZ-PLAYER_RADIUS),minO=Math.min(Math.min(oX1,oX2),Math.min(oZ1,oZ2));if(minO==oX1)nX=b.minX()-PLAYER_RADIUS;else if(minO==oX2)nX=b.maxX()+PLAYER_RADIUS;else if(minO==oZ1)nZ=b.minZ()-PLAYER_RADIUS;else nZ=b.maxZ()+PLAYER_RADIUS;}}}pX=nX;pY=nY;pZ=nZ;}
               }
-              
+
               public boolean isOnGround(){if(pY-PLAYER_HEIGHT<=FLOOR_Y+.1f)return true;for(Block b:blocks)if(pX+PLAYER_RADIUS>b.minX()&&pX-PLAYER_RADIUS<b.maxX()&&pZ+PLAYER_RADIUS>b.minZ()&&pZ-PLAYER_RADIUS<b.maxZ()&&Math.abs((pY-PLAYER_HEIGHT)-b.maxY())<.15f)return true;return false;}
               private void draw(int uM,int uMVP,int uC,float r,float g,float b,float a){GLES30.glUniformMatrix4fv(uM,1,false,model,0);float[] res=new float[16];Matrix.multiplyMM(res,0,proj,0,view,0);Matrix.multiplyMM(res,0,res,0,model,0);GLES30.glUniformMatrix4fv(uMVP,1,false,res,0);GLES30.glUniform4f(uC,r,g,b,a);for(int i=0;i<6;i++)GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,i*4,4);}
               private int mkProg(String v,String f){int p=GLES30.glCreateProgram();GLES30.glAttachShader(p,mkSh(35633,v));GLES30.glAttachShader(p,mkSh(35632,f));GLES30.glLinkProgram(p);return p;}
               private int mkSh(int t,String s){int sh=GLES30.glCreateShader(t);GLES30.glShaderSource(sh,s);GLES30.glCompileShader(sh);return sh;}
           }
           RENDERER
-
-      - name: Create FirebaseManager.java (упрощенный для начала)
-        run: |
-          cat <<'FIREBASE' > app/src/main/java/com/enjoer/game/FirebaseManager.java
-          package com.enjoer.game;
-          
-          import android.util.Log;
-          import androidx.annotation.NonNull;
-          import com.google.firebase.database.*;
-          import com.google.firebase.auth.FirebaseAuth;
-          import com.google.firebase.auth.FirebaseUser;
-          import org.json.JSONArray;
-          import org.json.JSONObject;
-          import java.util.*;
-          import java.util.concurrent.CopyOnWriteArrayList;
-          
-          public class FirebaseManager {
-              private DatabaseReference databaseRef;
-              private FirebaseAuth auth;
-              private FirebaseUser currentUser;
-              
-              public interface LevelsCallback {
-                  void onLevelsLoaded(List<LevelInfo> levels);
-                  void onLevelSaved(String levelId);
-                  void onLevelLoaded(CopyOnWriteArrayList<Block> blocks);
-                  void onError(String error);
-              }
-              
-              public static class LevelInfo {
-                  public String id, name, author;
-                  public int likes, plays;
-                  public long timestamp;
-                  public LevelInfo(String id, String name, String author, int likes, int plays, long timestamp) {
-                      this.id = id; this.name = name; this.author = author; this.likes = likes; this.plays = plays; this.timestamp = timestamp;
-                  }
-              }
-              
-              public FirebaseManager() {
-                  databaseRef = FirebaseDatabase.getInstance().getReference();
-                  auth = FirebaseAuth.getInstance();
-                  signInAnonymously();
-              }
-              
-              private void signInAnonymously() {
-                  if (auth.getCurrentUser() == null) {
-                      auth.signInAnonymously().addOnCompleteListener(task -> {
-                          if (task.isSuccessful()) {
-                              currentUser = auth.getCurrentUser();
-                              Log.d("Firebase", "Signed in: " + currentUser.getUid());
-                          }
-                      });
-                  } else {
-                      currentUser = auth.getCurrentUser();
-                  }
-              }
-              
-              public String getUserId() { return currentUser != null ? currentUser.getUid() : "anonymous"; }
-              
-              public void saveLevel(String levelName, CopyOnWriteArrayList<Block> blocks, LevelsCallback callback) {
-                  if (currentUser == null) { callback.onError("Not authenticated"); return; }
-                  String levelId = databaseRef.child("levels").push().getKey();
-                  try {
-                      JSONArray blocksJson = new JSONArray();
-                      for (Block b : blocks) {
-                          JSONObject obj = new JSONObject();
-                          obj.put("x", b.x); obj.put("y", b.y); obj.put("z", b.z);
-                          obj.put("sx", b.sx); obj.put("sy", b.sy); obj.put("sz", b.sz);
-                          obj.put("r", b.r); obj.put("g", b.g); obj.put("b", b.b);
-                          blocksJson.put(obj);
-                      }
-                      Map<String, Object> levelData = new HashMap<>();
-                      levelData.put("name", levelName);
-                      levelData.put("author", currentUser.getUid());
-                      levelData.put("authorName", "Player");
-                      levelData.put("blocks", blocksJson.toString());
-                      levelData.put("likes", 0);
-                      levelData.put("plays", 0);
-                      levelData.put("timestamp", System.currentTimeMillis());
-                      databaseRef.child("levels").child(levelId).setValue(levelData)
-                          .addOnSuccessListener(aVoid -> callback.onLevelSaved(levelId))
-                          .addOnFailureListener(e -> callback.onError(e.getMessage()));
-                  } catch (Exception e) {
-                      callback.onError(e.getMessage());
-                  }
-              }
-              
-              public void loadLevel(String levelId, LevelsCallback callback) {
-                  databaseRef.child("levels").child(levelId).addListenerForSingleValueEvent(new ValueEventListener() {
-                      @Override
-                      public void onDataChange(@NonNull DataSnapshot snapshot) {
-                          CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
-                          try {
-                              String blocksStr = snapshot.child("blocks").getValue(String.class);
-                              if (blocksStr != null) {
-                                  JSONArray arr = new JSONArray(blocksStr);
-                                  for (int i = 0; i < arr.length(); i++) {
-                                      JSONObject obj = arr.getJSONObject(i);
-                                      blocks.add(new Block(
-                                          (float)obj.getDouble("x"), (float)obj.getDouble("y"), (float)obj.getDouble("z"),
-                                          (float)obj.getDouble("sx"), (float)obj.getDouble("sy"), (float)obj.getDouble("sz"),
-                                          (float)obj.getDouble("r"), (float)obj.getDouble("g"), (float)obj.getDouble("b")
-                                      ));
-                                  }
-                              }
-                              databaseRef.child("levels").child(levelId).child("plays").setValue(snapshot.child("plays").getValue(Long.class, 0L) + 1);
-                              callback.onLevelLoaded(blocks);
-                          } catch (Exception e) {
-                              callback.onError(e.getMessage());
-                          }
-                      }
-                      @Override public void onCancelled(@NonNull DatabaseError error) { callback.onError(error.getMessage()); }
-                  });
-              }
-              
-              public void getAllLevels(LevelsCallback callback) {
-                  databaseRef.child("levels").orderByChild("timestamp").limitToLast(50).addListenerForSingleValueEvent(new ValueEventListener() {
-                      @Override
-                      public void onDataChange(@NonNull DataSnapshot snapshot) {
-                          List<LevelInfo> levels = new ArrayList<>();
-                          for (DataSnapshot child : snapshot.getChildren()) {
-                              String name = child.child("name").getValue(String.class);
-                              String author = child.child("authorName").getValue(String.class);
-                              int likes = child.child("likes").getValue(Integer.class, 0);
-                              int plays = child.child("plays").getValue(Integer.class, 0);
-                              long timestamp = child.child("timestamp").getValue(Long.class, 0L);
-                              levels.add(new LevelInfo(child.getKey(), name != null ? name : "Unnamed", author != null ? author : "Unknown", likes, plays, timestamp));
-                          }
-                          callback.onLevelsLoaded(levels);
-                      }
-                      @Override public void onCancelled(@NonNull DatabaseError error) { callback.onError(error.getMessage()); }
-                  });
-              }
-              
-              public void likeLevel(String levelId) {
-                  databaseRef.child("levels").child(levelId).child("likes").runTransaction(new Transaction.Handler() {
-                      @NonNull @Override public Transaction.Result doTransaction(@NonNull MutableData currentData) {
-                          Long likes = currentData.getValue(Long.class);
-                          currentData.setValue(likes != null ? likes + 1 : 1);
-                          return Transaction.success(currentData);
-                      }
-                      @Override public void onComplete(DatabaseError error, boolean committed, DataSnapshot currentData) {}
-                  });
-              }
-          }
-          FIREBASE
 
       - name: Create MainActivity.java
         run: |
@@ -688,12 +485,10 @@ jobs:
           import android.widget.*;
           import androidx.activity.result.ActivityResultLauncher;
           import androidx.activity.result.contract.ActivityResultContracts;
-          import androidx.appcompat.app.AlertDialog;
           import androidx.appcompat.app.AppCompatActivity;
           import org.json.JSONArray;
           import org.json.JSONObject;
           import java.io.*;
-          import java.util.List;
           
           public class MainActivity extends AppCompatActivity {
               private GameRenderer ren;
@@ -704,7 +499,6 @@ jobs:
               private ActivityResultLauncher<Intent> saveLauncher, loadLauncher;
               private Handler handler = new Handler(Looper.getMainLooper());
               private int pendingMode = 0;
-              private FirebaseManager firebaseManager;
               private Toast currentToast;
               
               private void showToast(String msg) {
@@ -717,8 +511,6 @@ jobs:
               @Override protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   setContentView(R.layout.activity_main);
-                  
-                  firebaseManager = new FirebaseManager();
                   
                   android.opengl.GLSurfaceView gv = findViewById(R.id.gl_view);
                   gv.setEGLContextClientVersion(3);
@@ -774,7 +566,6 @@ jobs:
                       }
                   });
                   
-                  // MENU BUTTONS
                   findViewById(R.id.btn_play).setOnClickListener(v -> {
                       pendingMode = 1;
                       ren.isEngineMode = false; ren.isPlayingLevel = false;
@@ -805,13 +596,6 @@ jobs:
                       i.setType("*/*");
                       loadLauncher.launch(i);
                   });
-                  
-                  findViewById(R.id.btn_online_levels).setOnClickListener(v -> showOnlineLevelsDialog());
-                  
-                  // ENGINE BUTTONS
-                  findViewById(R.id.btn_save_cloud).setOnClickListener(v -> showSaveLevelDialog());
-                  findViewById(R.id.btn_load_cloud).setOnClickListener(v -> showOnlineLevelsDialog());
-                  findViewById(R.id.btn_share_cloud).setOnClickListener(v -> showSaveLevelDialog());
                   
                   View.OnClickListener back = v -> {
                       pendingMode = 0;
@@ -901,68 +685,6 @@ jobs:
                   });
               }
               
-              private void showSaveLevelDialog() {
-                  EditText input = new EditText(this);
-                  input.setHint("Level name");
-                  new AlertDialog.Builder(this)
-                      .setTitle("Save level to cloud")
-                      .setView(input)
-                      .setPositiveButton("Save", (d, which) -> {
-                          String name = input.getText().toString();
-                          if (name.isEmpty()) name = "Level_" + System.currentTimeMillis();
-                          firebaseManager.saveLevel(name, ren.blocks, new FirebaseManager.LevelsCallback() {
-                              @Override public void onLevelsLoaded(List<FirebaseManager.LevelInfo> levels) {}
-                              @Override public void onLevelSaved(String levelId) { showToast("Level saved! ID: " + levelId.substring(0, 8)); }
-                              @Override public void onLevelLoaded(CopyOnWriteArrayList<Block> blocks) {}
-                              @Override public void onError(String error) { showToast("Error: " + error); }
-                          });
-                      })
-                      .setNegativeButton("Cancel", null)
-                      .show();
-              }
-              
-              private void showOnlineLevelsDialog() {
-                  firebaseManager.getAllLevels(new FirebaseManager.LevelsCallback() {
-                      @Override
-                      public void onLevelsLoaded(List<FirebaseManager.LevelInfo> levels) {
-                          if (levels.isEmpty()) {
-                              showToast("No levels found. Create one first!");
-                              return;
-                          }
-                          String[] items = new String[levels.size()];
-                          for (int i = 0; i < levels.size(); i++) {
-                              FirebaseManager.LevelInfo l = levels.get(i);
-                              items[i] = l.name + " (👍" + l.likes + " | 👤" + l.plays + ")";
-                          }
-                          new AlertDialog.Builder(MainActivity.this)
-                              .setTitle("Online Levels")
-                              .setItems(items, (d, which) -> {
-                                  FirebaseManager.LevelInfo selected = levels.get(which);
-                                  firebaseManager.loadLevel(selected.id, new FirebaseManager.LevelsCallback() {
-                                      @Override public void onLevelsLoaded(List<FirebaseManager.LevelInfo> levels) {}
-                                      @Override public void onLevelSaved(String levelId) {}
-                                      @Override
-                                      public void onLevelLoaded(CopyOnWriteArrayList<Block> blocks) {
-                                          ren.blocks = blocks;
-                                          ren.isEngineMode = false;
-                                          ren.isPlayingLevel = false;
-                                          ren.pX = 0; ren.pY = 7; ren.pZ = 15;
-                                          menuUI.setVisibility(View.GONE);
-                                          gameUI.setVisibility(View.VISIBLE);
-                                          showToast("Loaded: " + selected.name);
-                                      }
-                                      @Override public void onError(String error) { showToast("Error: " + error); }
-                                  });
-                              })
-                              .setNegativeButton("Cancel", null)
-                              .show();
-                      }
-                      @Override public void onLevelSaved(String levelId) {}
-                      @Override public void onLevelLoaded(CopyOnWriteArrayList<Block> blocks) {}
-                      @Override public void onError(String error) { showToast("Error loading levels: " + error); }
-                  });
-              }
-              
               @Override protected void onSaveInstanceState(Bundle outState) { super.onSaveInstanceState(outState); outState.putInt("mode", pendingMode); }
               private void axisBtn(int id, float dx, float dy, float dz) { findViewById(id).setOnTouchListener((v, e) -> { if (e.getAction() == MotionEvent.ACTION_DOWN || e.getAction() == MotionEvent.ACTION_MOVE) ren.moveSelected(dx * .5f, dy * .5f, dz * .5f); return true; }); }
               private void updAxis() { runOnUiThread(() -> axisPanel.setVisibility(ren.selectedIndex >= 0 ? View.VISIBLE : View.GONE)); }
@@ -1011,8 +733,7 @@ jobs:
           cat <<EOF > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET"/>
-              <application android:label="Enjoer 6.1 Online" android:theme="@style/AppTheme">
+              <application android:label="Enjoer 6.1" android:theme="@style/AppTheme">
                   <activity android:name="com.enjoer.game.MainActivity" 
                       android:exported="true"
                       android:configChanges="orientation|screenSize|keyboardHidden">
@@ -1034,5 +755,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_6.1_Online_Levels
+          name: Enjoer_6.1_Working
           path: app/build/outputs/apk/debug/app-debug.apk
