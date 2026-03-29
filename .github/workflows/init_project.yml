@@ -1,17 +1,11 @@
-name: STEP 2 - Auto Build APK
-
-on:
+name: ENJOER ALL-IN-ONE BUILD
+on: 
   push:
-  workflow_run:
-    workflows: ["STEP 1 - Initialize Source"]
-    types: [completed]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,31 +17,94 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Prepare Project
+      - name: Generate and Prepare
         run: |
-          # Полная очистка перед сборкой
+          # 1. Очистка и создание структуры
           rm -rf app
-          mkdir -p app/src/main/java/com/enjoer/game app/src/main/res/layout app/src/main/res/values app/src/main/res/drawable
-          
-          # Копируем исходники из Инициализатора
-          if [ -d "src_files" ]; then
-            cp -r src_files/java/. app/src/main/java/com/enjoer/game/ || true
-            cp -r src_files/layout/. app/src/main/res/layout/ || true
-          fi
+          mkdir -p app/src/main/java/com/enjoer/game
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
 
-          # Конфиги
+          # 2. Создание Java Renderer (Движок)
+          cat <<'EOF' > app/src/main/java/com/enjoer/game/GameRenderer.java
+          package com.enjoer.game;
+          import android.opengl.*;
+          import java.nio.*;
+          import java.util.concurrent.CopyOnWriteArrayList;
+          import javax.microedition.khronos.egl.EGLConfig;
+          import javax.microedition.khronos.opengles.GL10;
+          public class GameRenderer implements GLSurfaceView.Renderer {
+              private final float[] proj=new float[16], view=new float[16], model=new float[16];
+              public float pX=0, pY=6, pZ=15, rY=0, rX=0, jX=0, jY=0, vY=0;
+              public boolean isEngineMode=false;
+              private int prog;
+              private FloatBuffer vBuf;
+              public CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
+              @Override public void onSurfaceCreated(GL10 gl, EGLConfig cfg) {
+                  GLES30.glEnable(GLES30.GL_DEPTH_TEST);
+                  String vs="#version 300 es\nlayout(location=0)in vec4 aP;uniform mat4 uMVP;void main(){gl_Position=uMVP*aP;}";
+                  String fs="#version 300 es\nprecision highp float;uniform vec4 uC;out vec4 fC;void main(){fC=uC;}";
+                  prog=GLES30.glCreateProgram();
+                  int vsh=GLES30.glCreateShader(35633); GLES30.glShaderSource(vsh,vs); GLES30.glCompileShader(vsh);
+                  int fsh=GLES30.glCreateShader(35632); GLES30.glShaderSource(fsh,fs); GLES30.glCompileShader(fsh);
+                  GLES30.glAttachShader(prog,vsh); GLES30.glAttachShader(prog,fsh); GLES30.glLinkProgram(prog);
+                  float[] vc={-.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f, -.5f,.5f,-.5f, -.5f,.5f,.5f, .5f,.5f,-.5f, .5f,.5f,.5f, -.5f,-.5f,-.5f, -.5f,-.5f,.5f, .5f,-.5f,-.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, -.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f, .5f,.5f,.5f, .5f,-.5f,.5f};
+                  vBuf=ByteBuffer.allocateDirect(vc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(vc); vBuf.position(0);
+                  blocks.add(new Block(0,1,-5, 20,2,20, 0.1f,0.1f,0.2f));
+              }
+              @Override public void onSurfaceChanged(GL10 gl,int w,int h){ GLES30.glViewport(0,0,w,h); Matrix.perspectiveM(proj,0,60,(float)w/h,0.1f,500f); }
+              @Override public void onDrawFrame(GL10 gl) {
+                  update(); GLES30.glClearColor(0,0,0.01f,1); GLES30.glClear(16640);
+                  float vx=(float)(Math.sin(Math.toRadians(rY))*Math.cos(Math.toRadians(rX))), vy=(float)Math.sin(Math.toRadians(rX)), vz=(float)(-Math.cos(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
+                  Matrix.setLookAtM(view,0,pX,pY,pZ,pX+vx,pY+vy,pZ+vz,0,1,0);
+                  GLES30.glUseProgram(prog); int uMVP=GLES30.glGetUniformLocation(prog,"uMVP"), uC=GLES30.glGetUniformLocation(prog,"uC");
+                  GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,vBuf); GLES30.glEnableVertexAttribArray(0);
+                  for(Block b : blocks){
+                      Matrix.setIdentityM(model,0); Matrix.translateM(model,0,b.x,b.y,b.z); Matrix.scaleM(model,0,b.sx,b.sy,b.sz);
+                      float[] mvp=new float[16]; Matrix.multiplyMM(mvp,0,proj,0,view,0); Matrix.multiplyMM(mvp,0,mvp,0,model,0);
+                      GLES30.glUniformMatrix4fv(uMVP,1,false,mvp,0); GLES30.glUniform4f(uC,b.r,b.g,b.b,1);
+                      for(int f=0;f<6;f++) GLES30.glDrawArrays(5,f*4,4);
+                  }
+              }
+              private void update(){
+                  float s=0.3f, rad=(float)Math.toRadians(rY);
+                  pX+=((float)Math.sin(rad)*-jY+(float)Math.cos(rad)*jX)*s;
+                  pZ+=((float)-Math.cos(rad)*-jY+(float)Math.sin(rad)*jX)*s;
+                  if(!isEngineMode){vY-=0.02f; pY+=vY; if(pY<4.2f){pY=4.2f; vY=0;}}
+              }
+              public void place(){ blocks.add(new Block(pX,pY,pZ-5, 2,2,2, 0,0.7f,1)); }
+          }
+          class Block { public float x,y,z,sx,sy,sz,r,g,b; Block(float x,float y,float z,float sx,float sy,float sz,float r,float g,float b){this.x=x;this.y=y;this.z=z;this.sx=sx;this.sy=sy;this.sz=sz;this.r=r;this.g=g;this.b=b;} }
+          EOF
+
+          # 3. MainActivity
+          cat <<'EOF' > app/src/main/java/com/enjoer/game/MainActivity.java
+          package com.enjoer.game;
+          import android.os.Bundle;
+          import android.view.*;
+          import android.widget.*;
+          import androidx.appcompat.app.AppCompatActivity;
+          public class MainActivity extends AppCompatActivity {
+              @Override protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  android.opengl.GLSurfaceView gv = new android.opengl.GLSurfaceView(this);
+                  gv.setEGLContextClientVersion(3);
+                  gv.setRenderer(new GameRenderer());
+                  setContentView(gv);
+              }
+          }
+          EOF
+
+          # 4. Конфиги сборки
           echo "include ':app'" > settings.gradle
           echo "android.useAndroidX=true" > gradle.properties
-          echo "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8" >> gradle.properties
-
           cat <<EOF > build.gradle
           buildscript {
               repositories { google(); mavenCentral() }
               dependencies { classpath 'com.android.tools.build:gradle:8.2.2' }
           }
-          allprojects {
-              repositories { google(); mavenCentral() }
-          }
+          allprojects { repositories { google(); mavenCentral() } }
           EOF
 
           cat <<EOF > app/build.gradle
@@ -55,29 +112,15 @@ jobs:
           android {
               namespace 'com.enjoer.game'
               compileSdk 34
-              defaultConfig {
-                  applicationId 'com.enjoer.game'
-                  minSdk 24
-                  targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
-              }
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                  }
-              }
+              defaultConfig { applicationId 'com.enjoer.game'; minSdk 24; targetSdk 34 }
           }
-          dependencies {
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-              implementation 'com.google.android.material:material:1.9.0'
-          }
+          dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
 
           cat <<EOF > app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="Enjoer Space" android:theme="@style/Theme.AppCompat.NoActionBar">
-                  <activity android:name="com.enjoer.game.MainActivity" android:exported="true" android:screenOrientation="landscape">
+              <application android:label="Enjoer 6.2" android:theme="@style/Theme.AppCompat.NoActionBar">
+                  <activity android:name="com.enjoer.game.MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
@@ -87,15 +130,14 @@ jobs:
           </manifest>
           EOF
 
-          echo "<resources><style name='AppTheme' parent='Theme.AppCompat.Light.NoActionBar'/></resources>" > app/src/main/res/values/themes.xml
-
       - name: Build APK
         run: |
-          chmod +x gradlew || (gradle wrapper --gradle-version 8.5 && chmod +x gradlew)
-          ./gradlew clean assembleDebug --stacktrace
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_Final_Build
+          name: Enjoer_Final_APK
           path: app/build/outputs/apk/debug/app-debug.apk
