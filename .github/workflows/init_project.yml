@@ -1,4 +1,4 @@
-name: Enjoer_Keyboard_Final_v2.6
+name: Enjoer_Keyboard_Final_v2.7
 on: [push, workflow_dispatch]
 
 jobs:
@@ -50,7 +50,7 @@ jobs:
           # 2. Метод
           echo '<input-method xmlns:android="http://schemas.android.com/apk/res/android" />' > app/src/main/res/xml/method.xml
 
-          # 3. ИСПРАВЛЕННАЯ РУССКАЯ РАСКЛАДКА (убрана ошибка ?123)
+          # 3. Раскладки (RU, EN, SYM)
           cat <<'EOF' > app/src/main/res/xml/qwerty_ru.xml
           <Keyboard xmlns:android="http://schemas.android.com/apk/res/android" android:keyWidth="9%p" android:keyHeight="55dp" android:horizontalGap="1%p">
               <Row>
@@ -71,7 +71,6 @@ jobs:
           </Keyboard>
           EOF
 
-          # 4. АНГЛИЙСКАЯ И СИМВОЛЫ (чтобы были файлы для переключения)
           cat <<'EOF' > app/src/main/res/xml/qwerty_en.xml
           <Keyboard xmlns:android="http://schemas.android.com/apk/res/android" android:keyWidth="10%p" android:keyHeight="55dp">
               <Row>
@@ -85,7 +84,7 @@ jobs:
 
           echo '<Keyboard xmlns:android="http://schemas.android.com/apk/res/android" android:keyWidth="10%p" android:keyHeight="55dp"><Row><Key android:codes="49" android:keyLabel="1"/><Key android:codes="-101" android:keyLabel="RU" android:keyWidth="90%p"/></Row></Keyboard>' > app/src/main/res/xml/symbols.xml
 
-          # 5. UI и Стили
+          # 4. Стили и UI
           cat <<'EOF' > app/src/main/res/layout/keyboard_view.xml
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content">
               <TextureView android:id="@+id/kb_video_bg" android:layout_width="match_parent" android:layout_height="280dp" />
@@ -97,7 +96,7 @@ jobs:
           echo '<resources><style name="Theme.AppCompat.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar"/></resources>' > app/src/main/res/values/styles.xml
           echo '<shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#20FFFFFF"/><corners android:radius="5dp"/><stroke android:width="1dp" android:color="#4000BFFF"/></shape>' > app/src/main/res/drawable/key_bg.xml
 
-          # 6. Java логика
+          # 5. Java Логика (Исправлено!)
           cat <<'EOF' > app/src/main/java/com/enjoer/keyboard/SettingsActivity.java
           package com.enjoer.keyboard;
           import android.content.Intent;
@@ -115,8 +114,8 @@ jobs:
                   Button b1 = new Button(this); b1.setText("ВЫБРАТЬ ФОН");
                   Button b2 = new Button(this); b2.setText("ВЫБРАТЬ ЗВУК");
                   Button b3 = new Button(this); b3.setText("СОХРАНИТЬ"); b3.setBackgroundColor(0xFF00BFFF);
-                  b1.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("*/*"); startActivityForResult(i, 1); });
-                  b2.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("audio/*"); startActivityForResult(i, 2); });
+                  b1.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i, 1); });
+                  b2.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("audio/*"); startActivityForResult(i, 2); });
                   b3.setOnClickListener(v -> {
                       SharedPreferences.Editor ed = getSharedPreferences("kb", MODE_PRIVATE).edit();
                       if(bgUri != null) ed.putString("bg", bgUri.toString());
@@ -145,6 +144,7 @@ jobs:
           import android.view.*;
           import android.graphics.SurfaceTexture;
           import android.content.Context;
+          import android.content.res.AssetFileDescriptor;
           public class EnjoerIME extends InputMethodService implements KeyboardView.OnKeyboardActionListener, TextureView.SurfaceTextureListener {
               private MediaPlayer mp;
               private SoundPool spool;
@@ -160,7 +160,10 @@ jobs:
                   String sPath = prefs.getString("snd", null);
                   if(sPath != null) {
                       spool = new SoundPool.Builder().setMaxStreams(5).build();
-                      try { sndId = spool.load(getContentResolver().openFileDescriptor(Uri.parse(sPath), "r"), 1); } catch(Exception e){}
+                      try {
+                          AssetFileDescriptor afd = getContentResolver().openAssetFileDescriptor(Uri.parse(sPath), "r");
+                          if (afd != null) { sndId = spool.load(afd, 1); }
+                      } catch(Exception e){}
                   }
                   kv = v.findViewById(R.id.keyboard);
                   kbRu = new Keyboard(this, R.xml.qwerty_ru);
@@ -183,16 +186,25 @@ jobs:
               }
               @Override public void onKey(int c, int[] cs) {
                   if(sndId != -1) spool.play(sndId, 1, 1, 1, 0, 1);
-                  if(c == -5) getCurrentInputConnection().deleteSurroundingText(1, 0);
-                  else if(c == -2) ((android.view.inputmethod.InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE)).showInputMethodPicker();
+                  if(c == -5) {
+                      InputConnection ic = getCurrentInputConnection();
+                      if (ic != null) ic.deleteSurroundingText(1, 0);
+                  }
+                  else if(c == -2) {
+                      android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+                      if (imm != null) imm.showInputMethodPicker();
+                  }
                   else if(c == -101) kv.setKeyboard(kbRu);
                   else if(c == -102) kv.setKeyboard(kbEn);
                   else if(c == -103) kv.setKeyboard(kbSym);
-                  else getCurrentInputConnection().commitText(String.valueOf((char)c), 1);
+                  else {
+                      InputConnection ic = getCurrentInputConnection();
+                      if (ic != null) ic.commitText(String.valueOf((char)c), 1);
+                  }
               }
               @Override public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) {}
-              @Override public boolean onSurfaceTextureUpdated(SurfaceTexture st) { return false; }
-              @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) { if(mp != null) mp.release(); return true; }
+              @Override public void onSurfaceTextureUpdated(SurfaceTexture st) {}
+              @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) { if(mp != null) { mp.stop(); mp.release(); } return true; }
               @Override public void onPress(int p) {}
               @Override public void onRelease(int p) {}
               @Override public void onText(CharSequence t) {}
@@ -203,7 +215,7 @@ jobs:
           }
           EOF
 
-          # 7. Gradle
+          # 6. Gradle
           cat <<'EOF' > build.gradle
           buildscript { repositories { google(); mavenCentral() }; dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
           allprojects { repositories { google(); mavenCentral() } }
@@ -221,5 +233,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_Keyboard_Fixed
+          name: Enjoer_Keyboard_v2.7
           path: app/build/outputs/apk/debug/*.apk
