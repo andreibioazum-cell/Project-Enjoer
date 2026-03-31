@@ -1,4 +1,4 @@
-name: Enjoer_Keyboard_Final_v2.7
+name: Enjoer_Keyboard_v2.8
 on: [push, workflow_dispatch]
 
 jobs:
@@ -50,7 +50,7 @@ jobs:
           # 2. Метод
           echo '<input-method xmlns:android="http://schemas.android.com/apk/res/android" />' > app/src/main/res/xml/method.xml
 
-          # 3. Раскладки (RU, EN, SYM)
+          # 3. Раскладка RU
           cat <<'EOF' > app/src/main/res/xml/qwerty_ru.xml
           <Keyboard xmlns:android="http://schemas.android.com/apk/res/android" android:keyWidth="9%p" android:keyHeight="55dp" android:horizontalGap="1%p">
               <Row>
@@ -71,6 +71,7 @@ jobs:
           </Keyboard>
           EOF
 
+          # (EN и SYM)
           cat <<'EOF' > app/src/main/res/xml/qwerty_en.xml
           <Keyboard xmlns:android="http://schemas.android.com/apk/res/android" android:keyWidth="10%p" android:keyHeight="55dp">
               <Row>
@@ -81,10 +82,94 @@ jobs:
               </Row>
           </Keyboard>
           EOF
-
           echo '<Keyboard xmlns:android="http://schemas.android.com/apk/res/android" android:keyWidth="10%p" android:keyHeight="55dp"><Row><Key android:codes="49" android:keyLabel="1"/><Key android:codes="-101" android:keyLabel="RU" android:keyWidth="90%p"/></Row></Keyboard>' > app/src/main/res/xml/symbols.xml
 
-          # 4. Стили и UI
+          # 4. Java Логика (С ДОБАВЛЕННЫМИ ИМПОРТАМИ)
+          cat <<'EOF' > app/src/main/java/com/enjoer/keyboard/EnjoerIME.java
+          package com.enjoer.keyboard;
+          import android.inputmethodservice.*;
+          import android.media.*;
+          import android.net.Uri;
+          import android.view.*;
+          import android.view.inputmethod.InputConnection;
+          import android.view.inputmethod.InputMethodManager;
+          import android.graphics.SurfaceTexture;
+          import android.content.Context;
+          import android.content.res.AssetFileDescriptor;
+          import android.content.SharedPreferences;
+
+          public class EnjoerIME extends InputMethodService implements KeyboardView.OnKeyboardActionListener, TextureView.SurfaceTextureListener {
+              private MediaPlayer mp;
+              private SoundPool spool;
+              private int sndId = -1;
+              private KeyboardView kv;
+              private Keyboard kbRu, kbEn, kbSym;
+
+              @Override
+              public View onCreateInputView() {
+                  View v = getLayoutInflater().inflate(R.layout.keyboard_view, null);
+                  TextureView tv = v.findViewById(R.id.kb_video_bg);
+                  tv.setSurfaceTextureListener(this);
+                  SharedPreferences prefs = getSharedPreferences("kb", MODE_PRIVATE);
+                  String sPath = prefs.getString("snd", null);
+                  if(sPath != null) {
+                      spool = new SoundPool.Builder().setMaxStreams(5).build();
+                      try {
+                          AssetFileDescriptor afd = getContentResolver().openAssetFileDescriptor(Uri.parse(sPath), "r");
+                          if (afd != null) { sndId = spool.load(afd, 1); }
+                      } catch(Exception e){}
+                  }
+                  kv = v.findViewById(R.id.keyboard);
+                  kbRu = new Keyboard(this, R.xml.qwerty_ru);
+                  kbEn = new Keyboard(this, R.xml.qwerty_en);
+                  kbSym = new Keyboard(this, R.xml.symbols);
+                  kv.setKeyboard(kbRu);
+                  kv.setOnKeyboardActionListener(this);
+                  return v;
+              }
+
+              @Override
+              public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
+                  String bPath = getSharedPreferences("kb", MODE_PRIVATE).getString("bg", null);
+                  if(bPath != null) {
+                      try {
+                          mp = new MediaPlayer(); mp.setDataSource(this, Uri.parse(bPath));
+                          mp.setSurface(new Surface(st)); mp.setLooping(true);
+                          mp.prepareAsync(); mp.setOnPreparedListener(MediaPlayer::start);
+                      } catch(Exception e){}
+                  }
+              }
+
+              @Override public void onKey(int c, int[] cs) {
+                  if(sndId != -1) spool.play(sndId, 1, 1, 1, 0, 1);
+                  InputConnection ic = getCurrentInputConnection();
+                  if (ic == null) return;
+
+                  if(c == -5) ic.deleteSurroundingText(1, 0);
+                  else if(c == -2) {
+                      InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+                      if (imm != null) imm.showInputMethodPicker();
+                  }
+                  else if(c == -101) kv.setKeyboard(kbRu);
+                  else if(c == -102) kv.setKeyboard(kbEn);
+                  else if(c == -103) kv.setKeyboard(kbSym);
+                  else ic.commitText(String.valueOf((char)c), 1);
+              }
+
+              @Override public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) {}
+              @Override public void onSurfaceTextureUpdated(SurfaceTexture st) {}
+              @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) { if(mp != null) { mp.stop(); mp.release(); } return true; }
+              @Override public void onPress(int p) {}
+              @Override public void onRelease(int p) {}
+              @Override public void onText(CharSequence t) {}
+              @Override public void swipeLeft() {}
+              @Override public void swipeRight() {}
+              @Override public void swipeDown() {}
+              @Override public void swipeUp() {}
+          }
+          EOF
+
+          # 5. Остальное (Layout, Styles, Gradle, SettingsActivity)
           cat <<'EOF' > app/src/main/res/layout/keyboard_view.xml
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content">
               <TextureView android:id="@+id/kb_video_bg" android:layout_width="match_parent" android:layout_height="280dp" />
@@ -92,11 +177,10 @@ jobs:
                   android:background="#60000000" android:keyBackground="@drawable/key_bg" android:keyTextColor="#00BFFF"/>
           </FrameLayout>
           EOF
-
           echo '<resources><style name="Theme.AppCompat.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar"/></resources>' > app/src/main/res/values/styles.xml
           echo '<shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#20FFFFFF"/><corners android:radius="5dp"/><stroke android:width="1dp" android:color="#4000BFFF"/></shape>' > app/src/main/res/drawable/key_bg.xml
-
-          # 5. Java Логика (Исправлено!)
+          
+          # SettingsActivity (уже была ок, просто оставляем)
           cat <<'EOF' > app/src/main/java/com/enjoer/keyboard/SettingsActivity.java
           package com.enjoer.keyboard;
           import android.content.Intent;
@@ -136,86 +220,7 @@ jobs:
           }
           EOF
 
-          cat <<'EOF' > app/src/main/java/com/enjoer/keyboard/EnjoerIME.java
-          package com.enjoer.keyboard;
-          import android.inputmethodservice.*;
-          import android.media.*;
-          import android.net.Uri;
-          import android.view.*;
-          import android.graphics.SurfaceTexture;
-          import android.content.Context;
-          import android.content.res.AssetFileDescriptor;
-          public class EnjoerIME extends InputMethodService implements KeyboardView.OnKeyboardActionListener, TextureView.SurfaceTextureListener {
-              private MediaPlayer mp;
-              private SoundPool spool;
-              private int sndId = -1;
-              private KeyboardView kv;
-              private Keyboard kbRu, kbEn, kbSym;
-              @Override
-              public View onCreateInputView() {
-                  View v = getLayoutInflater().inflate(R.layout.keyboard_view, null);
-                  TextureView tv = v.findViewById(R.id.kb_video_bg);
-                  tv.setSurfaceTextureListener(this);
-                  android.content.SharedPreferences prefs = getSharedPreferences("kb", MODE_PRIVATE);
-                  String sPath = prefs.getString("snd", null);
-                  if(sPath != null) {
-                      spool = new SoundPool.Builder().setMaxStreams(5).build();
-                      try {
-                          AssetFileDescriptor afd = getContentResolver().openAssetFileDescriptor(Uri.parse(sPath), "r");
-                          if (afd != null) { sndId = spool.load(afd, 1); }
-                      } catch(Exception e){}
-                  }
-                  kv = v.findViewById(R.id.keyboard);
-                  kbRu = new Keyboard(this, R.xml.qwerty_ru);
-                  kbEn = new Keyboard(this, R.xml.qwerty_en);
-                  kbSym = new Keyboard(this, R.xml.symbols);
-                  kv.setKeyboard(kbRu);
-                  kv.setOnKeyboardActionListener(this);
-                  return v;
-              }
-              @Override
-              public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
-                  String bPath = getSharedPreferences("kb", MODE_PRIVATE).getString("bg", null);
-                  if(bPath != null) {
-                      try {
-                          mp = new MediaPlayer(); mp.setDataSource(this, Uri.parse(bPath));
-                          mp.setSurface(new Surface(st)); mp.setLooping(true);
-                          mp.prepareAsync(); mp.setOnPreparedListener(MediaPlayer::start);
-                      } catch(Exception e){}
-                  }
-              }
-              @Override public void onKey(int c, int[] cs) {
-                  if(sndId != -1) spool.play(sndId, 1, 1, 1, 0, 1);
-                  if(c == -5) {
-                      InputConnection ic = getCurrentInputConnection();
-                      if (ic != null) ic.deleteSurroundingText(1, 0);
-                  }
-                  else if(c == -2) {
-                      android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
-                      if (imm != null) imm.showInputMethodPicker();
-                  }
-                  else if(c == -101) kv.setKeyboard(kbRu);
-                  else if(c == -102) kv.setKeyboard(kbEn);
-                  else if(c == -103) kv.setKeyboard(kbSym);
-                  else {
-                      InputConnection ic = getCurrentInputConnection();
-                      if (ic != null) ic.commitText(String.valueOf((char)c), 1);
-                  }
-              }
-              @Override public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) {}
-              @Override public void onSurfaceTextureUpdated(SurfaceTexture st) {}
-              @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) { if(mp != null) { mp.stop(); mp.release(); } return true; }
-              @Override public void onPress(int p) {}
-              @Override public void onRelease(int p) {}
-              @Override public void onText(CharSequence t) {}
-              @Override public void swipeLeft() {}
-              @Override public void swipeRight() {}
-              @Override public void swipeDown() {}
-              @Override public void swipeUp() {}
-          }
-          EOF
-
-          # 6. Gradle
+          # Gradle
           cat <<'EOF' > build.gradle
           buildscript { repositories { google(); mavenCentral() }; dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
           allprojects { repositories { google(); mavenCentral() } }
@@ -233,5 +238,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_Keyboard_v2.7
+          name: Enjoer_Keyboard_v2.8
           path: app/build/outputs/apk/debug/*.apk
