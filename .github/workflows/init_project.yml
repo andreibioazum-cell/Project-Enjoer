@@ -83,6 +83,63 @@ jobs:
           </shape>
           EOF
 
+          cat <<EOF > app/src/main/res/drawable/btn_teal.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#26C6DA"/>
+            <corners android:radius="14dp"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/btn_dark.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#455A64"/>
+            <corners android:radius="14dp"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/btn_formula_num.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#37474F"/>
+            <corners android:radius="10dp"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/btn_formula_op.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#FF8F00"/>
+            <corners android:radius="10dp"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/btn_formula_func.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#5C6BC0"/>
+            <corners android:radius="10dp"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/btn_formula_sensor.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#26A69A"/>
+            <corners android:radius="10dp"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/btn_formula_var.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#EF6C00"/>
+            <corners android:radius="10dp"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/bg_formula_display.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#263238"/>
+            <corners android:radius="12dp"/>
+            <stroke android:width="2dp" android:color="#4FC3F7"/>
+          </shape>
+          EOF
+
           cat <<EOF > app/src/main/res/drawable/block_event.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android">
             <solid android:color="#FFBF00"/>
@@ -416,7 +473,6 @@ jobs:
                   </LinearLayout>
               </LinearLayout>
 
-              <!-- PLAYER: clipChildren/clipToPadding отключены на всех уровнях -->
               <FrameLayout
                   android:id="@+id/screen_player"
                   android:layout_width="match_parent"
@@ -577,6 +633,8 @@ jobs:
 
                   if(expr.equalsIgnoreCase("X")) return host.object() != null ? host.object().x : 0f;
                   if(expr.equalsIgnoreCase("Y")) return host.object() != null ? host.object().y : 0f;
+                  if(expr.equalsIgnoreCase("W")) return host.object() != null ? host.object().w : 0f;
+                  if(expr.equalsIgnoreCase("H")) return host.object() != null ? host.object().h : 0f;
                   if(expr.equalsIgnoreCase("касаниеX")) return host.touchX();
                   if(expr.equalsIgnoreCase("касаниеY")) return host.touchY();
                   if(expr.equalsIgnoreCase("колКасаний")) return host.touchCount();
@@ -608,6 +666,21 @@ jobs:
                   if(expr.startsWith("abs(") && expr.endsWith(")")){
                       return Math.abs(eval(host, inner(expr)));
                   }
+                  if(expr.startsWith("round(") && expr.endsWith(")")){
+                      return Math.round(eval(host, inner(expr)));
+                  }
+                  if(expr.startsWith("floor(") && expr.endsWith(")")){
+                      return (float)Math.floor(eval(host, inner(expr)));
+                  }
+                  if(expr.startsWith("ceil(") && expr.endsWith(")")){
+                      return (float)Math.ceil(eval(host, inner(expr)));
+                  }
+                  if(expr.startsWith("ln(") && expr.endsWith(")")){
+                      return (float)Math.log(Math.max(0.001f, eval(host, inner(expr))));
+                  }
+                  if(expr.startsWith("log(") && expr.endsWith(")")){
+                      return (float)Math.log10(Math.max(0.001f, eval(host, inner(expr))));
+                  }
                   if(expr.startsWith("random(") && expr.endsWith(")")){
                       String body = inner(expr);
                       String[] a = body.split(",");
@@ -618,22 +691,96 @@ jobs:
                           return mn + (float)Math.random() * (mx - mn);
                       }
                   }
+                  if(expr.startsWith("mod(") && expr.endsWith(")")){
+                      String body = inner(expr);
+                      String[] a = body.split(",");
+                      if(a.length == 2){
+                          float x = eval(host, a[0].trim());
+                          float y = eval(host, a[1].trim());
+                          return y != 0 ? x % y : 0f;
+                      }
+                  }
+                  if(expr.startsWith("pow(") && expr.endsWith(")")){
+                      String body = inner(expr);
+                      String[] a = body.split(",");
+                      if(a.length == 2){
+                          return (float)Math.pow(eval(host, a[0].trim()), eval(host, a[1].trim()));
+                      }
+                  }
+                  if(expr.startsWith("min(") && expr.endsWith(")")){
+                      String body = inner(expr);
+                      String[] a = body.split(",");
+                      if(a.length == 2){
+                          return Math.min(eval(host, a[0].trim()), eval(host, a[1].trim()));
+                      }
+                  }
+                  if(expr.startsWith("max(") && expr.endsWith(")")){
+                      String body = inner(expr);
+                      String[] a = body.split(",");
+                      if(a.length == 2){
+                          return Math.max(eval(host, a[0].trim()), eval(host, a[1].trim()));
+                      }
+                  }
+
+                  if("pi".equalsIgnoreCase(expr)) return (float)Math.PI;
+                  if("e".equalsIgnoreCase(expr) && expr.length() == 1) return (float)Math.E;
+
+                  // Multiplication and division
+                  try{
+                      int mul = findOp(expr, '*');
+                      if(mul > 0){
+                          return eval(host, expr.substring(0, mul).trim()) * eval(host, expr.substring(mul+1).trim());
+                      }
+                  }catch(Exception ignored){}
 
                   try{
-                      int plus = expr.lastIndexOf('+');
+                      int div = findOp(expr, '/');
+                      if(div > 0){
+                          float denom = eval(host, expr.substring(div+1).trim());
+                          return denom != 0 ? eval(host, expr.substring(0, div).trim()) / denom : 0f;
+                      }
+                  }catch(Exception ignored){}
+
+                  try{
+                      int plus = findOpLast(expr, '+');
                       if(plus > 0){
                           return eval(host, expr.substring(0, plus).trim()) + eval(host, expr.substring(plus+1).trim());
                       }
                   }catch(Exception ignored){}
 
                   try{
-                      int minus = expr.lastIndexOf('-');
+                      int minus = findOpLast(expr, '-');
                       if(minus > 0){
                           return eval(host, expr.substring(0, minus).trim()) - eval(host, expr.substring(minus+1).trim());
                       }
                   }catch(Exception ignored){}
 
+                  // Parentheses
+                  if(expr.startsWith("(") && expr.endsWith(")")){
+                      return eval(host, expr.substring(1, expr.length()-1));
+                  }
+
                   return 0f;
+              }
+
+              private static int findOp(String s, char op){
+                  int depth = 0;
+                  for(int i = 0; i < s.length(); i++){
+                      if(s.charAt(i) == '(') depth++;
+                      else if(s.charAt(i) == ')') depth--;
+                      else if(s.charAt(i) == op && depth == 0) return i;
+                  }
+                  return -1;
+              }
+
+              private static int findOpLast(String s, char op){
+                  int depth = 0;
+                  for(int i = s.length()-1; i >= 1; i--){
+                      if(s.charAt(i) == ')') depth++;
+                      else if(s.charAt(i) == '(') depth--;
+                      else if(s.charAt(i) == op && depth == 0) return i;
+                  }
+                  return -1;
               }
 
               public static String text(Host host, String expr){
@@ -888,7 +1035,6 @@ jobs:
               public static void runScene(Host host){
                   SceneItem scene = host.scene();
                   if(scene == null) return;
-
                   for(ObjectItem o : scene.objects){
                       runStart(host, o);
                   }
@@ -992,39 +1138,39 @@ jobs:
 
                       switch (b.type){
                           case "move_x": {
-                              final float dx = FormulaEngine.eval(hostFor(host, obj), b.arg1);
+                              final String argExpr = b.arg1;
                               h.postDelayed(() -> {
                                   if(host.stopped()) return;
-                                  obj.x += dx;
+                                  obj.x += FormulaEngine.eval(hostFor(host, obj), argExpr);
                                   host.renderPlayerScene();
                               }, delay);
                               break;
                           }
                           case "move_y": {
-                              final float dy = FormulaEngine.eval(hostFor(host, obj), b.arg1);
+                              final String argExpr = b.arg1;
                               h.postDelayed(() -> {
                                   if(host.stopped()) return;
-                                  obj.y += dy;
+                                  obj.y += FormulaEngine.eval(hostFor(host, obj), argExpr);
                                   host.renderPlayerScene();
                               }, delay);
                               break;
                           }
                           case "go_xy": {
-                              final float x = FormulaEngine.eval(hostFor(host, obj), b.arg1);
-                              final float y = FormulaEngine.eval(hostFor(host, obj), b.arg2);
+                              final String ax = b.arg1;
+                              final String ay = b.arg2;
                               h.postDelayed(() -> {
                                   if(host.stopped()) return;
-                                  obj.x = x;
-                                  obj.y = y;
+                                  obj.x = FormulaEngine.eval(hostFor(host, obj), ax);
+                                  obj.y = FormulaEngine.eval(hostFor(host, obj), ay);
                                   host.renderPlayerScene();
                               }, delay);
                               break;
                           }
                           case "say": {
-                              final String txt = FormulaEngine.text(hostFor(host, obj), b.arg1);
+                              final String argExpr = b.arg1;
                               h.postDelayed(() -> {
                                   if(host.stopped()) return;
-                                  obj.say = txt;
+                                  obj.say = FormulaEngine.text(hostFor(host, obj), argExpr);
                                   host.renderPlayerScene();
                               }, delay);
                               break;
@@ -1096,10 +1242,10 @@ jobs:
                               break;
                           }
                           case "goto_scene": {
-                              final String sceneName = FormulaEngine.text(hostFor(host, obj), b.arg1);
+                              final String sn = b.arg1;
                               h.postDelayed(() -> {
                                   if(host.stopped()) return;
-                                  host.goToSceneByName(sceneName);
+                                  host.goToSceneByName(FormulaEngine.text(hostFor(host, obj), sn));
                               }, delay);
                               break;
                           }
@@ -1151,21 +1297,26 @@ jobs:
 
           import android.annotation.SuppressLint;
           import android.app.AlertDialog;
+          import android.content.ClipData;
+          import android.content.ClipboardManager;
+          import android.content.Context;
           import android.content.Intent;
           import android.graphics.Color;
-          import android.graphics.Rect;
           import android.graphics.Typeface;
           import android.graphics.drawable.GradientDrawable;
           import android.net.Uri;
           import android.os.Bundle;
+          import android.text.InputType;
+          import android.view.Gravity;
           import android.view.MotionEvent;
           import android.view.View;
-          import android.view.ViewGroup;
           import android.widget.Button;
           import android.widget.EditText;
           import android.widget.FrameLayout;
+          import android.widget.HorizontalScrollView;
           import android.widget.ImageView;
           import android.widget.LinearLayout;
+          import android.widget.ScrollView;
           import android.widget.TextView;
           import android.widget.Toast;
           import androidx.activity.result.ActivityResultLauncher;
@@ -1189,10 +1340,6 @@ jobs:
 
               private ActivityResultLauncher<Intent> imagePickerTexture;
               private int dragIndex = -1;
-
-              // Хранение ссылок на View спрайтов для обработки касаний
-              private final ArrayList<View> spriteViews = new ArrayList<>();
-              private final ArrayList<ObjectItem> spriteObjects = new ArrayList<>();
 
               @Override public void renderPlayerScene() { runOnUiThread(this::drawPlayerScene); }
               @Override public boolean stopped() { return stopFlag; }
@@ -1287,7 +1434,6 @@ jobs:
                       }
                   });
 
-                  // Обработка касаний на сцене - определяем какой объект нажат
                   playerStageLayer.setOnTouchListener((v, e) -> {
                       touchCount = e.getPointerCount();
                       touchX = e.getX();
@@ -1316,31 +1462,272 @@ jobs:
                   findViewById(R.id.btn_stop_player).setOnClickListener(v -> stopPlayer());
 
                   findViewById(R.id.btn_add_block).setOnClickListener(v -> showCategoryDialog());
-                  findViewById(R.id.btn_formula_manager).setOnClickListener(v -> showFormulaHelp());
+                  findViewById(R.id.btn_formula_manager).setOnClickListener(v -> showFormulaEditor(null));
 
                   renderProjects();
                   showProjects();
               }
 
-              /**
-               * Обработка касания по координатам сцены.
-               * Проверяем все объекты в обратном порядке (верхний первый)
-               * и вызываем event_tap для попавшего.
-               */
+              // ===================== FORMULA EDITOR =====================
+
+              private void showFormulaEditor(OneArg callback){
+                  AlertDialog.Builder builder = new AlertDialog.Builder(this);
+
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setPadding(dp(12), dp(12), dp(12), dp(12));
+                  root.setBackgroundColor(Color.parseColor("#1B2838"));
+
+                  // Display
+                  final EditText display = new EditText(this);
+                  display.setTextSize(20f);
+                  display.setTextColor(Color.parseColor("#4FC3F7"));
+                  display.setBackgroundResource(R.drawable.bg_formula_display);
+                  display.setPadding(dp(16), dp(14), dp(16), dp(14));
+                  display.setTypeface(Typeface.MONOSPACE);
+                  display.setMinHeight(dp(56));
+                  display.setHint("формула...");
+                  display.setHintTextColor(Color.parseColor("#546E7A"));
+                  display.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+                  root.addView(display);
+
+                  // Tabs
+                  LinearLayout tabs = new LinearLayout(this);
+                  tabs.setOrientation(LinearLayout.HORIZONTAL);
+                  LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                  tabLp.topMargin = dp(8);
+                  tabs.setLayoutParams(tabLp);
+
+                  final LinearLayout keyboardArea = new LinearLayout(this);
+                  keyboardArea.setOrientation(LinearLayout.VERTICAL);
+                  LinearLayout.LayoutParams kaLp = new LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                  kaLp.topMargin = dp(6);
+                  keyboardArea.setLayoutParams(kaLp);
+
+                  String[] tabNames = {"123", "+-×÷", "f(x)", "Сенсоры", "Перем."};
+                  int[] tabColors = {
+                      Color.parseColor("#37474F"),
+                      Color.parseColor("#FF8F00"),
+                      Color.parseColor("#5C6BC0"),
+                      Color.parseColor("#26A69A"),
+                      Color.parseColor("#EF6C00")
+                  };
+
+                  for(int t=0; t<tabNames.length; t++){
+                      Button tb = new Button(this);
+                      tb.setText(tabNames[t]);
+                      tb.setTextColor(Color.WHITE);
+                      tb.setTextSize(12f);
+                      tb.setAllCaps(false);
+                      GradientDrawable gd = new GradientDrawable();
+                      gd.setColor(tabColors[t]);
+                      gd.setCornerRadius(dp(8));
+                      tb.setBackground(gd);
+                      LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0, dp(38), 1f);
+                      blp.rightMargin = dp(4);
+                      tb.setLayoutParams(blp);
+                      final int tabIdx = t;
+                      tb.setOnClickListener(v -> fillKeyboard(keyboardArea, display, tabIdx));
+                      tabs.addView(tb);
+                  }
+
+                  root.addView(tabs);
+                  root.addView(keyboardArea);
+
+                  // Action buttons
+                  LinearLayout actions = new LinearLayout(this);
+                  actions.setOrientation(LinearLayout.HORIZONTAL);
+                  LinearLayout.LayoutParams aLp = new LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                  aLp.topMargin = dp(10);
+                  actions.setLayoutParams(aLp);
+
+                  Button btnClear = new Button(this);
+                  btnClear.setText("Очистить");
+                  btnClear.setTextColor(Color.WHITE);
+                  btnClear.setBackgroundResource(R.drawable.btn_red);
+                  btnClear.setOnClickListener(v -> display.setText(""));
+                  LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, dp(44), 1f);
+                  btnClear.setLayoutParams(clp);
+                  actions.addView(btnClear);
+
+                  Button btnBackspace = new Button(this);
+                  btnBackspace.setText("⌫");
+                  btnBackspace.setTextColor(Color.WHITE);
+                  btnBackspace.setTextSize(18f);
+                  btnBackspace.setBackgroundResource(R.drawable.btn_dark);
+                  btnBackspace.setOnClickListener(v -> {
+                      String cur = display.getText().toString();
+                      if(!cur.isEmpty()){
+                          int sel = display.getSelectionStart();
+                          if(sel > 0){
+                              display.getText().delete(sel-1, sel);
+                          } else {
+                              display.setText(cur.substring(0, cur.length()-1));
+                              display.setSelection(display.getText().length());
+                          }
+                      }
+                  });
+                  LinearLayout.LayoutParams blp2 = new LinearLayout.LayoutParams(0, dp(44), 1f);
+                  blp2.leftMargin = dp(6);
+                  btnBackspace.setLayoutParams(blp2);
+                  actions.addView(btnBackspace);
+
+                  Button btnCopy = new Button(this);
+                  btnCopy.setText("Копия");
+                  btnCopy.setTextColor(Color.WHITE);
+                  btnCopy.setBackgroundResource(R.drawable.btn_teal);
+                  btnCopy.setOnClickListener(v -> {
+                      ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                      cm.setPrimaryClip(ClipData.newPlainText("formula", display.getText().toString()));
+                      toast("Скопировано");
+                  });
+                  LinearLayout.LayoutParams blp3 = new LinearLayout.LayoutParams(0, dp(44), 1f);
+                  blp3.leftMargin = dp(6);
+                  btnCopy.setLayoutParams(blp3);
+                  actions.addView(btnCopy);
+
+                  root.addView(actions);
+
+                  // Fill initial tab
+                  fillKeyboard(keyboardArea, display, 0);
+
+                  ScrollView scroll = new ScrollView(this);
+                  scroll.addView(root);
+
+                  builder.setView(scroll);
+                  builder.setTitle("Редактор формул");
+
+                  if(callback != null){
+                      builder.setPositiveButton("Вставить", (d,w) -> {
+                          callback.ok(display.getText().toString());
+                      });
+                  } else {
+                      builder.setPositiveButton("ОК", null);
+                  }
+                  builder.setNegativeButton("Отмена", null);
+                  builder.show();
+              }
+
+              private void fillKeyboard(LinearLayout area, EditText display, int tab){
+                  area.removeAllViews();
+
+                  String[][] buttons;
+                  int bgRes;
+
+                  switch(tab){
+                      case 0: // Numbers
+                          buttons = new String[][]{
+                              {"7", "8", "9", "."},
+                              {"4", "5", "6", "("},
+                              {"1", "2", "3", ")"},
+                              {"0", ",", "-", "\""}
+                          };
+                          bgRes = R.drawable.btn_formula_num;
+                          break;
+                      case 1: // Operators
+                          buttons = new String[][]{
+                              {"+", "-", "*", "/"},
+                              {"=", "<", ">", "!="},
+                              {"<=", ">=", "и", "или"},
+                              {"не", "%", "^", "пробел"}
+                          };
+                          bgRes = R.drawable.btn_formula_op;
+                          break;
+                      case 2: // Functions
+                          buttons = new String[][]{
+                              {"sin(", "cos(", "tan(", "atan("},
+                              {"sqrt(", "abs(", "round(", "floor("},
+                              {"ceil(", "ln(", "log(", "pow("},
+                              {"mod(", "min(", "max(", "random("},
+                              {"pi", "e", ")", ""}
+                          };
+                          bgRes = R.drawable.btn_formula_func;
+                          break;
+                      case 3: // Sensors
+                          buttons = new String[][]{
+                              {"X", "Y", "W", "H"},
+                              {"касаниеX", "касаниеY", "колКасаний", ""}
+                          };
+                          bgRes = R.drawable.btn_formula_sensor;
+                          break;
+                      case 4: // Variables
+                      default:
+                          ProjectItem p = currentProject();
+                          ArrayList<String> varNames = new ArrayList<>();
+                          if(p != null){
+                              for(VariableItem v : p.variables) varNames.add(v.name);
+                              for(ListItemModel li : p.lists) varNames.add("список:" + li.name);
+                          }
+                          if(varNames.isEmpty()) varNames.add("(нет)");
+                          int rows = (varNames.size() + 3) / 4;
+                          buttons = new String[rows][4];
+                          for(int r=0; r<rows; r++){
+                              for(int c=0; c<4; c++){
+                                  int idx = r*4+c;
+                                  buttons[r][c] = idx < varNames.size() ? varNames.get(idx) : "";
+                              }
+                          }
+                          bgRes = R.drawable.btn_formula_var;
+                          break;
+                  }
+
+                  for(String[] row : buttons){
+                      LinearLayout rowLayout = new LinearLayout(this);
+                      rowLayout.setOrientation(LinearLayout.HORIZONTAL);
+                      LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                      rlp.topMargin = dp(4);
+                      rowLayout.setLayoutParams(rlp);
+
+                      for(String label : row){
+                          Button btn = new Button(this);
+                          btn.setText(label);
+                          btn.setTextColor(Color.WHITE);
+                          btn.setTextSize(13f);
+                          btn.setAllCaps(false);
+                          btn.setBackgroundResource(bgRes);
+                          LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0, dp(44), 1f);
+                          blp.rightMargin = dp(3);
+                          btn.setLayoutParams(blp);
+
+                          if(label.isEmpty() || "(нет)".equals(label)){
+                              btn.setEnabled(false);
+                              btn.setAlpha(0.3f);
+                          } else {
+                              final String insert = "пробел".equals(label) ? " " : label;
+                              btn.setOnClickListener(v -> {
+                                  int sel = display.getSelectionStart();
+                                  if(sel >= 0){
+                                      display.getText().insert(sel, insert);
+                                  } else {
+                                      display.append(insert);
+                                  }
+                              });
+                          }
+
+                          rowLayout.addView(btn);
+                      }
+
+                      area.addView(rowLayout);
+                  }
+              }
+
+              // ===================== END FORMULA EDITOR =====================
+
               private void handleStageTap(float tapX, float tapY){
                   SceneItem sc = currentScene();
                   if(sc == null) return;
 
-                  // Проходим с конца (верхние объекты поверх нижних)
                   for(int i = sc.objects.size() - 1; i >= 0; i--){
                       ObjectItem o = sc.objects.get(i);
                       if(!o.visible) continue;
 
-                      // Определяем размер объекта
                       float ow = o.w;
                       float oh = o.h;
 
-                      // Для emoji и text используем примерный размер если w/h маленькие
                       if("emoji".equals(o.spriteType)){
                           ow = Math.max(ow, 60f);
                           oh = Math.max(oh, 60f);
@@ -1351,7 +1738,7 @@ jobs:
 
                       if(tapX >= o.x && tapX <= o.x + ow && tapY >= o.y && tapY <= o.y + oh){
                           ScriptRuntime.tapped(this, o);
-                          break; // Только верхний объект
+                          break;
                       }
                   }
               }
@@ -1618,13 +2005,10 @@ jobs:
                   }catch(Exception ignored){}
 
                   playerStageLayer.removeAllViews();
-                  spriteViews.clear();
-                  spriteObjects.clear();
 
                   for(int i=0;i<sc.objects.size();i++){
                       ObjectItem o = sc.objects.get(i);
 
-                      // Используем абсолютное позиционирование через LayoutParams вместо translation
                       FrameLayout wrap = new FrameLayout(this);
                       wrap.setClipChildren(false);
                       wrap.setClipToPadding(false);
@@ -1640,7 +2024,6 @@ jobs:
                       View spriteView = buildSpriteView(o);
                       spriteView.setVisibility(o.visible ? View.VISIBLE : View.INVISIBLE);
 
-                      // Не ставим OnClickListener на спрайт - обрабатываем касания через stage
                       wrap.addView(spriteView);
 
                       if(o.say != null && !o.say.isEmpty()){
@@ -1697,7 +2080,6 @@ jobs:
                       return v;
                   }
 
-                  // Emoji - задаём минимальный размер для кликабельности
                   TextView tv = new TextView(this);
                   tv.setText(o.emoji);
                   tv.setTextSize(42f);
@@ -1791,14 +2173,8 @@ jobs:
                   LinearLayout root = new LinearLayout(this);
                   root.setOrientation(LinearLayout.VERTICAL);
 
-                  EditText name = new EditText(this);
-                  name.setHint("Название");
-                  name.setText("Объект " + (s.objects.size()+1));
-
-                  EditText emoji = new EditText(this);
-                  emoji.setHint("Emoji");
-                  emoji.setText("🐱");
-
+                  EditText name = new EditText(this); name.setHint("Название"); name.setText("Объект " + (s.objects.size()+1));
+                  EditText emoji = new EditText(this); emoji.setHint("Emoji"); emoji.setText("🐱");
                   EditText x = new EditText(this); x.setHint("X"); x.setText("100");
                   EditText y = new EditText(this); y.setHint("Y"); y.setText("80");
 
@@ -2101,34 +2477,6 @@ jobs:
                       .show();
               }
 
-              private void showFormulaHelp(){
-                  String msg =
-                      "Формулы:\n\n" +
-                      "10\n" +
-                      "X\n" +
-                      "Y\n" +
-                      "касаниеX\n" +
-                      "касаниеY\n" +
-                      "колКасаний\n" +
-                      "мояПеременная\n" +
-                      "X+10\n" +
-                      "Y-5\n" +
-                      "sin(30)\n" +
-                      "cos(60)\n" +
-                      "tan(45)\n" +
-                      "atan(1)\n" +
-                      "sqrt(25)\n" +
-                      "abs(-5)\n" +
-                      "random(1,10)\n\n" +
-                      "Текст:\n" +
-                      "\"Привет\"";
-                  new AlertDialog.Builder(this)
-                      .setTitle("Редактор формул")
-                      .setMessage(msg)
-                      .setPositiveButton("ОК", null)
-                      .show();
-              }
-
               private void showCategoryDialog(){
                   String[] cats = {"События", "Движение", "Внешность", "Управление", "Данные", "Сигналы"};
                   new AlertDialog.Builder(this)
@@ -2249,7 +2597,7 @@ jobs:
                       .setTitle(title)
                       .setView(input)
                       .setPositiveButton("ОК", (d,w) -> cb.ok(input.getText().toString()))
-                      .setNeutralButton("Переменные", (d,w) -> chooseVariable(cb::ok))
+                      .setNeutralButton("Формула", (d,w) -> showFormulaEditor(cb))
                       .setNegativeButton("Отмена", null)
                       .show();
               }
@@ -2300,9 +2648,9 @@ jobs:
                   if(o == null) return;
                   BlockItem b = o.blocks.get(idx);
 
-                  String[] items = {"Удалить", "Изменить Arg1", "Изменить Arg2"};
+                  String[] items = {"Удалить", "Изменить Arg1", "Изменить Arg2", "Редактор формул → Arg1", "Редактор формул → Arg2"};
                   new AlertDialog.Builder(this)
-                      .setTitle("Блок")
+                      .setTitle("Блок: " + b.label)
                       .setItems(items, (d,w) -> {
                           if(w == 0){
                               o.blocks.remove(idx);
@@ -2316,6 +2664,18 @@ jobs:
                               });
                           } else if(w == 2){
                               askOneArg("Arg2", b.arg2 == null ? "" : b.arg2, val -> {
+                                  b.arg2 = val;
+                                  saveAll();
+                                  renderBlocks();
+                              });
+                          } else if(w == 3){
+                              showFormulaEditor(val -> {
+                                  b.arg1 = val;
+                                  saveAll();
+                                  renderBlocks();
+                              });
+                          } else if(w == 4){
+                              showFormulaEditor(val -> {
                                   b.arg2 = val;
                                   saveAll();
                                   renderBlocks();
