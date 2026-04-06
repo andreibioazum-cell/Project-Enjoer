@@ -1,9 +1,12 @@
 name: Enjoer_6.1_ThirdPerson
-on: [push, workflow_dispatch]
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -11,41 +14,150 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '17'
-          distribution: 'temurin'
 
-      - name: Create Project
+      - name: Install Android SDK components
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+
+      - name: Create Android project
         run: |
           mkdir -p app/src/main/java/com/enjoer/game
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main
 
-          echo "android.useAndroidX=true" > gradle.properties
-          echo "android.enableJetifier=true" >> gradle.properties
+          cat <<EOF > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.enableJetifier=true
+          EOF
+
+          cat <<EOF > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "Enjoer"
+          include(":app")
+          EOF
+
+          cat <<EOF > build.gradle
+          plugins {
+              id 'com.android.application' version '8.2.2' apply false
+          }
+          EOF
+
+          cat <<EOF > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.enjoer.game'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.enjoer.game"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+                  debug {
+                      minifyEnabled false
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+          }
+          EOF
+
+          cat <<EOF > app/proguard-rules.pro
+          # empty
+          EOF
+
+          cat <<EOF > local.properties
+          sdk.dir=$ANDROID_HOME
+          EOF
+
+          cat <<EOF > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <application
+                  android:allowBackup="true"
+                  android:label="Enjoer 6.1 Third Person"
+                  android:supportsRtl="true"
+                  android:theme="@style/AppTheme">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:screenOrientation="landscape">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+              </application>
+          </manifest>
+          EOF
 
           cat <<EOF > app/src/main/res/values/themes.xml
           <resources>
-            <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
-              <item name="android:windowFullscreen">true</item>
-            </style>
+              <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="android:windowFullscreen">true</item>
+              </style>
           </resources>
           EOF
 
           cat <<EOF > app/src/main/res/drawable/joy_base.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-            <solid android:color="#CC101820"/>
-            <stroke android:width="2dp" android:color="#00BFFF"/>
+              <solid android:color="#AA101820"/>
+              <stroke android:width="2dp" android:color="#00BFFF"/>
           </shape>
           EOF
 
           cat <<EOF > app/src/main/res/drawable/joy_stick.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-            <solid android:color="#00BFFF"/>
+              <solid android:color="#00BFFF"/>
           </shape>
           EOF
 
-          cat <<'LAYOUT' > app/src/main/res/layout/activity_main.xml
+          cat <<'EOF' > app/src/main/res/layout/activity_main.xml
           <?xml version="1.0" encoding="utf-8"?>
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent"
@@ -58,7 +170,6 @@ jobs:
                   android:layout_height="match_parent"/>
 
               <RelativeLayout
-                  android:id="@+id/game_ui"
                   android:layout_width="match_parent"
                   android:layout_height="match_parent">
 
@@ -72,8 +183,8 @@ jobs:
                       android:layout_width="140dp"
                       android:layout_height="140dp"
                       android:layout_alignParentBottom="true"
-                      android:layout_alignParentLeft="true"
-                      android:layout_marginLeft="40dp"
+                      android:layout_alignParentStart="true"
+                      android:layout_marginStart="40dp"
                       android:layout_marginBottom="40dp"
                       android:background="@drawable/joy_base"/>
 
@@ -89,7 +200,7 @@ jobs:
 
               </RelativeLayout>
           </FrameLayout>
-          LAYOUT
+          EOF
 
           cat <<EOF > app/src/main/java/com/enjoer/game/Block.java
           package com.enjoer.game;
@@ -109,25 +220,27 @@ jobs:
                   this.b = b;
               }
 
-              public float minX() { return x - sx / 2f; }
-              public float maxX() { return x + sx / 2f; }
-              public float minY() { return y - sy / 2f; }
-              public float maxY() { return y + sy / 2f; }
-              public float minZ() { return z - sz / 2f; }
-              public float maxZ() { return z + sz / 2f; }
+              public float minX(){ return x - sx / 2f; }
+              public float maxX(){ return x + sx / 2f; }
+              public float minY(){ return y - sy / 2f; }
+              public float maxY(){ return y + sy / 2f; }
+              public float minZ(){ return z - sz / 2f; }
+              public float maxZ(){ return z + sz / 2f; }
           }
           EOF
 
-          cat <<'RENDERER' > app/src/main/java/com/enjoer/game/GameRenderer.java
+          cat <<'EOF' > app/src/main/java/com/enjoer/game/GameRenderer.java
           package com.enjoer.game;
 
           import android.opengl.GLES30;
           import android.opengl.GLSurfaceView;
           import android.opengl.Matrix;
+
           import java.nio.ByteBuffer;
           import java.nio.ByteOrder;
           import java.nio.FloatBuffer;
           import java.util.concurrent.CopyOnWriteArrayList;
+
           import javax.microedition.khronos.egl.EGLConfig;
           import javax.microedition.khronos.opengles.GL10;
 
@@ -136,11 +249,17 @@ jobs:
               private final float[] view = new float[16];
               private final float[] model = new float[16];
 
-              public float pX = 0f, pY = 1.5f, pZ = 0f;
-              public float rY = 180f, rX = 18f, jX = 0f, jY = 0f;
+              public float pX = 0f;
+              public float pY = 1.5f;
+              public float pZ = 0f;
+              public float rY = 180f;
+              public float rX = 18f;
+              public float jX = 0f;
+              public float jY = 0f;
 
               private int prog;
-              private FloatBuffer vBuf, nBuf;
+              private FloatBuffer vBuf;
+              private FloatBuffer nBuf;
 
               public CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
 
@@ -158,70 +277,75 @@ jobs:
               }
 
               @Override
-              public void onSurfaceCreated(GL10 gl, EGLConfig cfg) {
+              public void onSurfaceCreated(GL10 gl, EGLConfig config) {
                   GLES30.glEnable(GLES30.GL_DEPTH_TEST);
 
                   String vs =
                           "#version 300 es\n" +
                           "layout(location=0) in vec4 aP;" +
                           "layout(location=1) in vec3 aN;" +
-                          "uniform mat4 uMVP,uM;" +
-                          "out vec3 vN,vP;" +
+                          "uniform mat4 uMVP;" +
+                          "uniform mat4 uM;" +
+                          "out vec3 vN;" +
+                          "out vec3 vP;" +
                           "void main(){" +
-                          "vP=vec3(uM*aP);" +
-                          "vN=normalize(mat3(uM)*aN);" +
-                          "gl_Position=uMVP*aP;" +
+                          "  vP = vec3(uM * aP);" +
+                          "  vN = normalize(mat3(uM) * aN);" +
+                          "  gl_Position = uMVP * aP;" +
                           "}";
 
                   String fs =
-                          "#version 300 es\nprecision highp float;" +
-                          "in vec3 vN,vP;" +
+                          "#version 300 es\n" +
+                          "precision highp float;" +
+                          "in vec3 vN;" +
+                          "in vec3 vP;" +
                           "uniform vec3 camP;" +
                           "uniform vec4 uC;" +
                           "out vec4 fC;" +
-                          "float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}" +
+                          "float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }" +
                           "vec3 sky(vec3 d){" +
-                          "float t=clamp(d.y*.5+.5,0.,1.);" +
-                          "vec3 base=mix(vec3(.005,.01,.03),vec3(.0,.2,.5),t);" +
-                          "if(d.y>0.05){" +
-                          "vec2 uv=d.xz/(d.y+.001);" +
-                          "vec2 id=floor(uv*80.);" +
-                          "float star=hash(id);" +
-                          "if(star>.97){" +
-                          "vec2 gv=fract(uv*80.)-.5;" +
-                          "float dist=length(gv);" +
-                          "float brightness=hash(id+.1);" +
-                          "float twinkle=sin(hash(id)*6.28+star*100.)*.3+.7;" +
-                          "float s=smoothstep(.15,.0,dist)*brightness*twinkle;" +
-                          "vec3 starCol=mix(vec3(1.,.9,.8),vec3(.8,.9,1.),hash(id+.2));" +
-                          "base+=starCol*s*1.5;" +
-                          "}" +
-                          "}" +
-                          "return base;" +
+                          "  float t = clamp(d.y * 0.5 + 0.5, 0.0, 1.0);" +
+                          "  vec3 base = mix(vec3(0.005,0.01,0.03), vec3(0.0,0.2,0.5), t);" +
+                          "  if(d.y > 0.05){" +
+                          "    vec2 uv = d.xz / (d.y + 0.001);" +
+                          "    vec2 id = floor(uv * 80.0);" +
+                          "    float star = hash(id);" +
+                          "    if(star > 0.97){" +
+                          "      vec2 gv = fract(uv * 80.0) - 0.5;" +
+                          "      float dist = length(gv);" +
+                          "      float brightness = hash(id + 0.1);" +
+                          "      float twinkle = sin(hash(id) * 6.28 + star * 100.0) * 0.3 + 0.7;" +
+                          "      float s = smoothstep(0.15, 0.0, dist) * brightness * twinkle;" +
+                          "      vec3 starCol = mix(vec3(1.0,0.9,0.8), vec3(0.8,0.9,1.0), hash(id + 0.2));" +
+                          "      base += starCol * s * 1.5;" +
+                          "    }" +
+                          "  }" +
+                          "  return base;" +
                           "}" +
                           "void main(){" +
-                          "vec3 n=normalize(vN);" +
-                          "vec3 vD=normalize(camP-vP);" +
-                          "vec3 lD=normalize(vec3(.4,1.,.2));" +
-                          "float diff=max(dot(n,lD),0.);" +
-                          "vec3 h=normalize(lD+vD);" +
-                          "float spec=pow(max(dot(n,h),0.),32.)*.35;" +
-                          "vec3 amb=vec3(.08,.1,.16);" +
-                          "vec3 fin=uC.rgb*(diff+amb)+spec;" +
-                          "float dist=length(camP-vP),fog=1.-exp(-dist*.01);" +
-                          "vec3 c=mix(fin,sky(vD),clamp(fog,0.,.88));" +
-                          "fC=vec4(c,uC.a);" +
+                          "  vec3 n = normalize(vN);" +
+                          "  vec3 vD = normalize(camP - vP);" +
+                          "  vec3 lD = normalize(vec3(0.4,1.0,0.2));" +
+                          "  float diff = max(dot(n, lD), 0.0);" +
+                          "  vec3 h = normalize(lD + vD);" +
+                          "  float spec = pow(max(dot(n, h), 0.0), 32.0) * 0.35;" +
+                          "  vec3 amb = vec3(0.08, 0.1, 0.16);" +
+                          "  vec3 fin = uC.rgb * (diff + amb) + spec;" +
+                          "  float dist = length(camP - vP);" +
+                          "  float fog = 1.0 - exp(-dist * 0.01);" +
+                          "  vec3 c = mix(fin, sky(vD), clamp(fog, 0.0, 0.88));" +
+                          "  fC = vec4(c, uC.a);" +
                           "}";
 
                   prog = mkProg(vs, fs);
 
                   float[] vc = {
-                          -.5f,.5f,.5f, -.5f,-.5f,.5f,  .5f,.5f,.5f,  .5f,-.5f,.5f,
-                          -.5f,.5f,-.5f, -.5f,-.5f,-.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f,
-                          -.5f,.5f,-.5f, -.5f,.5f,.5f,  .5f,.5f,-.5f, .5f,.5f,.5f,
-                          -.5f,-.5f,-.5f, -.5f,-.5f,.5f, .5f,-.5f,-.5f, .5f,-.5f,.5f,
-                          -.5f,.5f,-.5f, -.5f,-.5f,-.5f, -.5f,.5f,.5f, -.5f,-.5f,.5f,
-                          .5f,.5f,-.5f,  .5f,-.5f,-.5f,  .5f,.5f,.5f,  .5f,-.5f,.5f
+                          -.5f,.5f,.5f,  -.5f,-.5f,.5f,   .5f,.5f,.5f,   .5f,-.5f,.5f,
+                          -.5f,.5f,-.5f, -.5f,-.5f,-.5f,  .5f,.5f,-.5f,  .5f,-.5f,-.5f,
+                          -.5f,.5f,-.5f, -.5f,.5f,.5f,    .5f,.5f,-.5f,  .5f,.5f,.5f,
+                          -.5f,-.5f,-.5f, -.5f,-.5f,.5f,  .5f,-.5f,-.5f, .5f,-.5f,.5f,
+                          -.5f,.5f,-.5f, -.5f,-.5f,-.5f, -.5f,.5f,.5f,  -.5f,-.5f,.5f,
+                           .5f,.5f,-.5f,  .5f,-.5f,-.5f,  .5f,.5f,.5f,   .5f,-.5f,.5f
                   };
 
                   float[] nc = {
@@ -243,16 +367,16 @@ jobs:
               }
 
               @Override
-              public void onSurfaceChanged(GL10 gl, int w, int h) {
-                  GLES30.glViewport(0, 0, w, h);
-                  Matrix.perspectiveM(proj, 0, 60f, (float) w / h, 0.1f, 500f);
+              public void onSurfaceChanged(GL10 gl, int width, int height) {
+                  GLES30.glViewport(0, 0, width, height);
+                  Matrix.perspectiveM(proj, 0, 60f, (float) width / (float) height, 0.1f, 500f);
               }
 
               @Override
               public void onDrawFrame(GL10 gl) {
                   update();
 
-                  GLES30.glClearColor(.005f, .01f, .025f, 1f);
+                  GLES30.glClearColor(0.005f, 0.01f, 0.025f, 1f);
                   GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT | GLES30.GL_DEPTH_BUFFER_BIT);
 
                   float yawRad = (float) Math.toRadians(rY);
@@ -265,28 +389,31 @@ jobs:
                   float camDist = 7f;
                   float camHeight = 2.2f;
 
-                  float camX = targetX - (float) (Math.sin(yawRad) * Math.cos(pitchRad)) * camDist;
-                  float camY = targetY + (float) (Math.sin(pitchRad)) * camDist + camHeight;
-                  float camZ = targetZ + (float) (Math.cos(yawRad) * Math.cos(pitchRad)) * camDist;
+                  float camX = targetX - (float)(Math.sin(yawRad) * Math.cos(pitchRad)) * camDist;
+                  float camY = targetY + (float)(Math.sin(pitchRad)) * camDist + camHeight;
+                  float camZ = targetZ + (float)(Math.cos(yawRad) * Math.cos(pitchRad)) * camDist;
 
                   Matrix.setLookAtM(view, 0, camX, camY, camZ, targetX, targetY, targetZ, 0, 1, 0);
 
                   GLES30.glUseProgram(prog);
+
                   int uMVP = GLES30.glGetUniformLocation(prog, "uMVP");
                   int uM = GLES30.glGetUniformLocation(prog, "uM");
                   int uC = GLES30.glGetUniformLocation(prog, "uC");
+                  int camLoc = GLES30.glGetUniformLocation(prog, "camP");
 
-                  GLES30.glUniform3f(GLES30.glGetUniformLocation(prog, "camP"), camX, camY, camZ);
+                  GLES30.glUniform3f(camLoc, camX, camY, camZ);
 
                   GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 0, vBuf);
                   GLES30.glEnableVertexAttribArray(0);
+
                   GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 0, nBuf);
                   GLES30.glEnableVertexAttribArray(1);
 
                   Matrix.setIdentityM(model, 0);
-                  Matrix.translateM(model, 0, 0, -.05f, 0);
-                  Matrix.scaleM(model, 0, 800, .1f, 800);
-                  draw(uM, uMVP, uC, .05f, .07f, .11f, 1f);
+                  Matrix.translateM(model, 0, 0f, -0.05f, 0f);
+                  Matrix.scaleM(model, 0, 800f, 0.1f, 800f);
+                  draw(uM, uMVP, uC, 0.05f, 0.07f, 0.11f, 1f);
 
                   for (Block b : blocks) {
                       Matrix.setIdentityM(model, 0);
@@ -305,22 +432,30 @@ jobs:
                   drawPart(uM, uMVP, uC, pX, pY + 1.3f, pZ, 1.6f, 1.8f, 0.9f, 0.1f, 0.45f, 0.95f);
 
                   drawRotPart(uM, uMVP, uC,
-                          pX - 1.15f * (float) Math.cos(bodyYaw),
+                          pX - 1.15f * (float)Math.cos(bodyYaw),
                           pY + 1.3f,
-                          pZ - 1.15f * (float) Math.sin(bodyYaw),
-                          0.6f, 1.8f, 0.6f, 1.0f, 0.85f, 0.65f, bodyYaw);
+                          pZ - 1.15f * (float)Math.sin(bodyYaw),
+                          0.6f, 1.8f, 0.6f,
+                          1.0f, 0.85f, 0.65f,
+                          bodyYaw);
 
                   drawRotPart(uM, uMVP, uC,
-                          pX + 1.15f * (float) Math.cos(bodyYaw),
+                          pX + 1.15f * (float)Math.cos(bodyYaw),
                           pY + 1.3f,
-                          pZ + 1.15f * (float) Math.sin(bodyYaw),
-                          0.6f, 1.8f, 0.6f, 1.0f, 0.85f, 0.65f, bodyYaw);
+                          pZ + 1.15f * (float)Math.sin(bodyYaw),
+                          0.6f, 1.8f, 0.6f,
+                          1.0f, 0.85f, 0.65f,
+                          bodyYaw);
 
                   drawRotPart(uM, uMVP, uC, pX - 0.45f, pY - 0.7f, pZ,
-                          0.7f, 1.9f, 0.7f, 0.15f, 0.15f, 0.8f, 0f);
+                          0.7f, 1.9f, 0.7f,
+                          0.15f, 0.15f, 0.8f,
+                          0f);
 
                   drawRotPart(uM, uMVP, uC, pX + 0.45f, pY - 0.7f, pZ,
-                          0.7f, 1.9f, 0.7f, 0.15f, 0.15f, 0.8f, 0f);
+                          0.7f, 1.9f, 0.7f,
+                          0.15f, 0.15f, 0.8f,
+                          0f);
               }
 
               private void drawPart(int uM, int uMVP, int uC,
@@ -340,17 +475,17 @@ jobs:
                                        float rotY) {
                   Matrix.setIdentityM(model, 0);
                   Matrix.translateM(model, 0, x, y, z);
-                  Matrix.rotateM(model, 0, (float) Math.toDegrees(rotY), 0, 1, 0);
+                  Matrix.rotateM(model, 0, (float)Math.toDegrees(rotY), 0f, 1f, 0f);
                   Matrix.scaleM(model, 0, sx, sy, sz);
                   draw(uM, uMVP, uC, r, g, b, 1f);
               }
 
               private void update() {
-                  float s = 0.18f;
+                  float speed = 0.18f;
                   float rad = (float) Math.toRadians(rY);
 
-                  float moveX = ((float) Math.sin(rad) * -jY + (float) Math.cos(rad) * jX) * s;
-                  float moveZ = ((float) -Math.cos(rad) * -jY + (float) Math.sin(rad) * jX) * s;
+                  float moveX = ((float)Math.sin(rad) * -jY + (float)Math.cos(rad) * jX) * speed;
+                  float moveZ = ((float)-Math.cos(rad) * -jY + (float)Math.sin(rad) * jX) * speed;
 
                   float nX = pX + moveX;
                   float nZ = pZ + moveZ;
@@ -374,16 +509,21 @@ jobs:
                   pX = nX;
                   pZ = nZ;
 
-                  if (pY < FLOOR_Y + 1.5f) pY = FLOOR_Y + 1.5f;
+                  if (pY < FLOOR_Y + 1.5f) {
+                      pY = FLOOR_Y + 1.5f;
+                  }
               }
 
               private void draw(int uM, int uMVP, int uC, float r, float g, float b, float a) {
                   GLES30.glUniformMatrix4fv(uM, 1, false, model, 0);
+
                   float[] res = new float[16];
                   Matrix.multiplyMM(res, 0, proj, 0, view, 0);
                   Matrix.multiplyMM(res, 0, res, 0, model, 0);
+
                   GLES30.glUniformMatrix4fv(uMVP, 1, false, res, 0);
                   GLES30.glUniform4f(uC, r, g, b, a);
+
                   for (int i = 0; i < 6; i++) {
                       GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, i * 4, 4);
                   }
@@ -391,33 +531,36 @@ jobs:
 
               private int mkProg(String v, String f) {
                   int p = GLES30.glCreateProgram();
-                  GLES30.glAttachShader(p, mkSh(35633, v));
-                  GLES30.glAttachShader(p, mkSh(35632, f));
+                  GLES30.glAttachShader(p, mkSh(GLES30.GL_VERTEX_SHADER, v));
+                  GLES30.glAttachShader(p, mkSh(GLES30.GL_FRAGMENT_SHADER, f));
                   GLES30.glLinkProgram(p);
                   return p;
               }
 
-              private int mkSh(int t, String s) {
-                  int sh = GLES30.glCreateShader(t);
-                  GLES30.glShaderSource(sh, s);
+              private int mkSh(int type, String src) {
+                  int sh = GLES30.glCreateShader(type);
+                  GLES30.glShaderSource(sh, src);
                   GLES30.glCompileShader(sh);
                   return sh;
               }
           }
-          RENDERER
+          EOF
 
-          cat <<'MAINACT' > app/src/main/java/com/enjoer/game/MainActivity.java
+          cat <<'EOF' > app/src/main/java/com/enjoer/game/MainActivity.java
           package com.enjoer.game;
 
           import android.annotation.SuppressLint;
+          import android.opengl.GLSurfaceView;
           import android.os.Bundle;
           import android.view.MotionEvent;
           import android.view.View;
+
           import androidx.appcompat.app.AppCompatActivity;
 
           public class MainActivity extends AppCompatActivity {
               private GameRenderer ren;
-              private float lx, ly;
+              private float lx;
+              private float ly;
 
               @SuppressLint("ClickableViewAccessibility")
               @Override
@@ -425,7 +568,7 @@ jobs:
                   super.onCreate(savedInstanceState);
                   setContentView(R.layout.activity_main);
 
-                  android.opengl.GLSurfaceView gv = findViewById(R.id.gl_view);
+                  GLSurfaceView gv = findViewById(R.id.gl_view);
                   gv.setEGLContextClientVersion(3);
 
                   ren = new GameRenderer();
@@ -446,6 +589,8 @@ jobs:
                           float d = (float) Math.sqrt(dx * dx + dy * dy);
                           float lim = cx - stick.getWidth() / 2f;
 
+                          if (lim <= 0f) return true;
+
                           if (d > lim) {
                               dx *= lim / d;
                               dy *= lim / d;
@@ -455,14 +600,50 @@ jobs:
                           stick.setTranslationY(dy);
                           ren.jX = dx / lim;
                           ren.jY = dy / lim;
-                      } else if (e.getAction() == MotionEvent.ACTION_UP) {
-                          stick.setTranslationX(0);
-                          stick.setTranslationY(0);
-                          ren.jX = 0;
-                          ren.jY = 0;
+                      } else if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) {
+                          stick.setTranslationX(0f);
+                          stick.setTranslationY(0f);
+                          ren.jX = 0f;
+                          ren.jY = 0f;
                       }
                       return true;
                   });
               }
 
-              pr
+              private void setupLook(View zone) {
+                  zone.setOnTouchListener((v, e) -> {
+                      if (e.getAction() == MotionEvent.ACTION_DOWN) {
+                          lx = e.getX();
+                          ly = e.getY();
+                      } else if (e.getAction() == MotionEvent.ACTION_MOVE) {
+                          ren.rY += (e.getX() - lx) * 0.25f;
+                          ren.rX = Math.max(-35f, Math.min(60f, ren.rX - (e.getY() - ly) * 0.2f));
+                          lx = e.getX();
+                          ly = e.getY();
+                      }
+                      return true;
+                  });
+              }
+          }
+          EOF
+
+      - name: Create Gradle Wrapper
+        run: |
+          gradle wrapper --gradle-version 8.5
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Verify APK
+        run: |
+          ls -R app/build/outputs || true
+          test -f app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Enjoer_6.1_ThirdPerson_APK
+          path: app/build/outputs/apk/debug/app-debug.apk
