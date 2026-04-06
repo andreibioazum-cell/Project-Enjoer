@@ -1,4 +1,4 @@
-name: Enjoer_6.1_ThirdPerson_Fixed
+name: Enjoer_6.1_ThirdPerson_RunStamina
 on:
   push:
   workflow_dispatch:
@@ -116,7 +116,7 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application
                   android:allowBackup="true"
-                  android:label="Enjoer 6.1 Third Person"
+                  android:label="Enjoer 6.1"
                   android:supportsRtl="true"
                   android:theme="@style/AppTheme">
                   <activity
@@ -142,14 +142,36 @@ jobs:
 
           cat <<EOF > app/src/main/res/drawable/joy_base.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#AA101820"/>
-              <stroke android:width="2dp" android:color="#00BFFF"/>
+              <solid android:color="#AA202020"/>
+              <stroke android:width="2dp" android:color="#777777"/>
           </shape>
           EOF
 
           cat <<EOF > app/src/main/res/drawable/joy_stick.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#00BFFF"/>
+              <solid android:color="#C0C0C0"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/run_btn.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+              <solid android:color="#CC2A2A2A"/>
+              <stroke android:width="2dp" android:color="#999999"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/stamina_bg.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+              <corners android:radius="8dp"/>
+              <solid android:color="#AA111111"/>
+              <stroke android:width="2dp" android:color="#666666"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/stamina_fill.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+              <corners android:radius="6dp"/>
+              <solid android:color="#B0B0B0"/>
           </shape>
           EOF
 
@@ -158,7 +180,7 @@ jobs:
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent"
               android:layout_height="match_parent"
-              android:background="#02050A">
+              android:background="#050505">
 
               <android.opengl.GLSurfaceView
                   android:id="@+id/gl_view"
@@ -193,6 +215,52 @@ jobs:
                       android:layout_marginLeft="40dp"
                       android:layout_marginTop="40dp"
                       android:background="@drawable/joy_stick"/>
+
+                  <Button
+                      android:id="@+id/btn_run"
+                      android:layout_width="92dp"
+                      android:layout_height="92dp"
+                      android:layout_alignParentEnd="true"
+                      android:layout_centerVertical="true"
+                      android:layout_marginEnd="30dp"
+                      android:background="@drawable/run_btn"
+                      android:text="RUN"
+                      android:textColor="#E0E0E0"
+                      android:textStyle="bold"
+                      android:textSize="18sp"/>
+
+                  <LinearLayout
+                      android:layout_width="220dp"
+                      android:layout_height="wrap_content"
+                      android:layout_alignParentStart="true"
+                      android:layout_alignParentBottom="true"
+                      android:layout_marginStart="28dp"
+                      android:layout_marginBottom="205dp"
+                      android:orientation="vertical">
+
+                      <TextView
+                          android:layout_width="wrap_content"
+                          android:layout_height="wrap_content"
+                          android:text="STAMINA"
+                          android:textColor="#D0D0D0"
+                          android:textSize="14sp"
+                          android:textStyle="bold"
+                          android:layout_marginBottom="6dp"/>
+
+                      <FrameLayout
+                          android:id="@+id/stamina_bg"
+                          android:layout_width="220dp"
+                          android:layout_height="22dp"
+                          android:background="@drawable/stamina_bg"
+                          android:padding="3dp">
+
+                          <View
+                              android:id="@+id/stamina_fill"
+                              android:layout_width="214dp"
+                              android:layout_height="match_parent"
+                              android:background="@drawable/stamina_fill"/>
+                      </FrameLayout>
+                  </LinearLayout>
 
               </RelativeLayout>
           </FrameLayout>
@@ -246,7 +314,7 @@ jobs:
               private final float[] model = new float[16];
 
               public float pX = 0f;
-              public float pY = 1.5f;
+              public float pY = 1.0f;
               public float pZ = 0f;
 
               public float rY = 180f;
@@ -259,6 +327,9 @@ jobs:
               public float walkTime = 0f;
               public float moveAmount = 0f;
 
+              public boolean runPressed = false;
+              public float stamina = 100f;
+
               private int prog;
               private FloatBuffer vBuf;
               private FloatBuffer nBuf;
@@ -266,22 +337,23 @@ jobs:
               public CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
 
               private static final float FLOOR_Y = 0f;
-              private static final float PLAYER_RADIUS = 0.6f;
-              private static final float PLAYER_HEIGHT = 3.8f;
+              private static final float PLAYER_RADIUS = 0.38f;
+              private static final float PLAYER_HEIGHT = 2.4f;
+              private static final float PLAYER_SCALE = 0.68f;
 
               public void loadBuiltInLevel() {
                   blocks.clear();
 
-                  blocks.add(new Block(0, 1, -10, 6, 2, 6, 0.9f, 0.2f, 0.2f));
-                  blocks.add(new Block(-10, 1, -18, 5, 2, 5, 0.2f, 0.9f, 0.2f));
-                  blocks.add(new Block(10, 1, -18, 5, 2, 5, 0.2f, 0.4f, 0.9f));
-                  blocks.add(new Block(0, 1, -30, 12, 2, 12, 0.9f, 0.9f, 0.3f));
-                  blocks.add(new Block(-14, 1, -36, 5, 2, 5, 1.0f, 0.5f, 0.2f));
-                  blocks.add(new Block(14, 1, -36, 5, 2, 5, 0.7f, 0.3f, 1.0f));
+                  blocks.add(new Block(0, 1, -10, 6, 2, 6, 0.75f, 0.2f, 0.2f));
+                  blocks.add(new Block(-10, 1, -18, 5, 2, 5, 0.3f, 0.3f, 0.3f));
+                  blocks.add(new Block(10, 1, -18, 5, 2, 5, 0.45f, 0.45f, 0.45f));
+                  blocks.add(new Block(0, 1, -30, 12, 2, 12, 0.6f, 0.6f, 0.6f));
+                  blocks.add(new Block(-14, 1, -36, 5, 2, 5, 0.35f, 0.35f, 0.35f));
+                  blocks.add(new Block(14, 1, -36, 5, 2, 5, 0.5f, 0.5f, 0.5f));
 
-                  blocks.add(new Block(0, 4, -46, 8, 8, 8, 0.3f, 0.9f, 0.9f));
-                  blocks.add(new Block(-18, 3, -52, 6, 6, 6, 0.8f, 0.2f, 0.8f));
-                  blocks.add(new Block(18, 3, -52, 6, 6, 6, 0.8f, 0.8f, 0.2f));
+                  blocks.add(new Block(0, 4, -46, 8, 8, 8, 0.38f, 0.38f, 0.38f));
+                  blocks.add(new Block(-18, 3, -52, 6, 6, 6, 0.28f, 0.28f, 0.28f));
+                  blocks.add(new Block(18, 3, -52, 6, 6, 6, 0.72f, 0.72f, 0.72f));
               }
 
               @Override
@@ -314,19 +386,17 @@ jobs:
                           "float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }" +
                           "vec3 sky(vec3 d){" +
                           "  float t = clamp(d.y * 0.5 + 0.5, 0.0, 1.0);" +
-                          "  vec3 base = mix(vec3(0.005,0.01,0.03), vec3(0.0,0.2,0.5), t);" +
+                          "  vec3 base = mix(vec3(0.01,0.01,0.01), vec3(0.22,0.22,0.22), t);" +
                           "  if(d.y > 0.05){" +
                           "    vec2 uv = d.xz / (d.y + 0.001);" +
                           "    vec2 id = floor(uv * 80.0);" +
                           "    float star = hash(id);" +
-                          "    if(star > 0.97){" +
+                          "    if(star > 0.975){" +
                           "      vec2 gv = fract(uv * 80.0) - 0.5;" +
                           "      float dist = length(gv);" +
                           "      float brightness = hash(id + 0.1);" +
-                          "      float twinkle = sin(hash(id) * 6.28 + star * 100.0) * 0.3 + 0.7;" +
-                          "      float s = smoothstep(0.15, 0.0, dist) * brightness * twinkle;" +
-                          "      vec3 starCol = mix(vec3(1.0,0.9,0.8), vec3(0.8,0.9,1.0), hash(id + 0.2));" +
-                          "      base += starCol * s * 1.5;" +
+                          "      float s = smoothstep(0.15, 0.0, dist) * brightness;" +
+                          "      base += vec3(0.9) * s * 1.2;" +
                           "    }" +
                           "  }" +
                           "  return base;" +
@@ -334,15 +404,15 @@ jobs:
                           "void main(){" +
                           "  vec3 n = normalize(vN);" +
                           "  vec3 vD = normalize(camP - vP);" +
-                          "  vec3 lD = normalize(vec3(0.4,1.0,0.2));" +
+                          "  vec3 lD = normalize(vec3(0.3,1.0,0.15));" +
                           "  float diff = max(dot(n, lD), 0.0);" +
                           "  vec3 h = normalize(lD + vD);" +
-                          "  float spec = pow(max(dot(n, h), 0.0), 32.0) * 0.35;" +
-                          "  vec3 amb = vec3(0.08, 0.1, 0.16);" +
+                          "  float spec = pow(max(dot(n, h), 0.0), 28.0) * 0.18;" +
+                          "  vec3 amb = vec3(0.10, 0.10, 0.10);" +
                           "  vec3 fin = uC.rgb * (diff + amb) + spec;" +
                           "  float dist = length(camP - vP);" +
-                          "  float fog = 1.0 - exp(-dist * 0.01);" +
-                          "  vec3 c = mix(fin, sky(vD), clamp(fog, 0.0, 0.88));" +
+                          "  float fog = 1.0 - exp(-dist * 0.012);" +
+                          "  vec3 c = mix(fin, sky(vD), clamp(fog, 0.0, 0.90));" +
                           "  fC = vec4(c, uC.a);" +
                           "}";
 
@@ -385,7 +455,7 @@ jobs:
               public void onDrawFrame(GL10 gl) {
                   update();
 
-                  GLES30.glClearColor(0.005f, 0.01f, 0.025f, 1f);
+                  GLES30.glClearColor(0.01f, 0.01f, 0.01f, 1f);
                   GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT | GLES30.GL_DEPTH_BUFFER_BIT);
 
                   float[] cam = computeCamera();
@@ -394,7 +464,7 @@ jobs:
                   float camZ = cam[2];
 
                   float targetX = pX;
-                  float targetY = pY + 1.8f;
+                  float targetY = pY + 1.25f;
                   float targetZ = pZ;
 
                   Matrix.setLookAtM(view, 0, camX, camY, camZ, targetX, targetY, targetZ, 0, 1, 0);
@@ -417,7 +487,7 @@ jobs:
                   Matrix.setIdentityM(model, 0);
                   Matrix.translateM(model, 0, 0f, -0.05f, 0f);
                   Matrix.scaleM(model, 0, 800f, 0.1f, 800f);
-                  draw(uM, uMVP, uC, 0.05f, 0.07f, 0.11f, 1f);
+                  draw(uM, uMVP, uC, 0.08f, 0.08f, 0.08f, 1f);
 
                   for (Block b : blocks) {
                       Matrix.setIdentityM(model, 0);
@@ -434,18 +504,18 @@ jobs:
                   float pitchRad = (float) Math.toRadians(rX);
 
                   float targetX = pX;
-                  float targetY = pY + 1.8f;
+                  float targetY = pY + 1.25f;
                   float targetZ = pZ;
 
-                  float desiredDist = 7f;
-                  float minDist = 1.6f;
+                  float desiredDist = 8.3f;
+                  float minDist = 1.9f;
 
                   float dirX = (float)(-Math.sin(yawRad) * Math.cos(pitchRad));
                   float dirY = (float)( Math.sin(pitchRad));
                   float dirZ = (float)( Math.cos(yawRad) * Math.cos(pitchRad));
 
                   float desiredX = targetX + dirX * desiredDist;
-                  float desiredY = targetY + dirY * desiredDist + 1.2f;
+                  float desiredY = targetY + dirY * desiredDist + 1.0f;
                   float desiredZ = targetZ + dirZ * desiredDist;
 
                   float bestT = 1f;
@@ -470,7 +540,8 @@ jobs:
                       float dx = camX - targetX;
                       float dy = camY - targetY;
                       float dz = camZ - targetZ;
-                      float dist = (float)Math.sqrt(dx*dx + dy*dy + dz*dz);
+                      float dist = (float)Math.sqrt(dx * dx + dy * dy + dz * dz);
+
                       if (dist < minDist) {
                           float len = Math.max(0.0001f, dist);
                           camX = targetX + dx / len * minDist;
@@ -494,7 +565,6 @@ jobs:
                   float tMin = 0f;
                   float tMax = 1f;
 
-                  if (!slab(sx, dx, b.minX(), b.maxX())) return -1f;
                   float[] xRes = slabRange(sx, dx, b.minX(), b.maxX());
                   if (xRes == null) return -1f;
                   tMin = Math.max(tMin, xRes[0]);
@@ -510,18 +580,8 @@ jobs:
                   tMin = Math.max(tMin, zRes[0]);
                   tMax = Math.min(tMax, zRes[1]);
 
-                  if (tMax >= tMin && tMax >= 0f && tMin <= 1f) {
-                      return Math.max(0f, tMin);
-                  }
-
+                  if (tMax >= tMin && tMax >= 0f && tMin <= 1f) return Math.max(0f, tMin);
                   return -1f;
-              }
-
-              private boolean slab(float s, float d, float min, float max) {
-                  if (Math.abs(d) < 0.00001f) {
-                      return s >= min && s <= max;
-                  }
-                  return true;
               }
 
               private float[] slabRange(float s, float d, float min, float max) {
@@ -543,7 +603,13 @@ jobs:
               }
 
               private void update() {
-                  float speed = 0.18f;
+                  boolean hasInput = Math.abs(jX) > 0.02f || Math.abs(jY) > 0.02f;
+                  boolean canRun = runPressed && stamina > 0.5f && hasInput;
+
+                  float walkSpeed = 0.16f;
+                  float runSpeed = 0.29f;
+                  float speed = canRun ? runSpeed : walkSpeed;
+
                   float camYawRad = (float) Math.toRadians(rY);
 
                   float inputX = jX;
@@ -584,7 +650,15 @@ jobs:
                   if (moveAmount > 0.001f) {
                       float desiredYaw = (float)Math.toDegrees(Math.atan2(moveX, -moveZ));
                       bodyYaw = lerpAngle(bodyYaw, desiredYaw, 0.22f);
-                      walkTime += 0.28f;
+                      walkTime += canRun ? 0.48f : 0.30f;
+                  }
+
+                  if (canRun) {
+                      stamina -= 0.55f;
+                      if (stamina < 0f) stamina = 0f;
+                  } else {
+                      stamina += 0.28f;
+                      if (stamina > 100f) stamina = 100f;
                   }
               }
 
@@ -594,30 +668,27 @@ jobs:
               }
 
               private void drawPlayer(int uM, int uMVP, int uC) {
-                  float swing = (float)Math.sin(walkTime) * 35f * Math.min(1f, moveAmount * 8f);
-                  float armL = swing;
-                  float armR = -swing;
-                  float legL = -swing;
-                  float legR = swing;
+                  float swing = (float)Math.sin(walkTime) * 32f * Math.min(1f, moveAmount * 9f);
 
-                  drawBodyPart(uM, uMVP, uC, pX, pY + 2.8f, pZ, 1.2f, 1.2f, 1.2f, 1.0f, 0.85f, 0.65f);
-                  drawBodyPart(uM, uMVP, uC, pX, pY + 1.3f, pZ, 1.6f, 1.8f, 0.9f, 0.1f, 0.45f, 0.95f);
+                  drawBodyPart(uM, uMVP, uC, 0f, 2.8f, 0f, 1.2f, 1.2f, 1.2f, 0.92f, 0.80f, 0.65f);
+                  drawBodyPart(uM, uMVP, uC, 0f, 1.3f, 0f, 1.6f, 1.8f, 0.9f, 0.20f, 0.20f, 0.20f);
 
-                  drawLimb(uM, uMVP, uC, -1.15f, 1.3f, 0f, 0.6f, 1.8f, 0.6f, 1.0f, 0.85f, 0.65f, armL, true);
-                  drawLimb(uM, uMVP, uC,  1.15f, 1.3f, 0f, 0.6f, 1.8f, 0.6f, 1.0f, 0.85f, 0.65f, armR, true);
+                  drawLimb(uM, uMVP, uC, -1.15f, 1.3f, 0f, 0.6f, 1.8f, 0.6f, 0.82f, 0.74f, 0.62f,  swing);
+                  drawLimb(uM, uMVP, uC,  1.15f, 1.3f, 0f, 0.6f, 1.8f, 0.6f, 0.82f, 0.74f, 0.62f, -swing);
 
-                  drawLimb(uM, uMVP, uC, -0.45f, -0.7f, 0f, 0.7f, 1.9f, 0.7f, 0.15f, 0.15f, 0.8f, legL, false);
-                  drawLimb(uM, uMVP, uC,  0.45f, -0.7f, 0f, 0.7f, 1.9f, 0.7f, 0.15f, 0.15f, 0.8f, legR, false);
+                  drawLimb(uM, uMVP, uC, -0.45f,-0.7f, 0f, 0.7f, 1.9f, 0.7f, 0.30f, 0.30f, 0.30f, -swing);
+                  drawLimb(uM, uMVP, uC,  0.45f,-0.7f, 0f, 0.7f, 1.9f, 0.7f, 0.30f, 0.30f, 0.30f,  swing);
               }
 
               private void drawBodyPart(int uM, int uMVP, int uC,
-                                        float x, float y, float z,
+                                        float localX, float localY, float localZ,
                                         float sx, float sy, float sz,
                                         float r, float g, float b) {
                   Matrix.setIdentityM(model, 0);
                   Matrix.translateM(model, 0, pX, pY, pZ);
                   Matrix.rotateM(model, 0, bodyYaw, 0f, 1f, 0f);
-                  Matrix.translateM(model, 0, x - pX, y - pY, z - pZ);
+                  Matrix.scaleM(model, 0, PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
+                  Matrix.translateM(model, 0, localX, localY, localZ);
                   Matrix.scaleM(model, 0, sx, sy, sz);
                   draw(uM, uMVP, uC, r, g, b, 1f);
               }
@@ -626,11 +697,11 @@ jobs:
                                     float localX, float localY, float localZ,
                                     float sx, float sy, float sz,
                                     float r, float g, float b,
-                                    float rotX,
-                                    boolean arm) {
+                                    float rotX) {
                   Matrix.setIdentityM(model, 0);
                   Matrix.translateM(model, 0, pX, pY, pZ);
                   Matrix.rotateM(model, 0, bodyYaw, 0f, 1f, 0f);
+                  Matrix.scaleM(model, 0, PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
                   Matrix.translateM(model, 0, localX, localY + sy * 0.5f, localZ);
                   Matrix.rotateM(model, 0, rotX, 1f, 0f, 0f);
                   Matrix.translateM(model, 0, 0f, -sy * 0.5f, 0f);
@@ -679,6 +750,7 @@ jobs:
           import android.os.Bundle;
           import android.view.MotionEvent;
           import android.view.View;
+          import android.view.ViewGroup;
 
           import androidx.appcompat.app.AppCompatActivity;
 
@@ -686,6 +758,7 @@ jobs:
               private GameRenderer ren;
               private float lx;
               private float ly;
+              private View staminaFill;
 
               @SuppressLint("ClickableViewAccessibility")
               @Override
@@ -699,8 +772,33 @@ jobs:
                   ren = new GameRenderer();
                   gv.setRenderer(ren);
 
+                  staminaFill = findViewById(R.id.stamina_fill);
+
                   setupJoy(findViewById(R.id.joy_base), findViewById(R.id.joy_stick));
                   setupLook(findViewById(R.id.look_zone));
+                  setupRunButton(findViewById(R.id.btn_run));
+
+                  gv.post(updateUiRunnable);
+              }
+
+              private final Runnable updateUiRunnable = new Runnable() {
+                  @Override
+                  public void run() {
+                      if (staminaFill != null && ren != null) {
+                          ViewGroup.LayoutParams lp = staminaFill.getLayoutParams();
+                          int max = dp(214);
+                          int w = (int)(max * (ren.stamina / 100f));
+                          if (w < dp(8)) w = Math.max(0, w);
+                          lp.width = w;
+                          staminaFill.setLayoutParams(lp);
+                          staminaFill.setAlpha(ren.stamina <= 15f ? 0.45f : 1f);
+                      }
+                      staminaFill.postDelayed(this, 16);
+                  }
+              };
+
+              private int dp(int v) {
+                  return (int)(v * getResources().getDisplayMetrics().density);
               }
 
               private void setupJoy(View base, View stick) {
@@ -743,8 +841,8 @@ jobs:
                           ly = e.getY();
                       } else if (e.getAction() == MotionEvent.ACTION_MOVE) {
                           ren.rY += (e.getX() - lx) * 0.25f;
-
                           ren.rX += (e.getY() - ly) * 0.18f;
+
                           if (ren.rX < -10f) ren.rX = -10f;
                           if (ren.rX > 55f) ren.rX = 55f;
 
@@ -753,6 +851,28 @@ jobs:
                       }
                       return true;
                   });
+              }
+
+              @SuppressLint("ClickableViewAccessibility")
+              private void setupRunButton(View btn) {
+                  btn.setOnTouchListener((v, e) -> {
+                      if (e.getAction() == MotionEvent.ACTION_DOWN || e.getAction() == MotionEvent.ACTION_MOVE) {
+                          ren.runPressed = true;
+                          v.setAlpha(0.7f);
+                      } else if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) {
+                          ren.runPressed = false;
+                          v.setAlpha(1f);
+                      }
+                      return true;
+                  });
+              }
+
+              @Override
+              protected void onDestroy() {
+                  super.onDestroy();
+                  if (staminaFill != null) {
+                      staminaFill.removeCallbacks(updateUiRunnable);
+                  }
               }
           }
           EOF
@@ -774,5 +894,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_6.1_ThirdPerson_Fixed_APK
+          name: Enjoer_6.1_ThirdPerson_RunStamina_APK
           path: app/build/outputs/apk/debug/app-debug.apk
