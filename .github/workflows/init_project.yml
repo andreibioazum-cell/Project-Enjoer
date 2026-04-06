@@ -1,4 +1,4 @@
-name: Pocket_Code_Ultra_RU_v2
+name: Enjoer_6.1_Stars
 on: [push, workflow_dispatch]
 
 jobs:
@@ -16,7 +16,7 @@ jobs:
 
       - name: Create Project
         run: |
-          mkdir -p app/src/main/java/com/pocketultra/ruv2
+          mkdir -p app/src/main/java/com/enjoer/game
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
@@ -27,2804 +27,653 @@ jobs:
           cat <<EOF > app/src/main/res/values/themes.xml
           <resources>
             <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
-              <item name="android:windowBackground">#F2F8FD</item>
+              <item name="android:windowFullscreen">true</item>
             </style>
           </resources>
           EOF
 
-          cat <<EOF > app/src/main/res/drawable/bg_panel.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#FFFFFF"/>
-            <corners android:radius="16dp"/>
-            <stroke android:width="1dp" android:color="#D6E6F2"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/bg_stage.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#D8F0FF"/>
-            <corners android:radius="18dp"/>
-            <stroke android:width="2dp" android:color="#8AC4E8"/>
-          </shape>
-          EOF
-
           cat <<EOF > app/src/main/res/drawable/btn_blue.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#4C97FF"/>
-            <corners android:radius="14dp"/>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <corners android:radius="12dp"/><solid android:color="#101820"/><stroke android:width="2dp" android:color="#00BFFF"/>
           </shape>
           EOF
 
-          cat <<EOF > app/src/main/res/drawable/btn_green.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#5FD36E"/>
-            <corners android:radius="14dp"/>
+          cat <<EOF > app/src/main/res/drawable/btn_blue_filled.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <corners android:radius="12dp"/><solid android:color="#00BFFF"/>
           </shape>
           EOF
 
           cat <<EOF > app/src/main/res/drawable/btn_red.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#FF6F6F"/>
-            <corners android:radius="14dp"/>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <corners android:radius="12dp"/><solid android:color="#101820"/><stroke android:width="2dp" android:color="#FF4444"/>
           </shape>
           EOF
 
-          cat <<EOF > app/src/main/res/drawable/btn_orange.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#FFAB19"/>
-            <corners android:radius="14dp"/>
+          cat <<EOF > app/src/main/res/drawable/btn_green.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <corners android:radius="12dp"/><solid android:color="#44FF44"/>
           </shape>
           EOF
 
-          cat <<EOF > app/src/main/res/drawable/btn_purple.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#9966FF"/>
-            <corners android:radius="14dp"/>
+          cat <<EOF > app/src/main/res/drawable/joy_base.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+            <solid android:color="#CC101820"/><stroke android:width="2dp" android:color="#00BFFF"/>
           </shape>
           EOF
 
-          cat <<EOF > app/src/main/res/drawable/btn_teal.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#26C6DA"/>
-            <corners android:radius="14dp"/>
+          cat <<EOF > app/src/main/res/drawable/joy_stick.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+            <solid android:color="#00BFFF"/>
           </shape>
           EOF
 
-          cat <<EOF > app/src/main/res/drawable/btn_dark.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#455A64"/>
-            <corners android:radius="14dp"/>
+          cat <<EOF > app/src/main/res/drawable/panel_bg.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+            <corners android:radius="8dp"/><solid android:color="#E6101820"/><stroke android:width="1dp" android:color="#00BFFF"/>
           </shape>
           EOF
 
-          cat <<EOF > app/src/main/res/drawable/btn_formula_num.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#37474F"/>
-            <corners android:radius="10dp"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/btn_formula_op.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#FF8F00"/>
-            <corners android:radius="10dp"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/btn_formula_func.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#5C6BC0"/>
-            <corners android:radius="10dp"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/btn_formula_sensor.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#26A69A"/>
-            <corners android:radius="10dp"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/btn_formula_var.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#EF6C00"/>
-            <corners android:radius="10dp"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/bg_formula_display.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#263238"/>
-            <corners android:radius="12dp"/>
-            <stroke android:width="2dp" android:color="#4FC3F7"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/block_event.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#FFBF00"/>
-            <corners android:radius="16dp"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/block_motion.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#4C97FF"/>
-            <corners android:radius="16dp"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/block_looks.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#9966FF"/>
-            <corners android:radius="16dp"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/block_control.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#FFAB19"/>
-            <corners android:radius="16dp"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/block_data.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#FF8C1A"/>
-            <corners android:radius="16dp"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/block_signal.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android">
-            <solid android:color="#E1A91A"/>
-            <corners android:radius="16dp"/>
+          cat <<EOF > app/src/main/res/drawable/color_btn.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+            <solid android:color="#FFF"/><stroke android:width="2dp" android:color="#00BFFF"/>
           </shape>
           EOF
 
           cat <<'LAYOUT' > app/src/main/res/layout/activity_main.xml
           <?xml version="1.0" encoding="utf-8"?>
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:background="#F2F8FD">
+              android:layout_width="match_parent" android:layout_height="match_parent" android:background="#02050A">
+              
+              <android.opengl.GLSurfaceView android:id="@+id/gl_view"
+                  android:layout_width="match_parent" android:layout_height="match_parent"/>
+              
+              <RelativeLayout android:id="@+id/game_ui" android:layout_width="match_parent" 
+                  android:layout_height="match_parent" android:visibility="gone">
+                  <View android:id="@+id/look_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
+                  <Button android:id="@+id/btn_menu" android:layout_width="50dp" android:layout_height="50dp"
+                      android:layout_margin="10dp" android:text="≡" android:textSize="24sp" 
+                      android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                  <FrameLayout android:id="@+id/joy_base" android:layout_width="140dp" android:layout_height="140dp"
+                      android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" 
+                      android:layout_marginLeft="40dp" android:layout_marginBottom="40dp" android:background="@drawable/joy_base"/>
+                  <View android:id="@+id/joy_stick" android:layout_width="60dp" android:layout_height="60dp"
+                      android:layout_alignLeft="@id/joy_base" android:layout_alignTop="@id/joy_base" 
+                      android:layout_marginLeft="40dp" android:layout_marginTop="40dp" android:background="@drawable/joy_stick"/>
+                  <Button android:id="@+id/btn_jump" android:layout_width="90dp" android:layout_height="90dp"
+                      android:layout_alignParentRight="true" android:layout_alignParentBottom="true" 
+                      android:layout_marginRight="40dp" android:layout_marginBottom="40dp" 
+                      android:text="▲" android:textSize="28sp" android:background="@drawable/btn_blue" android:textColor="#FFF"/>
+              </RelativeLayout>
 
-              <LinearLayout
-                  android:id="@+id/screen_projects"
-                  android:layout_width="match_parent"
-                  android:layout_height="match_parent"
-                  android:orientation="vertical"
-                  android:padding="12dp">
-
-                  <TextView
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:text="Проекты"
-                      android:textSize="26sp"
-                      android:textStyle="bold"
-                      android:textColor="#2D678F"/>
-
-                  <LinearLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:orientation="horizontal"
-                      android:layout_marginTop="10dp">
-
-                      <Button
-                          android:id="@+id/btn_new_project"
-                          android:layout_width="0dp"
-                          android:layout_height="48dp"
-                          android:layout_weight="1"
-                          android:text="+ Новый проект"
-                          android:textColor="#FFFFFF"
-                          android:background="@drawable/btn_blue"/>
-
-                      <Button
-                          android:id="@+id/btn_data_manager"
-                          android:layout_width="0dp"
-                          android:layout_height="48dp"
-                          android:layout_weight="1"
-                          android:layout_marginLeft="8dp"
-                          android:text="Данные"
-                          android:textColor="#FFFFFF"
-                          android:background="@drawable/btn_orange"/>
+              <RelativeLayout android:id="@+id/engine_ui" android:layout_width="match_parent" 
+                  android:layout_height="match_parent" android:visibility="gone">
+                  <View android:id="@+id/engine_touch_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
+                      android:layout_alignParentTop="true" android:orientation="horizontal" android:padding="10dp">
+                      <Button android:id="@+id/btn_engine_menu" android:layout_width="50dp" android:layout_height="50dp" 
+                          android:text="≡" android:textSize="24sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                      <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
+                      <Button android:id="@+id/btn_save" android:layout_width="90dp" android:layout_height="50dp" 
+                          android:text="EXPORT" android:textSize="12sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                      <Button android:id="@+id/btn_play_level" android:layout_width="50dp" android:layout_height="50dp" 
+                          android:text="▶" android:textSize="20sp" android:background="@drawable/btn_green" android:textColor="#000" android:layout_marginLeft="10dp"/>
                   </LinearLayout>
-
-                  <ScrollView
-                      android:layout_width="match_parent"
-                      android:layout_height="0dp"
-                      android:layout_weight="1"
-                      android:layout_marginTop="10dp">
-
-                      <LinearLayout
-                          android:id="@+id/projects_list"
-                          android:layout_width="match_parent"
-                          android:layout_height="wrap_content"
-                          android:orientation="vertical"/>
-                  </ScrollView>
-              </LinearLayout>
-
-              <LinearLayout
-                  android:id="@+id/screen_scenes"
-                  android:layout_width="match_parent"
-                  android:layout_height="match_parent"
-                  android:orientation="vertical"
-                  android:padding="12dp"
-                  android:visibility="gone">
-
-                  <LinearLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:orientation="horizontal">
-
-                      <Button
-                          android:id="@+id/back_to_projects"
-                          android:layout_width="wrap_content"
-                          android:layout_height="44dp"
-                          android:text="←"
-                          android:textColor="#FFFFFF"
-                          android:background="@drawable/btn_red"/>
-
-                      <TextView
-                          android:id="@+id/txt_project_title"
-                          android:layout_width="0dp"
-                          android:layout_height="wrap_content"
-                          android:layout_weight="1"
-                          android:text="Сцены"
-                          android:textSize="24sp"
-                          android:textStyle="bold"
-                          android:textColor="#2D678F"
-                          android:gravity="center_vertical"
-                          android:paddingLeft="12dp"/>
+                  <FrameLayout android:id="@+id/engine_joy_base" android:layout_width="120dp" android:layout_height="120dp"
+                      android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" 
+                      android:layout_marginLeft="30dp" android:layout_marginBottom="30dp" android:background="@drawable/joy_base"/>
+                  <View android:id="@+id/engine_joy_stick" android:layout_width="50dp" android:layout_height="50dp"
+                      android:layout_alignLeft="@id/engine_joy_base" android:layout_alignTop="@id/engine_joy_base" 
+                      android:layout_marginLeft="35dp" android:layout_marginTop="35dp" android:background="@drawable/joy_stick"/>
+                  <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+                      android:layout_above="@id/engine_joy_base" android:layout_alignParentLeft="true" 
+                      android:layout_marginLeft="35dp" android:layout_marginBottom="10dp" android:orientation="horizontal">
+                      <Button android:id="@+id/btn_down" android:layout_width="50dp" android:layout_height="50dp" 
+                          android:text="▼" android:textSize="20sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                      <Button android:id="@+id/btn_up" android:layout_width="50dp" android:layout_height="50dp" 
+                          android:text="▲" android:textSize="20sp" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="10dp"/>
                   </LinearLayout>
-
-                  <LinearLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:orientation="horizontal"
-                      android:layout_marginTop="12dp">
-
-                      <Button
-                          android:id="@+id/btn_new_scene"
-                          android:layout_width="0dp"
-                          android:layout_height="48dp"
-                          android:layout_weight="1"
-                          android:text="+ Новая сцена"
-                          android:textColor="#FFFFFF"
-                          android:background="@drawable/btn_purple"/>
-
-                      <Button
-                          android:id="@+id/btn_texture_library"
-                          android:layout_width="0dp"
-                          android:layout_height="48dp"
-                          android:layout_weight="1"
-                          android:layout_marginLeft="8dp"
-                          android:text="Текстуры"
-                          android:textColor="#FFFFFF"
-                          android:background="@drawable/btn_blue"/>
-                  </LinearLayout>
-
-                  <ScrollView
-                      android:layout_width="match_parent"
-                      android:layout_height="0dp"
-                      android:layout_weight="1"
-                      android:layout_marginTop="10dp">
-
-                      <LinearLayout
-                          android:id="@+id/scenes_list"
-                          android:layout_width="match_parent"
-                          android:layout_height="wrap_content"
-                          android:orientation="vertical"/>
-                  </ScrollView>
-              </LinearLayout>
-
-              <LinearLayout
-                  android:id="@+id/screen_objects"
-                  android:layout_width="match_parent"
-                  android:layout_height="match_parent"
-                  android:orientation="vertical"
-                  android:padding="12dp"
-                  android:visibility="gone">
-
-                  <LinearLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:orientation="horizontal">
-
-                      <Button
-                          android:id="@+id/back_to_scenes"
-                          android:layout_width="wrap_content"
-                          android:layout_height="44dp"
-                          android:text="←"
-                          android:textColor="#FFFFFF"
-                          android:background="@drawable/btn_red"/>
-
-                      <TextView
-                          android:id="@+id/txt_scene_title"
-                          android:layout_width="0dp"
-                          android:layout_height="wrap_content"
-                          android:layout_weight="1"
-                          android:text="Объекты"
-                          android:textSize="24sp"
-                          android:textStyle="bold"
-                          android:textColor="#2D678F"
-                          android:gravity="center_vertical"
-                          android:paddingLeft="12dp"/>
-
-                      <Button
-                          android:id="@+id/btn_play_scene"
-                          android:layout_width="wrap_content"
-                          android:layout_height="44dp"
-                          android:text="Запуск"
-                          android:textColor="#FFFFFF"
-                          android:background="@drawable/btn_green"/>
-                  </LinearLayout>
-
-                  <Button
-                      android:id="@+id/btn_new_object"
-                      android:layout_width="match_parent"
-                      android:layout_height="48dp"
-                      android:text="+ Новый объект"
-                      android:textColor="#FFFFFF"
-                      android:background="@drawable/btn_blue"
-                      android:layout_marginTop="12dp"/>
-
-                  <ScrollView
-                      android:layout_width="match_parent"
-                      android:layout_height="0dp"
-                      android:layout_weight="1"
-                      android:layout_marginTop="10dp">
-
-                      <LinearLayout
-                          android:id="@+id/objects_list"
-                          android:layout_width="match_parent"
-                          android:layout_height="wrap_content"
-                          android:orientation="vertical"/>
-                  </ScrollView>
-              </LinearLayout>
-
-              <LinearLayout
-                  android:id="@+id/screen_scripts"
-                  android:layout_width="match_parent"
-                  android:layout_height="match_parent"
-                  android:orientation="vertical"
-                  android:padding="12dp"
-                  android:visibility="gone">
-
-                  <LinearLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:orientation="horizontal">
-
-                      <Button
-                          android:id="@+id/back_to_objects"
-                          android:layout_width="wrap_content"
-                          android:layout_height="44dp"
-                          android:text="←"
-                          android:textColor="#FFFFFF"
-                          android:background="@drawable/btn_red"/>
-
-                      <TextView
-                          android:id="@+id/txt_object_title"
-                          android:layout_width="0dp"
-                          android:layout_height="wrap_content"
-                          android:layout_weight="1"
-                          android:text="Скрипты"
-                          android:textSize="24sp"
-                          android:textStyle="bold"
-                          android:textColor="#2D678F"
-                          android:gravity="center_vertical"
-                          android:paddingLeft="12dp"/>
-
-                      <Button
-                          android:id="@+id/btn_formula_manager"
-                          android:layout_width="wrap_content"
-                          android:layout_height="44dp"
-                          android:text="Формулы"
-                          android:textColor="#FFFFFF"
-                          android:background="@drawable/btn_orange"/>
-                  </LinearLayout>
-
-                  <LinearLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="0dp"
-                      android:layout_weight="1"
-                      android:orientation="vertical"
-                      android:background="@drawable/bg_panel"
-                      android:padding="10dp"
-                      android:layout_marginTop="10dp">
-
-                      <LinearLayout
-                          android:layout_width="match_parent"
-                          android:layout_height="wrap_content"
-                          android:orientation="horizontal">
-
-                          <TextView
-                              android:layout_width="0dp"
-                              android:layout_height="wrap_content"
-                              android:layout_weight="1"
-                              android:text="Блоки"
-                              android:textStyle="bold"
-                              android:textSize="18sp"
-                              android:textColor="#356D99"/>
-
-                          <Button
-                              android:id="@+id/btn_add_block"
-                              android:layout_width="44dp"
-                              android:layout_height="44dp"
-                              android:text="+"
-                              android:textColor="#FFFFFF"
-                              android:textSize="24sp"
-                              android:background="@drawable/btn_blue"/>
+                  <ScrollView android:id="@+id/tools_scroll" android:layout_width="170dp" android:layout_height="match_parent"
+                      android:layout_alignParentRight="true" android:layout_marginRight="10dp" 
+                      android:layout_marginTop="70dp" android:layout_marginBottom="10dp">
+                      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
+                          android:orientation="vertical" android:background="@drawable/panel_bg" android:padding="10dp">
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                              <Button android:id="@+id/shape_cube" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="■" android:background="@drawable/btn_blue_filled" android:textColor="#000"/>
+                              <Button android:id="@+id/shape_flat" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="▬" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
+                              <Button android:id="@+id/shape_tall" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="▮" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
+                          </LinearLayout>
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
+                              android:orientation="horizontal" android:layout_marginTop="8dp">
+                              <Button android:id="@+id/size_s" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="S" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                              <Button android:id="@+id/size_m" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="M" android:background="@drawable/btn_blue_filled" android:textColor="#000" android:layout_marginLeft="4dp"/>
+                              <Button android:id="@+id/size_l" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="L" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
+                          </LinearLayout>
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
+                              android:orientation="horizontal" android:gravity="center" android:layout_marginTop="8dp">
+                              <View android:id="@+id/color_red" android:layout_width="26dp" android:layout_height="26dp" 
+                                  android:background="@drawable/color_btn" android:backgroundTint="#FF2222"/>
+                              <View android:id="@+id/color_green" android:layout_width="26dp" android:layout_height="26dp" 
+                                  android:background="@drawable/color_btn" android:backgroundTint="#22FF22" android:layout_marginLeft="5dp"/>
+                              <View android:id="@+id/color_blue" android:layout_width="26dp" android:layout_height="26dp" 
+                                  android:background="@drawable/color_btn" android:backgroundTint="#2288FF" android:layout_marginLeft="5dp"/>
+                              <View android:id="@+id/color_yellow" android:layout_width="26dp" android:layout_height="26dp" 
+                                  android:background="@drawable/color_btn" android:backgroundTint="#FFFF22" android:layout_marginLeft="5dp"/>
+                              <View android:id="@+id/color_white" android:layout_width="26dp" android:layout_height="26dp" 
+                                  android:background="@drawable/color_btn" android:backgroundTint="#FFFFFF" android:layout_marginLeft="5dp"/>
+                          </LinearLayout>
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
+                              android:orientation="horizontal" android:layout_marginTop="8dp">
+                              <Button android:id="@+id/dist_near" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="3" android:background="@drawable/btn_blue" android:textColor="#00BFFF"/>
+                              <Button android:id="@+id/dist_mid" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="6" android:background="@drawable/btn_blue_filled" android:textColor="#000" android:layout_marginLeft="4dp"/>
+                              <Button android:id="@+id/dist_far" android:layout_width="0dp" android:layout_height="36dp" 
+                                  android:layout_weight="1" android:text="12" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginLeft="4dp"/>
+                          </LinearLayout>
+                          <Button android:id="@+id/btn_place" android:layout_width="match_parent" android:layout_height="44dp" 
+                              android:text="+ PLACE" android:background="@drawable/btn_blue_filled" android:textColor="#000" android:layout_marginTop="12dp"/>
+                          <Button android:id="@+id/btn_delete" android:layout_width="match_parent" android:layout_height="36dp" 
+                              android:text="DELETE" android:background="@drawable/btn_red" android:textColor="#FF4444" android:layout_marginTop="8dp"/>
+                          <Button android:id="@+id/btn_deselect" android:layout_width="match_parent" android:layout_height="36dp" 
+                              android:text="DESELECT" android:background="@drawable/btn_blue" android:textColor="#00BFFF" android:layout_marginTop="8dp"/>
                       </LinearLayout>
-
-                      <ScrollView
-                          android:layout_width="match_parent"
-                          android:layout_height="0dp"
-                          android:layout_weight="1"
-                          android:layout_marginTop="8dp">
-
-                          <LinearLayout
-                              android:id="@+id/blocks_list"
-                              android:layout_width="match_parent"
-                              android:layout_height="wrap_content"
-                              android:orientation="vertical"/>
-                      </ScrollView>
+                  </ScrollView>
+                  <LinearLayout android:id="@+id/axis_panel" android:layout_width="wrap_content" android:layout_height="wrap_content" 
+                      android:layout_alignParentBottom="true" android:layout_centerHorizontal="true" android:layout_marginBottom="20dp" 
+                      android:orientation="horizontal" android:background="@drawable/panel_bg" android:padding="6dp" android:visibility="gone">
+                      <Button android:id="@+id/axis_x_minus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="X-" android:background="@drawable/btn_blue" android:textColor="#FF4444" android:textSize="12sp"/>
+                      <Button android:id="@+id/axis_x_plus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="X+" android:background="@drawable/btn_blue" android:textColor="#FF4444" android:textSize="12sp" android:layout_marginLeft="4dp"/>
+                      <Button android:id="@+id/axis_y_minus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="Y-" android:background="@drawable/btn_blue" android:textColor="#44FF44" android:textSize="12sp" android:layout_marginLeft="10dp"/>
+                      <Button android:id="@+id/axis_y_plus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="Y+" android:background="@drawable/btn_blue" android:textColor="#44FF44" android:textSize="12sp" android:layout_marginLeft="4dp"/>
+                      <Button android:id="@+id/axis_z_minus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="Z-" android:background="@drawable/btn_blue" android:textColor="#4488FF" android:textSize="12sp" android:layout_marginLeft="10dp"/>
+                      <Button android:id="@+id/axis_z_plus" android:layout_width="44dp" android:layout_height="44dp" 
+                          android:text="Z+" android:background="@drawable/btn_blue" android:textColor="#4488FF" android:textSize="12sp" android:layout_marginLeft="4dp"/>
                   </LinearLayout>
+                  <View android:id="@+id/crosshair" android:layout_width="6dp" android:layout_height="6dp" 
+                      android:layout_centerInParent="true" android:background="#00BFFF"/>
+              </RelativeLayout>
+
+              <RelativeLayout android:id="@+id/playtest_ui" android:layout_width="match_parent" 
+                  android:layout_height="match_parent" android:visibility="gone">
+                  <View android:id="@+id/playtest_look_zone" android:layout_width="match_parent" android:layout_height="match_parent"/>
+                  <Button android:id="@+id/btn_stop_playtest" android:layout_width="50dp" android:layout_height="50dp" 
+                      android:layout_margin="10dp" android:text="■" android:textSize="20sp" android:background="@drawable/btn_red" android:textColor="#FFF"/>
+                  <FrameLayout android:id="@+id/playtest_joy_base" android:layout_width="140dp" android:layout_height="140dp" 
+                      android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" 
+                      android:layout_marginLeft="40dp" android:layout_marginBottom="40dp" android:background="@drawable/joy_base"/>
+                  <View android:id="@+id/playtest_joy_stick" android:layout_width="60dp" android:layout_height="60dp" 
+                      android:layout_alignLeft="@id/playtest_joy_base" android:layout_alignTop="@id/playtest_joy_base" 
+                      android:layout_marginLeft="40dp" android:layout_marginTop="40dp" android:background="@drawable/joy_stick"/>
+                  <Button android:id="@+id/btn_playtest_jump" android:layout_width="90dp" android:layout_height="90dp" 
+                      android:layout_alignParentRight="true" android:layout_alignParentBottom="true" 
+                      android:layout_marginRight="40dp" android:layout_marginBottom="40dp" 
+                      android:text="▲" android:textSize="28sp" android:background="@drawable/btn_blue" android:textColor="#FFF"/>
+              </RelativeLayout>
+
+              <LinearLayout android:id="@+id/menu_ui" android:layout_width="match_parent" android:layout_height="match_parent"
+                  android:orientation="vertical" android:gravity="center" android:background="#02050A">
+                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" 
+                      android:text="ENJOER" android:textSize="52sp" android:textColor="#00BFFF" android:textStyle="bold"/>
+                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" 
+                      android:text="ENGINE 6.1" android:textSize="18sp" android:textColor="#0088CC" android:layout_marginBottom="80dp"/>
+                  <Button android:id="@+id/btn_play" android:layout_width="240dp" android:layout_height="60dp" 
+                      android:text="PLAY" android:textSize="18sp" android:textColor="#000" android:background="@drawable/btn_blue_filled" android:layout_marginBottom="16dp"/>
+                  <Button android:id="@+id/btn_engine" android:layout_width="240dp" android:layout_height="60dp" 
+                      android:text="EDITOR" android:textSize="18sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue" android:layout_marginBottom="16dp"/>
+                  <Button android:id="@+id/btn_load_file" android:layout_width="240dp" android:layout_height="60dp" 
+                      android:text="IMPORT .JSON" android:textSize="16sp" android:textColor="#00BFFF" android:background="@drawable/btn_blue"/>
               </LinearLayout>
-
-              <FrameLayout
-                  android:id="@+id/screen_player"
-                  android:layout_width="match_parent"
-                  android:layout_height="match_parent"
-                  android:visibility="gone"
-                  android:clipChildren="false"
-                  android:clipToPadding="false"
-                  android:background="#101820">
-
-                  <FrameLayout
-                      android:id="@+id/player_stage"
-                      android:layout_width="match_parent"
-                      android:layout_height="match_parent"
-                      android:layout_margin="12dp"
-                      android:clipChildren="false"
-                      android:clipToPadding="false"
-                      android:background="@drawable/bg_stage">
-
-                      <FrameLayout
-                          android:id="@+id/player_stage_layer"
-                          android:layout_width="match_parent"
-                          android:layout_height="match_parent"
-                          android:clipChildren="false"
-                          android:clipToPadding="false"/>
-                  </FrameLayout>
-
-                  <Button
-                      android:id="@+id/btn_stop_player"
-                      android:layout_width="80dp"
-                      android:layout_height="48dp"
-                      android:layout_margin="16dp"
-                      android:text="Стоп"
-                      android:textColor="#FFFFFF"
-                      android:background="@drawable/btn_red"/>
-              </FrameLayout>
           </FrameLayout>
           LAYOUT
 
-          cat <<EOF > app/src/main/java/com/pocketultra/ruv2/BlockItem.java
-          package com.pocketultra.ruv2;
-
-          public class BlockItem {
-              public String type;
-              public String label;
-              public String arg1;
-              public String arg2;
-
-              public BlockItem(String type, String label, String arg1, String arg2){
-                  this.type = type;
-                  this.label = label;
-                  this.arg1 = arg1;
-                  this.arg2 = arg2;
+          cat <<EOF > app/src/main/java/com/enjoer/game/Block.java
+          package com.enjoer.game;
+          public class Block {
+              public float x, y, z, sx, sy, sz, r, g, b;
+              public Block(float x, float y, float z, float sx, float sy, float sz, float r, float g, float b) {
+                  this.x=x; this.y=y; this.z=z; this.sx=sx; this.sy=sy; this.sz=sz; this.r=r; this.g=g; this.b=b;
               }
+              public float minX(){return x-sx/2;} public float maxX(){return x+sx/2;}
+              public float minY(){return y-sy/2;} public float maxY(){return y+sy/2;}
+              public float minZ(){return z-sz/2;} public float maxZ(){return z+sz/2;}
           }
           EOF
 
-          cat <<EOF > app/src/main/java/com/pocketultra/ruv2/TextureItem.java
-          package com.pocketultra.ruv2;
+          cat <<'RENDERER' > app/src/main/java/com/enjoer/game/GameRenderer.java
+          package com.enjoer.game;
+          import android.opengl.GLES30;
+          import android.opengl.GLSurfaceView;
+          import android.opengl.Matrix;
+          import java.nio.*;
+          import java.util.concurrent.CopyOnWriteArrayList;
+          import javax.microedition.khronos.egl.EGLConfig;
+          import javax.microedition.khronos.opengles.GL10;
 
-          public class TextureItem {
-              public String id = "";
-              public String name = "";
-              public String uri = "";
+          public class GameRenderer implements GLSurfaceView.Renderer {
+              private final float[] proj=new float[16], view=new float[16], model=new float[16];
+              public float pX=0, pY=6, pZ=15, rY=0, rX=0, jX=0, jY=0, vY=0;
+              public boolean isEngineMode=false, isPlayingLevel=false;
+              private int prog;
+              private FloatBuffer vBuf, nBuf;
+              public float blockR=0.8f, blockG=0.3f, blockB=0.3f, blockSX=4, blockSY=4, blockSZ=4, placeDist=6f;
+              public CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
+              public int selectedIndex = -1;
+              public float screenW=1, screenH=1;
+              private static final float FLOOR_Y=0f, PLAYER_HEIGHT=3.2f, PLAYER_RADIUS=0.5f;
+
+              public void loadBuiltInLevel() {
+                  blocks.clear();
+                  blocks.add(new Block(0,2,-10, 6,4,6, 0.9f,0.2f,0.2f));
+                  blocks.add(new Block(-12,2,-22, 5,4,5, 0.2f,0.9f,0.2f));
+                  blocks.add(new Block(12,2,-22, 5,4,5, 0.2f,0.4f,0.9f));
+                  blocks.add(new Block(0,1,-38, 14,2,14, 0.9f,0.9f,0.3f));
+                  blocks.add(new Block(0,0.5f,-60, 18,1,18, 0.95f,0.95f,0.95f));
+              }
+
+              public void placeBlock() {
+                  float vx=(float)(Math.sin(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
+                  float vy=(float)Math.sin(Math.toRadians(rX));
+                  float vz=(float)(-Math.cos(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
+                  float nx=pX+vx*placeDist, ny=pY+vy*placeDist, nz=pZ+vz*placeDist;
+                  if(ny-blockSY/2<FLOOR_Y) ny=FLOOR_Y+blockSY/2;
+                  blocks.add(new Block(nx,ny,nz, blockSX,blockSY,blockSZ, blockR,blockG,blockB));
+              }
+
+              public void deleteSelected() { if(selectedIndex>=0 && selectedIndex<blocks.size()) { blocks.remove(selectedIndex); selectedIndex=-1; } }
+              
+              public void moveSelected(float dx, float dy, float dz) {
+                  if(selectedIndex>=0 && selectedIndex<blocks.size()) {
+                      Block b=blocks.get(selectedIndex); b.x+=dx; b.y+=dy; b.z+=dz;
+                      if(b.y-b.sy/2<FLOOR_Y) b.y=FLOOR_Y+b.sy/2;
+                  }
+              }
+
+              public int raycastBlock(float tx, float ty) {
+                  float ndcX=(2f*tx/screenW)-1f, ndcY=1f-(2f*ty/screenH);
+                  float[] invP=new float[16], invV=new float[16];
+                  Matrix.invertM(invP,0,proj,0); Matrix.invertM(invV,0,view,0);
+                  float[] n={ndcX,ndcY,-1,1}, f={ndcX,ndcY,1,1}, t=new float[4];
+                  Matrix.multiplyMV(t,0,invP,0,n,0); for(int i=0;i<4;i++)t[i]/=t[3];
+                  float[] nW=new float[4]; Matrix.multiplyMV(nW,0,invV,0,t,0);
+                  Matrix.multiplyMV(t,0,invP,0,f,0); for(int i=0;i<4;i++)t[i]/=t[3];
+                  float[] fW=new float[4]; Matrix.multiplyMV(fW,0,invV,0,t,0);
+                  float dx=fW[0]-nW[0], dy=fW[1]-nW[1], dz=fW[2]-nW[2];
+                  float len=(float)Math.sqrt(dx*dx+dy*dy+dz*dz); dx/=len; dy/=len; dz/=len;
+                  int closest=-1; float cDist=Float.MAX_VALUE;
+                  for(int i=0; i<blocks.size(); i++) {
+                      Block b=blocks.get(i);
+                      float tmin=(b.minX()-nW[0])/dx, tmax=(b.maxX()-nW[0])/dx;
+                      if(tmin>tmax){float tmp=tmin;tmin=tmax;tmax=tmp;}
+                      float tymin=(b.minY()-nW[1])/dy, tymax=(b.maxY()-nW[1])/dy;
+                      if(tymin>tymax){float tmp=tymin;tymin=tymax;tymax=tmp;}
+                      if(tmin>tymax||tymin>tmax)continue;
+                      if(tymin>tmin)tmin=tymin; if(tymax<tmax)tmax=tymax;
+                      float tzmin=(b.minZ()-nW[2])/dz, tzmax=(b.maxZ()-nW[2])/dz;
+                      if(tzmin>tzmax){float tmp=tzmin;tzmin=tzmax;tzmax=tmp;}
+                      if(tmin>tzmax||tzmin>tmax)continue;
+                      if(tzmin>tmin)tmin=tzmin;
+                      if(tmin>0&&tmin<cDist){cDist=tmin;closest=i;}
+                  }
+                  return closest;
+              }
+
+              @Override
+              public void onSurfaceCreated(GL10 gl, EGLConfig cfg) {
+                  GLES30.glEnable(GLES30.GL_DEPTH_TEST);
+                  String vs="#version 300 es\n"+
+                      "layout(location=0)in vec4 aP;layout(location=1)in vec3 aN;"+
+                      "uniform mat4 uMVP,uM;out vec3 vN,vP;"+
+                      "void main(){vP=vec3(uM*aP);vN=normalize(mat3(uM)*aN);gl_Position=uMVP*aP;}";
+                  
+                  // Фрагментный шейдер с звёздами
+                  String fs="#version 300 es\nprecision highp float;"+
+                      "in vec3 vN,vP;uniform vec3 camP;uniform vec4 uC;uniform float uSel,isFloor;out vec4 fC;"+
+                      // Генератор псевдослучайных чисел для звёзд
+                      "float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}"+
+                      // Функция неба со звёздами
+                      "vec3 sky(vec3 d){"+
+                      "  float t=clamp(d.y*.5+.5,0.,1.);"+
+                      "  vec3 base=mix(vec3(.005,.01,.03),vec3(.0,.2,.5),t);"+
+                      // Звёзды (только в верхней части неба)
+                      "  if(d.y>0.05){"+
+                      "    vec2 uv=d.xz/(d.y+.001);"+
+                      "    vec2 id=floor(uv*80.);"+
+                      "    float star=hash(id);"+
+                      "    if(star>.97){"+
+                      "      vec2 gv=fract(uv*80.)-.5;"+
+                      "      float dist=length(gv);"+
+                      "      float brightness=hash(id+.1);"+
+                      "      float twinkle=sin(hash(id)*6.28+star*100.)*.3+.7;"+
+                      "      float s=smoothstep(.15,.0,dist)*brightness*twinkle;"+
+                      "      vec3 starCol=mix(vec3(1.,.9,.8),vec3(.8,.9,1.),hash(id+.2));"+
+                      "      base+=starCol*s*1.5;"+
+                      "    }"+
+                      "  }"+
+                      "  return base;"+
+                      "}"+
+                      "void main(){"+
+                      "vec3 n=normalize(vN),vD=normalize(camP-vP),lD=normalize(vec3(.4,1.,.2));"+
+                      "float diff=max(dot(n,lD),0.),ao=clamp(vP.y*.08+.6,.3,1.);"+
+                      "vec3 h=normalize(lD+vD);float spec=pow(max(dot(n,h),0.),48.)*.6;"+
+                      "float fres=pow(1.-max(dot(n,vD),0.),4.);"+
+                      "vec3 col=uC.rgb;if(uSel>.5)col+=vec3(0.,.5,.8);"+
+                      "vec3 amb=vec3(.06,.09,.15)*ao;vec3 fin=col*(diff*vec3(1.,.97,.92)+amb)+spec;"+
+                      "fin+=sky(reflect(-vD,n))*fres*.35;"+
+                      "if(isFloor>.5){vec2 g=fract(vP.xz*.15);float ln=step(.95,g.x)+step(.95,g.y);fin=mix(fin,vec3(0.,.4,.8),clamp(ln,0.,1.)*.4);}"+
+                      "float dist=length(camP-vP),fog=1.-exp(-dist*.006);"+
+                      "vec3 c=mix(fin,sky(vD),clamp(fog,0.,.9));"+
+                      "c=(c*(2.51*c+.03))/(c*(2.43*c+.59)+.14);"+
+                      "fC=vec4(c,uC.a);}";
+                  
+                  prog=mkProg(vs,fs);
+                  float[] vc={-.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f, -.5f,.5f,-.5f, -.5f,.5f,.5f, .5f,.5f,-.5f, .5f,.5f,.5f, -.5f,-.5f,-.5f, -.5f,-.5f,.5f, .5f,-.5f,-.5f, .5f,-.5f,.5f, -.5f,.5f,-.5f, -.5f,-.5f,-.5f, -.5f,.5f,.5f, -.5f,-.5f,.5f, .5f,.5f,-.5f, .5f,-.5f,-.5f, .5f,.5f,.5f, .5f,-.5f,.5f};
+                  float[] nc={0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0, -1,0,0, -1,0,0, -1,0,0, -1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0};
+                  vBuf=ByteBuffer.allocateDirect(vc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(vc);vBuf.position(0);
+                  nBuf=ByteBuffer.allocateDirect(nc.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(nc);nBuf.position(0);
+                  loadBuiltInLevel();
+              }
+
+              @Override public void onSurfaceChanged(GL10 gl,int w,int h){GLES30.glViewport(0,0,w,h);Matrix.perspectiveM(proj,0,55,(float)w/h,.1f,500f);screenW=w;screenH=h;}
+
+              @Override public void onDrawFrame(GL10 gl) {
+                  update();
+                  GLES30.glClearColor(.005f,.01f,.025f,1f);
+                  GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT|GLES30.GL_DEPTH_BUFFER_BIT);
+                  float vx=(float)(Math.sin(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
+                  float vy=(float)Math.sin(Math.toRadians(rX));
+                  float vz=(float)(-Math.cos(Math.toRadians(rY))*Math.cos(Math.toRadians(rX)));
+                  Matrix.setLookAtM(view,0,pX,pY,pZ,pX+vx,pY+vy,pZ+vz,0,1,0);
+                  GLES30.glUseProgram(prog);
+                  int uMVP=GLES30.glGetUniformLocation(prog,"uMVP"),uM=GLES30.glGetUniformLocation(prog,"uM"),uC=GLES30.glGetUniformLocation(prog,"uC");
+                  int uSel=GLES30.glGetUniformLocation(prog,"uSel"),uFloor=GLES30.glGetUniformLocation(prog,"isFloor");
+                  GLES30.glUniform3f(GLES30.glGetUniformLocation(prog,"camP"),pX,pY,pZ);
+                  GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,vBuf);GLES30.glEnableVertexAttribArray(0);
+                  GLES30.glVertexAttribPointer(1,3,GLES30.GL_FLOAT,false,0,nBuf);GLES30.glEnableVertexAttribArray(1);
+                  Matrix.setIdentityM(model,0);Matrix.translateM(model,0,0,-.05f,0);Matrix.scaleM(model,0,800,.1f,800);
+                  GLES30.glUniform1f(uSel,0f);GLES30.glUniform1f(uFloor,1f);draw(uM,uMVP,uC,.04f,.06f,.1f,1f);
+                  GLES30.glUniform1f(uFloor,0f);
+                  for(int i=0;i<blocks.size();i++){Block b=blocks.get(i);Matrix.setIdentityM(model,0);Matrix.translateM(model,0,b.x,b.y,b.z);Matrix.scaleM(model,0,b.sx,b.sy,b.sz);GLES30.glUniform1f(uSel,(i==selectedIndex&&isEngineMode&&!isPlayingLevel)?1f:0f);draw(uM,uMVP,uC,b.r,b.g,b.b,1f);}
+                  if(isEngineMode&&!isPlayingLevel&&selectedIndex<0){float px=pX+vx*placeDist,py=pY+vy*placeDist,pz=pZ+vz*placeDist;if(py-blockSY/2<FLOOR_Y)py=FLOOR_Y+blockSY/2;Matrix.setIdentityM(model,0);Matrix.translateM(model,0,px,py,pz);Matrix.scaleM(model,0,blockSX,blockSY,blockSZ);GLES30.glEnable(GLES30.GL_BLEND);GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA,GLES30.GL_ONE_MINUS_SRC_ALPHA);GLES30.glUniform1f(uSel,0f);draw(uM,uMVP,uC,blockR,blockG,blockB,.4f);GLES30.glDisable(GLES30.GL_BLEND);}
+              }
+
+              private void update(){
+                  float s=.35f,rad=(float)Math.toRadians(rY),pitch=(float)Math.toRadians(rX);
+                  if(isEngineMode&&!isPlayingLevel){float fx=(float)Math.sin(rad),fz=(float)-Math.cos(rad),fy=(float)Math.sin(pitch);pX+=(fx*-jY+(float)Math.cos(rad)*jX)*s;pZ+=(fz*-jY+(float)Math.sin(rad)*jX)*s;pY+=(fy*-jY)*s;if(pY<1)pY=1;}
+                  else{float mX=((float)Math.sin(rad)*-jY+(float)Math.cos(rad)*jX)*s,mZ=((float)-Math.cos(rad)*-jY+(float)Math.sin(rad)*jX)*s;vY-=.025f;float nX=pX+mX,nY=pY+vY,nZ=pZ+mZ,fY=nY-PLAYER_HEIGHT,hY=nY;if(fY<FLOOR_Y){nY=FLOOR_Y+PLAYER_HEIGHT;vY=0;}for(Block b:blocks){if(nX+PLAYER_RADIUS>b.minX()&&nX-PLAYER_RADIUS<b.maxX()&&nZ+PLAYER_RADIUS>b.minZ()&&nZ-PLAYER_RADIUS<b.maxZ()){if(pY-PLAYER_HEIGHT>=b.maxY()-.15f&&fY<b.maxY()){nY=b.maxY()+PLAYER_HEIGHT;vY=0;}else if(pY<b.minY()&&hY>b.minY()){nY=b.minY();vY=0;}else if(fY<b.maxY()-.1f&&hY>b.minY()+.1f){float oX1=(nX+PLAYER_RADIUS)-b.minX(),oX2=b.maxX()-(nX-PLAYER_RADIUS),oZ1=(nZ+PLAYER_RADIUS)-b.minZ(),oZ2=b.maxZ()-(nZ-PLAYER_RADIUS),minO=Math.min(Math.min(oX1,oX2),Math.min(oZ1,oZ2));if(minO==oX1)nX=b.minX()-PLAYER_RADIUS;else if(minO==oX2)nX=b.maxX()+PLAYER_RADIUS;else if(minO==oZ1)nZ=b.minZ()-PLAYER_RADIUS;else nZ=b.maxZ()+PLAYER_RADIUS;}}}pX=nX;pY=nY;pZ=nZ;}
+              }
+
+              public boolean isOnGround(){if(pY-PLAYER_HEIGHT<=FLOOR_Y+.1f)return true;for(Block b:blocks)if(pX+PLAYER_RADIUS>b.minX()&&pX-PLAYER_RADIUS<b.maxX()&&pZ+PLAYER_RADIUS>b.minZ()&&pZ-PLAYER_RADIUS<b.maxZ()&&Math.abs((pY-PLAYER_HEIGHT)-b.maxY())<.15f)return true;return false;}
+              private void draw(int uM,int uMVP,int uC,float r,float g,float b,float a){GLES30.glUniformMatrix4fv(uM,1,false,model,0);float[] res=new float[16];Matrix.multiplyMM(res,0,proj,0,view,0);Matrix.multiplyMM(res,0,res,0,model,0);GLES30.glUniformMatrix4fv(uMVP,1,false,res,0);GLES30.glUniform4f(uC,r,g,b,a);for(int i=0;i<6;i++)GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP,i*4,4);}
+              private int mkProg(String v,String f){int p=GLES30.glCreateProgram();GLES30.glAttachShader(p,mkSh(35633,v));GLES30.glAttachShader(p,mkSh(35632,f));GLES30.glLinkProgram(p);return p;}
+              private int mkSh(int t,String s){int sh=GLES30.glCreateShader(t);GLES30.glShaderSource(sh,s);GLES30.glCompileShader(sh);return sh;}
           }
-          EOF
+          RENDERER
 
-          cat <<EOF > app/src/main/java/com/pocketultra/ruv2/ObjectItem.java
-          package com.pocketultra.ruv2;
-
-          import java.util.ArrayList;
-
-          public class ObjectItem {
-              public String name = "Объект";
-              public String spriteType = "emoji";
-              public String emoji = "🐱";
-              public String text = "Текст";
-              public String textureId = "";
-              public String shape = "square";
-              public String color = "#FFFFFF";
-
-              public float startX = 100f;
-              public float startY = 80f;
-              public float x = 100f;
-              public float y = 80f;
-              public float w = 72f;
-              public float h = 72f;
-
-              public boolean visible = true;
-              public String say = "";
-
-              public java.util.ArrayList<BlockItem> blocks = new java.util.ArrayList<>();
-          }
-          EOF
-
-          cat <<EOF > app/src/main/java/com/pocketultra/ruv2/SceneItem.java
-          package com.pocketultra.ruv2;
-
-          import java.util.ArrayList;
-
-          public class SceneItem {
-              public String name = "Сцена";
-              public String bgColor = "#D8F0FF";
-              public ArrayList<ObjectItem> objects = new ArrayList<>();
-          }
-          EOF
-
-          cat <<EOF > app/src/main/java/com/pocketultra/ruv2/VariableItem.java
-          package com.pocketultra.ruv2;
-
-          public class VariableItem {
-              public String name = "переменная";
-              public String value = "0";
-          }
-          EOF
-
-          cat <<EOF > app/src/main/java/com/pocketultra/ruv2/ListItemModel.java
-          package com.pocketultra.ruv2;
-
-          import java.util.ArrayList;
-
-          public class ListItemModel {
-              public String name = "список";
-              public ArrayList<String> items = new ArrayList<>();
-          }
-          EOF
-
-          cat <<EOF > app/src/main/java/com/pocketultra/ruv2/ProjectItem.java
-          package com.pocketultra.ruv2;
-
-          import java.util.ArrayList;
-
-          public class ProjectItem {
-              public String name = "Проект";
-              public ArrayList<SceneItem> scenes = new ArrayList<>();
-              public ArrayList<TextureItem> textures = new ArrayList<>();
-              public ArrayList<VariableItem> variables = new ArrayList<>();
-              public ArrayList<ListItemModel> lists = new ArrayList<>();
-          }
-          EOF
-
-          cat <<'FORMULA' > app/src/main/java/com/pocketultra/ruv2/FormulaEngine.java
-          package com.pocketultra.ruv2;
-
-          public class FormulaEngine {
-              public interface Host {
-                  ProjectItem project();
-                  ObjectItem object();
-                  float touchX();
-                  float touchY();
-                  float touchCount();
-              }
-
-              public static float eval(Host host, String expr){
-                  if(expr == null || expr.trim().isEmpty()) return 0f;
-                  expr = expr.trim();
-
-                  try { return Float.parseFloat(expr); } catch(Exception ignored){}
-
-                  if(expr.equalsIgnoreCase("X")) return host.object() != null ? host.object().x : 0f;
-                  if(expr.equalsIgnoreCase("Y")) return host.object() != null ? host.object().y : 0f;
-                  if(expr.equalsIgnoreCase("W")) return host.object() != null ? host.object().w : 0f;
-                  if(expr.equalsIgnoreCase("H")) return host.object() != null ? host.object().h : 0f;
-                  if(expr.equalsIgnoreCase("касаниеX")) return host.touchX();
-                  if(expr.equalsIgnoreCase("касаниеY")) return host.touchY();
-                  if(expr.equalsIgnoreCase("колКасаний")) return host.touchCount();
-
-                  ProjectItem p = host.project();
-                  if(p != null){
-                      for(VariableItem v : p.variables){
-                          if(expr.equals(v.name)){
-                              try { return Float.parseFloat(v.value); } catch(Exception ignored){}
-                          }
-                      }
-                  }
-
-                  if(expr.startsWith("sin(") && expr.endsWith(")")){
-                      return (float)Math.sin(Math.toRadians(eval(host, inner(expr))));
-                  }
-                  if(expr.startsWith("cos(") && expr.endsWith(")")){
-                      return (float)Math.cos(Math.toRadians(eval(host, inner(expr))));
-                  }
-                  if(expr.startsWith("tan(") && expr.endsWith(")")){
-                      return (float)Math.tan(Math.toRadians(eval(host, inner(expr))));
-                  }
-                  if(expr.startsWith("atan(") && expr.endsWith(")")){
-                      return (float)Math.toDegrees(Math.atan(eval(host, inner(expr))));
-                  }
-                  if(expr.startsWith("sqrt(") && expr.endsWith(")")){
-                      return (float)Math.sqrt(Math.max(0f, eval(host, inner(expr))));
-                  }
-                  if(expr.startsWith("abs(") && expr.endsWith(")")){
-                      return Math.abs(eval(host, inner(expr)));
-                  }
-                  if(expr.startsWith("round(") && expr.endsWith(")")){
-                      return Math.round(eval(host, inner(expr)));
-                  }
-                  if(expr.startsWith("floor(") && expr.endsWith(")")){
-                      return (float)Math.floor(eval(host, inner(expr)));
-                  }
-                  if(expr.startsWith("ceil(") && expr.endsWith(")")){
-                      return (float)Math.ceil(eval(host, inner(expr)));
-                  }
-                  if(expr.startsWith("ln(") && expr.endsWith(")")){
-                      return (float)Math.log(Math.max(0.001f, eval(host, inner(expr))));
-                  }
-                  if(expr.startsWith("log(") && expr.endsWith(")")){
-                      return (float)Math.log10(Math.max(0.001f, eval(host, inner(expr))));
-                  }
-                  if(expr.startsWith("random(") && expr.endsWith(")")){
-                      String body = inner(expr);
-                      String[] a = body.split(",");
-                      if(a.length == 2){
-                          float x = eval(host, a[0].trim());
-                          float y = eval(host, a[1].trim());
-                          float mn = Math.min(x,y), mx = Math.max(x,y);
-                          return mn + (float)Math.random() * (mx - mn);
-                      }
-                  }
-                  if(expr.startsWith("mod(") && expr.endsWith(")")){
-                      String body = inner(expr);
-                      String[] a = body.split(",");
-                      if(a.length == 2){
-                          float x = eval(host, a[0].trim());
-                          float y = eval(host, a[1].trim());
-                          return y != 0 ? x % y : 0f;
-                      }
-                  }
-                  if(expr.startsWith("pow(") && expr.endsWith(")")){
-                      String body = inner(expr);
-                      String[] a = body.split(",");
-                      if(a.length == 2){
-                          return (float)Math.pow(eval(host, a[0].trim()), eval(host, a[1].trim()));
-                      }
-                  }
-                  if(expr.startsWith("min(") && expr.endsWith(")")){
-                      String body = inner(expr);
-                      String[] a = body.split(",");
-                      if(a.length == 2){
-                          return Math.min(eval(host, a[0].trim()), eval(host, a[1].trim()));
-                      }
-                  }
-                  if(expr.startsWith("max(") && expr.endsWith(")")){
-                      String body = inner(expr);
-                      String[] a = body.split(",");
-                      if(a.length == 2){
-                          return Math.max(eval(host, a[0].trim()), eval(host, a[1].trim()));
-                      }
-                  }
-
-                  if("pi".equalsIgnoreCase(expr)) return (float)Math.PI;
-                  if("e".equalsIgnoreCase(expr) && expr.length() == 1) return (float)Math.E;
-
-                  // Multiplication and division
-                  try{
-                      int mul = findOp(expr, '*');
-                      if(mul > 0){
-                          return eval(host, expr.substring(0, mul).trim()) * eval(host, expr.substring(mul+1).trim());
-                      }
-                  }catch(Exception ignored){}
-
-                  try{
-                      int div = findOp(expr, '/');
-                      if(div > 0){
-                          float denom = eval(host, expr.substring(div+1).trim());
-                          return denom != 0 ? eval(host, expr.substring(0, div).trim()) / denom : 0f;
-                      }
-                  }catch(Exception ignored){}
-
-                  try{
-                      int plus = findOpLast(expr, '+');
-                      if(plus > 0){
-                          return eval(host, expr.substring(0, plus).trim()) + eval(host, expr.substring(plus+1).trim());
-                      }
-                  }catch(Exception ignored){}
-
-                  try{
-                      int minus = findOpLast(expr, '-');
-                      if(minus > 0){
-                          return eval(host, expr.substring(0, minus).trim()) - eval(host, expr.substring(minus+1).trim());
-                      }
-                  }catch(Exception ignored){}
-
-                  // Parentheses
-                  if(expr.startsWith("(") && expr.endsWith(")")){
-                      return eval(host, expr.substring(1, expr.length()-1));
-                  }
-
-                  return 0f;
-              }
-
-              private static int findOp(String s, char op){
-                  int depth = 0;
-                  for(int i = 0; i < s.length(); i++){
-                      if(s.charAt(i) == '(') depth++;
-                      else if(s.charAt(i) == ')') depth--;
-                      else if(s.charAt(i) == op && depth == 0) return i;
-                  }
-                  return -1;
-              }
-
-              private static int findOpLast(String s, char op){
-                  int depth = 0;
-                  for(int i = s.length()-1; i >= 1; i--){
-                      if(s.charAt(i) == ')') depth++;
-                      else if(s.charAt(i) == '(') depth--;
-                      else if(s.charAt(i) == op && depth == 0) return i;
-                  }
-                  return -1;
-              }
-
-              public static String text(Host host, String expr){
-                  if(expr == null) return "";
-                  expr = expr.trim();
-                  if(expr.startsWith("\"") && expr.endsWith("\"") && expr.length() >= 2){
-                      return expr.substring(1, expr.length()-1);
-                  }
-                  ProjectItem p = host.project();
-                  if(p != null){
-                      for(VariableItem v : p.variables){
-                          if(expr.equals(v.name)) return v.value;
-                      }
-                  }
-                  return expr;
-              }
-
-              private static String inner(String s){
-                  return s.substring(s.indexOf('(')+1, s.lastIndexOf(')')).trim();
-              }
-          }
-          FORMULA
-
-          cat <<'STORE' > app/src/main/java/com/pocketultra/ruv2/ProjectStore.java
-          package com.pocketultra.ruv2;
-
-          import android.content.Context;
-          import org.json.JSONArray;
-          import org.json.JSONObject;
-          import java.io.*;
-          import java.util.ArrayList;
-
-          public class ProjectStore {
-              private static File file(Context c){
-                  return new File(c.getFilesDir(), "projects_ultra_ru_v2.json");
-              }
-
-              public static ArrayList<ProjectItem> load(Context c){
-                  ArrayList<ProjectItem> out = new ArrayList<>();
-                  try{
-                      File f = file(c);
-                      if(!f.exists()) return out;
-
-                      BufferedReader rd = new BufferedReader(new FileReader(f));
-                      StringBuilder sb = new StringBuilder();
-                      String line;
-                      while((line = rd.readLine()) != null) sb.append(line);
-                      rd.close();
-
-                      JSONArray arr = new JSONArray(sb.toString());
-                      for(int i=0;i<arr.length();i++){
-                          JSONObject p = arr.getJSONObject(i);
-                          ProjectItem pr = new ProjectItem();
-                          pr.name = p.optString("name", "Проект");
-
-                          JSONArray tex = p.optJSONArray("textures");
-                          if(tex != null){
-                              for(int t=0;t<tex.length();t++){
-                                  JSONObject o = tex.getJSONObject(t);
-                                  TextureItem tx = new TextureItem();
-                                  tx.id = o.optString("id");
-                                  tx.name = o.optString("name");
-                                  tx.uri = o.optString("uri");
-                                  pr.textures.add(tx);
-                              }
-                          }
-
-                          JSONArray vars = p.optJSONArray("variables");
-                          if(vars != null){
-                              for(int v=0;v<vars.length();v++){
-                                  JSONObject o = vars.getJSONObject(v);
-                                  VariableItem vi = new VariableItem();
-                                  vi.name = o.optString("name");
-                                  vi.value = o.optString("value");
-                                  pr.variables.add(vi);
-                              }
-                          }
-
-                          JSONArray lists = p.optJSONArray("lists");
-                          if(lists != null){
-                              for(int l=0;l<lists.length();l++){
-                                  JSONObject o = lists.getJSONObject(l);
-                                  ListItemModel li = new ListItemModel();
-                                  li.name = o.optString("name");
-                                  JSONArray its = o.optJSONArray("items");
-                                  if(its != null){
-                                      for(int z=0;z<its.length();z++) li.items.add(its.optString(z));
-                                  }
-                                  pr.lists.add(li);
-                              }
-                          }
-
-                          JSONArray scenes = p.optJSONArray("scenes");
-                          if(scenes != null){
-                              for(int j=0;j<scenes.length();j++){
-                                  JSONObject s = scenes.getJSONObject(j);
-                                  SceneItem sc = new SceneItem();
-                                  sc.name = s.optString("name", "Сцена");
-                                  sc.bgColor = s.optString("bgColor", "#D8F0FF");
-
-                                  JSONArray objs = s.optJSONArray("objects");
-                                  if(objs != null){
-                                      for(int k=0;k<objs.length();k++){
-                                          JSONObject o = objs.getJSONObject(k);
-                                          ObjectItem ob = new ObjectItem();
-                                          ob.name = o.optString("name", "Объект");
-                                          ob.spriteType = o.optString("spriteType", "emoji");
-                                          ob.emoji = o.optString("emoji", "🐱");
-                                          ob.text = o.optString("text", "Текст");
-                                          ob.textureId = o.optString("textureId", "");
-                                          ob.shape = o.optString("shape", "square");
-                                          ob.color = o.optString("color", "#FFFFFF");
-                                          ob.startX = (float)o.optDouble("startX", 100);
-                                          ob.startY = (float)o.optDouble("startY", 80);
-                                          ob.x = ob.startX;
-                                          ob.y = ob.startY;
-                                          ob.w = (float)o.optDouble("w", 72);
-                                          ob.h = (float)o.optDouble("h", 72);
-                                          ob.visible = o.optBoolean("visible", true);
-                                          ob.say = o.optString("say", "");
-
-                                          JSONArray blocks = o.optJSONArray("blocks");
-                                          if(blocks != null){
-                                              for(int z=0;z<blocks.length();z++){
-                                                  JSONObject b = blocks.getJSONObject(z);
-                                                  ob.blocks.add(new BlockItem(
-                                                      b.optString("type"),
-                                                      b.optString("label"),
-                                                      b.optString("arg1"),
-                                                      b.optString("arg2")
-                                                  ));
-                                              }
-                                          }
-                                          sc.objects.add(ob);
-                                      }
-                                  }
-                                  pr.scenes.add(sc);
-                              }
-                          }
-
-                          out.add(pr);
-                      }
-                  }catch(Exception ignored){}
-                  return out;
-              }
-
-              public static void save(Context c, ArrayList<ProjectItem> projects){
-                  try{
-                      JSONArray arr = new JSONArray();
-
-                      for(ProjectItem pr : projects){
-                          JSONObject p = new JSONObject();
-                          p.put("name", pr.name);
-
-                          JSONArray tex = new JSONArray();
-                          for(TextureItem t : pr.textures){
-                              JSONObject o = new JSONObject();
-                              o.put("id", t.id);
-                              o.put("name", t.name);
-                              o.put("uri", t.uri);
-                              tex.put(o);
-                          }
-                          p.put("textures", tex);
-
-                          JSONArray vars = new JSONArray();
-                          for(VariableItem v : pr.variables){
-                              JSONObject o = new JSONObject();
-                              o.put("name", v.name);
-                              o.put("value", v.value);
-                              vars.put(o);
-                          }
-                          p.put("variables", vars);
-
-                          JSONArray lists = new JSONArray();
-                          for(ListItemModel li : pr.lists){
-                              JSONObject o = new JSONObject();
-                              o.put("name", li.name);
-                              JSONArray its = new JSONArray();
-                              for(String s : li.items) its.put(s);
-                              o.put("items", its);
-                              lists.put(o);
-                          }
-                          p.put("lists", lists);
-
-                          JSONArray scenes = new JSONArray();
-                          for(SceneItem sc : pr.scenes){
-                              JSONObject s = new JSONObject();
-                              s.put("name", sc.name);
-                              s.put("bgColor", sc.bgColor);
-
-                              JSONArray objs = new JSONArray();
-                              for(ObjectItem ob : sc.objects){
-                                  JSONObject o = new JSONObject();
-                                  o.put("name", ob.name);
-                                  o.put("spriteType", ob.spriteType);
-                                  o.put("emoji", ob.emoji);
-                                  o.put("text", ob.text);
-                                  o.put("textureId", ob.textureId);
-                                  o.put("shape", ob.shape);
-                                  o.put("color", ob.color);
-                                  o.put("startX", ob.startX);
-                                  o.put("startY", ob.startY);
-                                  o.put("w", ob.w);
-                                  o.put("h", ob.h);
-                                  o.put("visible", ob.visible);
-                                  o.put("say", ob.say);
-
-                                  JSONArray bl = new JSONArray();
-                                  for(BlockItem b : ob.blocks){
-                                      JSONObject bb = new JSONObject();
-                                      bb.put("type", b.type);
-                                      bb.put("label", b.label);
-                                      bb.put("arg1", b.arg1);
-                                      bb.put("arg2", b.arg2);
-                                      bl.put(bb);
-                                  }
-                                  o.put("blocks", bl);
-                                  objs.put(o);
-                              }
-                              s.put("objects", objs);
-                              scenes.put(s);
-                          }
-                          p.put("scenes", scenes);
-
-                          arr.put(p);
-                      }
-
-                      FileWriter wr = new FileWriter(file(c));
-                      wr.write(arr.toString());
-                      wr.close();
-                  }catch(Exception ignored){}
-              }
-          }
-          STORE
-
-          cat <<'RUNTIME' > app/src/main/java/com/pocketultra/ruv2/ScriptRuntime.java
-          package com.pocketultra.ruv2;
-
-          import android.os.Handler;
-          import android.os.Looper;
-          import java.util.ArrayList;
-          import java.util.Locale;
-
-          public class ScriptRuntime {
-              public interface Host extends FormulaEngine.Host {
-                  void renderPlayerScene();
-                  boolean stopped();
-                  SceneItem scene();
-                  void goToSceneByName(String name);
-              }
-
-              public static void runScene(Host host){
-                  SceneItem scene = host.scene();
-                  if(scene == null) return;
-                  for(ObjectItem o : scene.objects){
-                      runStart(host, o);
-                  }
-              }
-
-              public static void tapped(Host host, ObjectItem obj){
-                  runEvent(host, obj, "event_tap");
-              }
-
-              public static void signal(Host host, String name){
-                  SceneItem scene = host.scene();
-                  if(scene == null) return;
-                  for(ObjectItem o : scene.objects){
-                      runSignal(host, o, name);
-                  }
-              }
-
-              private static void runStart(Host host, ObjectItem obj){
-                  ArrayList<ArrayList<BlockItem>> scripts = splitScripts(obj.blocks);
-                  boolean found = false;
-                  for(ArrayList<BlockItem> script : scripts){
-                      if(!script.isEmpty() && "event_start".equals(script.get(0).type)){
-                          found = true;
-                          execute(host, obj, script, 1);
-                      }
-                  }
-                  if(!found){
-                      ArrayList<BlockItem> linear = new ArrayList<>();
-                      for(BlockItem b : obj.blocks){
-                          if(!b.type.startsWith("event_")) linear.add(b);
-                      }
-                      if(!linear.isEmpty()) execute(host, obj, linear, 0);
-                  }
-              }
-
-              private static void runEvent(Host host, ObjectItem obj, String type){
-                  ArrayList<ArrayList<BlockItem>> scripts = splitScripts(obj.blocks);
-                  for(ArrayList<BlockItem> script : scripts){
-                      if(!script.isEmpty() && type.equals(script.get(0).type)){
-                          execute(host, obj, script, 1);
-                      }
-                  }
-              }
-
-              private static void runSignal(Host host, ObjectItem obj, String name){
-                  ArrayList<ArrayList<BlockItem>> scripts = splitScripts(obj.blocks);
-                  for(ArrayList<BlockItem> script : scripts){
-                      if(!script.isEmpty() && "event_signal".equals(script.get(0).type)){
-                          String sig = script.get(0).arg1 == null ? "" : script.get(0).arg1;
-                          if(sig.equals(name)){
-                              execute(host, obj, script, 1);
-                          }
-                      }
-                  }
-              }
-
-              private static ArrayList<ArrayList<BlockItem>> splitScripts(ArrayList<BlockItem> blocks){
-                  ArrayList<ArrayList<BlockItem>> out = new ArrayList<>();
-                  ArrayList<BlockItem> cur = null;
-                  for(BlockItem b : blocks){
-                      if(b.type.startsWith("event_")){
-                          cur = new ArrayList<>();
-                          cur.add(b);
-                          out.add(cur);
-                      } else {
-                          if(cur == null){
-                              cur = new ArrayList<>();
-                              out.add(cur);
-                          }
-                          cur.add(b);
-                      }
-                  }
-                  return out;
-              }
-
-              private static void execute(Host host, ObjectItem obj, ArrayList<BlockItem> seq, int startIndex){
-                  Handler h = new Handler(Looper.getMainLooper());
-                  long delay = 0;
-
-                  for(int i=startIndex;i<seq.size();i++){
-                      BlockItem b = seq.get(i);
-
-                      if("forever".equals(b.type)){
-                          ArrayList<BlockItem> body = new ArrayList<>();
-                          int depth = 1;
-                          for(int j=i+1;j<seq.size();j++){
-                              BlockItem x = seq.get(j);
-                              if("forever".equals(x.type)) depth++;
-                              else if("end_forever".equals(x.type)){
-                                  depth--;
-                                  if(depth == 0) break;
-                              }
-                              if(depth > 0) body.add(x);
-                          }
-                          final ArrayList<BlockItem> bodyFinal = body;
-                          h.postDelayed(() -> loop(host, obj, bodyFinal), delay);
-                          break;
-                      }
-
-                      if("end_forever".equals(b.type)) continue;
-
-                      switch (b.type){
-                          case "move_x": {
-                              final String argExpr = b.arg1;
-                              h.postDelayed(() -> {
-                                  if(host.stopped()) return;
-                                  obj.x += FormulaEngine.eval(hostFor(host, obj), argExpr);
-                                  host.renderPlayerScene();
-                              }, delay);
-                              break;
-                          }
-                          case "move_y": {
-                              final String argExpr = b.arg1;
-                              h.postDelayed(() -> {
-                                  if(host.stopped()) return;
-                                  obj.y += FormulaEngine.eval(hostFor(host, obj), argExpr);
-                                  host.renderPlayerScene();
-                              }, delay);
-                              break;
-                          }
-                          case "go_xy": {
-                              final String ax = b.arg1;
-                              final String ay = b.arg2;
-                              h.postDelayed(() -> {
-                                  if(host.stopped()) return;
-                                  obj.x = FormulaEngine.eval(hostFor(host, obj), ax);
-                                  obj.y = FormulaEngine.eval(hostFor(host, obj), ay);
-                                  host.renderPlayerScene();
-                              }, delay);
-                              break;
-                          }
-                          case "say": {
-                              final String argExpr = b.arg1;
-                              h.postDelayed(() -> {
-                                  if(host.stopped()) return;
-                                  obj.say = FormulaEngine.text(hostFor(host, obj), argExpr);
-                                  host.renderPlayerScene();
-                              }, delay);
-                              break;
-                          }
-                          case "hide": {
-                              h.postDelayed(() -> {
-                                  if(host.stopped()) return;
-                                  obj.visible = false;
-                                  host.renderPlayerScene();
-                              }, delay);
-                              break;
-                          }
-                          case "show": {
-                              h.postDelayed(() -> {
-                                  if(host.stopped()) return;
-                                  obj.visible = true;
-                                  host.renderPlayerScene();
-                              }, delay);
-                              break;
-                          }
-                          case "wait": {
-                              delay += (long)(Math.max(0f, FormulaEngine.eval(hostFor(host, obj), b.arg1)) * 1000f);
-                              break;
-                          }
-                          case "set_var": {
-                              final String n = b.arg1 == null ? "" : b.arg1;
-                              final String valExpr = b.arg2 == null ? "0" : b.arg2;
-                              h.postDelayed(() -> {
-                                  if(host.stopped()) return;
-                                  ProjectItem p = host.project();
-                                  if(p != null){
-                                      for(VariableItem v : p.variables){
-                                          if(v.name.equals(n)){
-                                              float r = FormulaEngine.eval(hostFor(host, obj), valExpr);
-                                              v.value = String.format(Locale.US, "%.2f", r);
-                                              break;
-                                          }
-                                      }
-                                  }
-                              }, delay);
-                              break;
-                          }
-                          case "change_var": {
-                              final String n = b.arg1 == null ? "" : b.arg1;
-                              final String valExpr = b.arg2 == null ? "0" : b.arg2;
-                              h.postDelayed(() -> {
-                                  if(host.stopped()) return;
-                                  ProjectItem p = host.project();
-                                  if(p != null){
-                                      for(VariableItem v : p.variables){
-                                          if(v.name.equals(n)){
-                                              float oldv = 0f;
-                                              try { oldv = Float.parseFloat(v.value); } catch(Exception ignored){}
-                                              float add = FormulaEngine.eval(hostFor(host, obj), valExpr);
-                                              v.value = String.format(Locale.US, "%.2f", oldv + add);
-                                              break;
-                                          }
-                                      }
-                                  }
-                              }, delay);
-                              break;
-                          }
-                          case "signal": {
-                              final String sig = b.arg1 == null ? "" : b.arg1;
-                              h.postDelayed(() -> {
-                                  if(host.stopped()) return;
-                                  signal(host, sig);
-                              }, delay);
-                              break;
-                          }
-                          case "goto_scene": {
-                              final String sn = b.arg1;
-                              h.postDelayed(() -> {
-                                  if(host.stopped()) return;
-                                  host.goToSceneByName(FormulaEngine.text(hostFor(host, obj), sn));
-                              }, delay);
-                              break;
-                          }
-                          case "list_add": {
-                              final String listName = b.arg1 == null ? "" : b.arg1;
-                              final String val = b.arg2 == null ? "" : b.arg2;
-                              h.postDelayed(() -> {
-                                  ProjectItem p = host.project();
-                                  if(p != null){
-                                      for(ListItemModel li : p.lists){
-                                          if(li.name.equals(listName)){
-                                              li.items.add(FormulaEngine.text(hostFor(host, obj), val));
-                                              break;
-                                          }
-                                      }
-                                  }
-                              }, delay);
-                              break;
-                          }
-                      }
-                  }
-              }
-
-              private static void loop(Host host, ObjectItem obj, ArrayList<BlockItem> body){
-                  Handler h = new Handler(Looper.getMainLooper());
-                  Runnable[] rr = new Runnable[1];
-                  rr[0] = () -> {
-                      if(host.stopped()) return;
-                      execute(host, obj, body, 0);
-                      h.postDelayed(rr[0], 60);
-                  };
-                  h.post(rr[0]);
-              }
-
-              private static FormulaEngine.Host hostFor(Host h, ObjectItem o){
-                  return new FormulaEngine.Host() {
-                      @Override public ProjectItem project() { return h.project(); }
-                      @Override public ObjectItem object() { return o; }
-                      @Override public float touchX() { return h.touchX(); }
-                      @Override public float touchY() { return h.touchY(); }
-                      @Override public float touchCount() { return h.touchCount(); }
-                  };
-              }
-          }
-          RUNTIME
-
-          cat <<'MAINACT' > app/src/main/java/com/pocketultra/ruv2/MainActivity.java
-          package com.pocketultra.ruv2;
-
+          cat <<'MAINACT' > app/src/main/java/com/enjoer/game/MainActivity.java
+          package com.enjoer.game;
           import android.annotation.SuppressLint;
-          import android.app.AlertDialog;
-          import android.content.ClipData;
-          import android.content.ClipboardManager;
-          import android.content.Context;
           import android.content.Intent;
-          import android.graphics.Color;
-          import android.graphics.Typeface;
+          import android.content.pm.ActivityInfo;
           import android.graphics.drawable.GradientDrawable;
           import android.net.Uri;
           import android.os.Bundle;
-          import android.text.InputType;
-          import android.view.Gravity;
+          import android.os.Handler;
+          import android.os.Looper;
           import android.view.MotionEvent;
           import android.view.View;
           import android.widget.Button;
-          import android.widget.EditText;
-          import android.widget.FrameLayout;
-          import android.widget.HorizontalScrollView;
-          import android.widget.ImageView;
-          import android.widget.LinearLayout;
-          import android.widget.ScrollView;
-          import android.widget.TextView;
           import android.widget.Toast;
           import androidx.activity.result.ActivityResultLauncher;
           import androidx.activity.result.contract.ActivityResultContracts;
           import androidx.appcompat.app.AppCompatActivity;
-          import java.util.ArrayList;
-          import java.util.UUID;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+          import java.io.*;
 
-          public class MainActivity extends AppCompatActivity implements ScriptRuntime.Host {
-              private View screenProjects, screenScenes, screenObjects, screenScripts, screenPlayer;
-              private LinearLayout projectsList, scenesList, objectsList, blocksList;
-              private FrameLayout playerStage, playerStageLayer;
-              private TextView txtProjectTitle, txtSceneTitle, txtObjectTitle;
-
-              private final ArrayList<ProjectItem> projects = new ArrayList<>();
-              private int currentProject = -1, currentScene = -1, currentObject = -1;
-              private int pendingTextureProject = -1;
-              private int pendingAssignProject = -1, pendingAssignScene = -1, pendingAssignObject = -1;
-              private boolean stopFlag = false;
-              private float touchX = 0f, touchY = 0f, touchCount = 0f;
-
-              private ActivityResultLauncher<Intent> imagePickerTexture;
-              private int dragIndex = -1;
-
-              @Override public void renderPlayerScene() { runOnUiThread(this::drawPlayerScene); }
-              @Override public boolean stopped() { return stopFlag; }
-              @Override public SceneItem scene() { return currentScene(); }
-              @Override public ProjectItem project() { return currentProject(); }
-              @Override public ObjectItem object() { return currentObject(); }
-              @Override public float touchX() { return touchX; }
-              @Override public float touchY() { return touchY; }
-              @Override public float touchCount() { return touchCount; }
-
-              @Override
-              public void goToSceneByName(String name) {
-                  ProjectItem p = currentProject();
-                  if(p == null) return;
-                  for(int i=0;i<p.scenes.size();i++){
-                      if(p.scenes.get(i).name.equals(name)){
-                          currentScene = i;
-                          runOnUiThread(() -> {
-                              SceneItem sc = currentScene();
-                              if(sc != null){
-                                  for(ObjectItem o : sc.objects){
-                                      o.x = o.startX;
-                                      o.y = o.startY;
-                                      o.visible = true;
-                                      o.say = "";
-                                  }
-                                  drawPlayerScene();
-                                  ScriptRuntime.runScene(this);
-                              }
-                          });
-                          break;
-                      }
-                  }
-              }
+          public class MainActivity extends AppCompatActivity {
+              private GameRenderer ren;
+              private float lx,ly;
+              private Button[] shapeBtn,sizeBtn,distBtn;
+              private View[] colorBtn;
+              private View axisPanel,menuUI,gameUI,engineUI,playtestUI;
+              private ActivityResultLauncher<Intent> saveLauncher,loadLauncher;
+              private Handler handler = new Handler(Looper.getMainLooper());
+              private int pendingMode = 0; // 0=none, 1=play, 2=engine
 
               @SuppressLint("ClickableViewAccessibility")
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
+              @Override protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   setContentView(R.layout.activity_main);
+                  
+                  // Проверяем режим после пересоздания Activity
+                  int currentOrientation = getResources().getConfiguration().orientation;
+                  
+                  android.opengl.GLSurfaceView gv=findViewById(R.id.gl_view);
+                  gv.setEGLContextClientVersion(3);
+                  ren=new GameRenderer();
+                  gv.setRenderer(ren);
 
-                  screenProjects = findViewById(R.id.screen_projects);
-                  screenScenes = findViewById(R.id.screen_scenes);
-                  screenObjects = findViewById(R.id.screen_objects);
-                  screenScripts = findViewById(R.id.screen_scripts);
-                  screenPlayer = findViewById(R.id.screen_player);
+                  menuUI=findViewById(R.id.menu_ui);
+                  gameUI=findViewById(R.id.game_ui);
+                  engineUI=findViewById(R.id.engine_ui);
+                  playtestUI=findViewById(R.id.playtest_ui);
+                  axisPanel=findViewById(R.id.axis_panel);
 
-                  projectsList = findViewById(R.id.projects_list);
-                  scenesList = findViewById(R.id.scenes_list);
-                  objectsList = findViewById(R.id.objects_list);
-                  blocksList = findViewById(R.id.blocks_list);
-
-                  playerStage = findViewById(R.id.player_stage);
-                  playerStageLayer = findViewById(R.id.player_stage_layer);
-
-                  txtProjectTitle = findViewById(R.id.txt_project_title);
-                  txtSceneTitle = findViewById(R.id.txt_scene_title);
-                  txtObjectTitle = findViewById(R.id.txt_object_title);
-
-                  projects.addAll(ProjectStore.load(this));
-
-                  imagePickerTexture = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), res -> {
-                      if(res.getResultCode() == RESULT_OK && res.getData() != null && res.getData().getData() != null){
-                          try{
-                              Uri uri = res.getData().getData();
-                              getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
-                              if(pendingTextureProject >= 0 && pendingTextureProject < projects.size()){
-                                  TextureItem t = new TextureItem();
-                                  t.id = UUID.randomUUID().toString();
-                                  t.name = "Текстура " + (projects.get(pendingTextureProject).textures.size()+1);
-                                  t.uri = uri.toString();
-                                  projects.get(pendingTextureProject).textures.add(t);
-                                  saveAll();
-                              }
-
-                              if(pendingAssignProject >= 0 && pendingAssignScene >= 0 && pendingAssignObject >= 0){
-                                  ProjectItem p = projects.get(pendingAssignProject);
-                                  if(!p.textures.isEmpty() && pendingAssignObject < p.scenes.get(pendingAssignScene).objects.size()){
-                                      TextureItem last = p.textures.get(p.textures.size()-1);
-                                      ObjectItem o = p.scenes.get(pendingAssignScene).objects.get(pendingAssignObject);
-                                      o.spriteType = "texture";
-                                      o.textureId = last.id;
-                                      saveAll();
-                                  }
-                              }
-
-                              renderObjects();
-                          }catch(Exception e){
-                              toast("Ошибка импорта");
-                          }
+                  // Восстанавливаем состояние после поворота
+                  if(savedInstanceState != null) {
+                      int mode = savedInstanceState.getInt("mode", 0);
+                      if(mode == 1) { // Play mode
+                          ren.isEngineMode = false;
+                          ren.isPlayingLevel = false;
+                          ren.loadBuiltInLevel();
+                          resetP();
+                          menuUI.setVisibility(View.GONE);
+                          gameUI.setVisibility(View.VISIBLE);
+                      } else if(mode == 2) { // Engine mode
+                          ren.isEngineMode = true;
+                          ren.isPlayingLevel = false;
+                          ren.pX=0; ren.pY=20; ren.pZ=35;
+                          menuUI.setVisibility(View.GONE);
+                          engineUI.setVisibility(View.VISIBLE);
                       }
+                  }
+
+                  saveLauncher=registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),res->{
+                      if(res.getResultCode()==RESULT_OK&&res.getData()!=null){
+                          try{OutputStream out=getContentResolver().openOutputStream(res.getData().getData());
+                          JSONArray arr=new JSONArray();for(Block b:ren.blocks){JSONObject o=new JSONObject();o.put("x",b.x);o.put("y",b.y);o.put("z",b.z);o.put("sx",b.sx);o.put("sy",b.sy);o.put("sz",b.sz);o.put("r",b.r);o.put("g",b.g);o.put("b",b.b);arr.put(o);}
+                          JSONObject root=new JSONObject();root.put("blocks",arr);out.write(root.toString().getBytes());out.close();Toast.makeText(this,"Exported!",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,"Error",Toast.LENGTH_SHORT).show();}}});
+
+                  loadLauncher=registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),res->{
+                      if(res.getResultCode()==RESULT_OK&&res.getData()!=null){
+                          try{InputStream in=getContentResolver().openInputStream(res.getData().getData());BufferedReader rd=new BufferedReader(new InputStreamReader(in));StringBuilder sb=new StringBuilder();String ln;while((ln=rd.readLine())!=null)sb.append(ln);in.close();
+                          JSONObject root=new JSONObject(sb.toString());JSONArray arr=root.getJSONArray("blocks");ren.blocks.clear();
+                          for(int i=0;i<arr.length();i++){JSONObject o=arr.getJSONObject(i);ren.blocks.add(new Block((float)o.getDouble("x"),(float)o.getDouble("y"),(float)o.getDouble("z"),(float)o.getDouble("sx"),(float)o.getDouble("sy"),(float)o.getDouble("sz"),(float)o.getDouble("r"),(float)o.getDouble("g"),(float)o.getDouble("b")));}
+                          pendingMode = 1;
+                          ren.isEngineMode=false;ren.isPlayingLevel=false;resetP();
+                          menuUI.setVisibility(View.GONE);gameUI.setVisibility(View.VISIBLE);
+                          setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                          Toast.makeText(this,"Loaded!",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,"Invalid file",Toast.LENGTH_SHORT).show();}}});
+
+                  // PLAY кнопка - сначала переключаем UI, потом ориентацию
+                  findViewById(R.id.btn_play).setOnClickListener(v->{
+                      pendingMode = 1;
+                      ren.isEngineMode=false;
+                      ren.isPlayingLevel=false;
+                      ren.loadBuiltInLevel();
+                      resetP();
+                      ren.selectedIndex=-1;
+                      menuUI.setVisibility(View.GONE);
+                      gameUI.setVisibility(View.VISIBLE);
+                      engineUI.setVisibility(View.GONE);
+                      playtestUI.setVisibility(View.GONE);
+                      // Меняем ориентацию с задержкой
+                      handler.postDelayed(() -> {
+                          setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                      }, 50);
+                  });
+                  
+                  // EDITOR кнопка
+                  findViewById(R.id.btn_engine).setOnClickListener(v->{
+                      pendingMode = 2;
+                      ren.isEngineMode=true;
+                      ren.isPlayingLevel=false;
+                      ren.blocks.clear();
+                      ren.pX=0;ren.pY=20;ren.pZ=35;
+                      ren.selectedIndex=-1;
+                      menuUI.setVisibility(View.GONE);
+                      gameUI.setVisibility(View.GONE);
+                      engineUI.setVisibility(View.VISIBLE);
+                      playtestUI.setVisibility(View.GONE);
+                      updAxis();
+                      handler.postDelayed(() -> {
+                          setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                      }, 50);
+                  });
+                  
+                  findViewById(R.id.btn_load_file).setOnClickListener(v->{
+                      Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                      i.addCategory(Intent.CATEGORY_OPENABLE);
+                      i.setType("*/*");
+                      loadLauncher.launch(i);
                   });
 
-                  playerStageLayer.setOnTouchListener((v, e) -> {
-                      touchCount = e.getPointerCount();
-                      touchX = e.getX();
-                      touchY = e.getY();
+                  View.OnClickListener back=v->{
+                      pendingMode = 0;
+                      ren.isPlayingLevel=false;
+                      gameUI.setVisibility(View.GONE);
+                      engineUI.setVisibility(View.GONE);
+                      playtestUI.setVisibility(View.GONE);
+                      menuUI.setVisibility(View.VISIBLE);
+                      setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                  };
+                  findViewById(R.id.btn_menu).setOnClickListener(back);
+                  findViewById(R.id.btn_engine_menu).setOnClickListener(back);
 
-                      if(e.getAction() == MotionEvent.ACTION_DOWN || e.getAction() == MotionEvent.ACTION_POINTER_DOWN){
-                          if(!stopFlag){
-                              handleStageTap(e.getX(), e.getY());
-                          }
-                      }
+                  findViewById(R.id.btn_play_level).setOnClickListener(v->{
+                      ren.isPlayingLevel=true;
+                      resetP();
+                      ren.selectedIndex=-1;
+                      engineUI.setVisibility(View.GONE);
+                      playtestUI.setVisibility(View.VISIBLE);
+                  });
+                  
+                  findViewById(R.id.btn_stop_playtest).setOnClickListener(v->{
+                      ren.isPlayingLevel=false;
+                      ren.pX=0;ren.pY=20;ren.pZ=35;
+                      playtestUI.setVisibility(View.GONE);
+                      engineUI.setVisibility(View.VISIBLE);
+                      updAxis();
+                  });
+                  
+                  findViewById(R.id.btn_save).setOnClickListener(v->{
+                      Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                      i.addCategory(Intent.CATEGORY_OPENABLE);
+                      i.setType("application/json");
+                      i.putExtra(Intent.EXTRA_TITLE,"level.json");
+                      saveLauncher.launch(i);
+                  });
+
+                  findViewById(R.id.btn_jump).setOnTouchListener((v,e)->{
+                      if(e.getAction()==MotionEvent.ACTION_DOWN&&ren.isOnGround())ren.vY=.55f;
+                      return true;
+                  });
+                  findViewById(R.id.btn_playtest_jump).setOnTouchListener((v,e)->{
+                      if(e.getAction()==MotionEvent.ACTION_DOWN&&ren.isOnGround())ren.vY=.55f;
                       return true;
                   });
 
-                  findViewById(R.id.btn_new_project).setOnClickListener(v -> createProjectDialog());
-                  findViewById(R.id.btn_data_manager).setOnClickListener(v -> showDataManager());
+                  findViewById(R.id.btn_place).setOnClickListener(v->{if(ren.selectedIndex<0)ren.placeBlock();});
+                  findViewById(R.id.btn_delete).setOnClickListener(v->{ren.deleteSelected();updAxis();});
+                  findViewById(R.id.btn_deselect).setOnClickListener(v->{ren.selectedIndex=-1;updAxis();});
 
-                  findViewById(R.id.back_to_projects).setOnClickListener(v -> showProjects());
-                  findViewById(R.id.back_to_scenes).setOnClickListener(v -> showScenes());
-                  findViewById(R.id.back_to_objects).setOnClickListener(v -> showObjects());
+                  axisBtn(R.id.axis_x_plus,1,0,0);axisBtn(R.id.axis_x_minus,-1,0,0);
+                  axisBtn(R.id.axis_y_plus,0,1,0);axisBtn(R.id.axis_y_minus,0,-1,0);
+                  axisBtn(R.id.axis_z_plus,0,0,1);axisBtn(R.id.axis_z_minus,0,0,-1);
 
-                  findViewById(R.id.btn_new_scene).setOnClickListener(v -> createSceneDialog());
-                  findViewById(R.id.btn_texture_library).setOnClickListener(v -> showTextureLibrary());
-
-                  findViewById(R.id.btn_new_object).setOnClickListener(v -> createObjectDialog());
-                  findViewById(R.id.btn_play_scene).setOnClickListener(v -> startPlayer());
-                  findViewById(R.id.btn_stop_player).setOnClickListener(v -> stopPlayer());
-
-                  findViewById(R.id.btn_add_block).setOnClickListener(v -> showCategoryDialog());
-                  findViewById(R.id.btn_formula_manager).setOnClickListener(v -> showFormulaEditor(null));
-
-                  renderProjects();
-                  showProjects();
-              }
-
-              // ===================== FORMULA EDITOR =====================
-
-              private void showFormulaEditor(OneArg callback){
-                  AlertDialog.Builder builder = new AlertDialog.Builder(this);
-
-                  LinearLayout root = new LinearLayout(this);
-                  root.setOrientation(LinearLayout.VERTICAL);
-                  root.setPadding(dp(12), dp(12), dp(12), dp(12));
-                  root.setBackgroundColor(Color.parseColor("#1B2838"));
-
-                  // Display
-                  final EditText display = new EditText(this);
-                  display.setTextSize(20f);
-                  display.setTextColor(Color.parseColor("#4FC3F7"));
-                  display.setBackgroundResource(R.drawable.bg_formula_display);
-                  display.setPadding(dp(16), dp(14), dp(16), dp(14));
-                  display.setTypeface(Typeface.MONOSPACE);
-                  display.setMinHeight(dp(56));
-                  display.setHint("формула...");
-                  display.setHintTextColor(Color.parseColor("#546E7A"));
-                  display.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-                  root.addView(display);
-
-                  // Tabs
-                  LinearLayout tabs = new LinearLayout(this);
-                  tabs.setOrientation(LinearLayout.HORIZONTAL);
-                  LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                  tabLp.topMargin = dp(8);
-                  tabs.setLayoutParams(tabLp);
-
-                  final LinearLayout keyboardArea = new LinearLayout(this);
-                  keyboardArea.setOrientation(LinearLayout.VERTICAL);
-                  LinearLayout.LayoutParams kaLp = new LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                  kaLp.topMargin = dp(6);
-                  keyboardArea.setLayoutParams(kaLp);
-
-                  String[] tabNames = {"123", "+-×÷", "f(x)", "Сенсоры", "Перем."};
-                  int[] tabColors = {
-                      Color.parseColor("#37474F"),
-                      Color.parseColor("#FF8F00"),
-                      Color.parseColor("#5C6BC0"),
-                      Color.parseColor("#26A69A"),
-                      Color.parseColor("#EF6C00")
-                  };
-
-                  for(int t=0; t<tabNames.length; t++){
-                      Button tb = new Button(this);
-                      tb.setText(tabNames[t]);
-                      tb.setTextColor(Color.WHITE);
-                      tb.setTextSize(12f);
-                      tb.setAllCaps(false);
-                      GradientDrawable gd = new GradientDrawable();
-                      gd.setColor(tabColors[t]);
-                      gd.setCornerRadius(dp(8));
-                      tb.setBackground(gd);
-                      LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0, dp(38), 1f);
-                      blp.rightMargin = dp(4);
-                      tb.setLayoutParams(blp);
-                      final int tabIdx = t;
-                      tb.setOnClickListener(v -> fillKeyboard(keyboardArea, display, tabIdx));
-                      tabs.addView(tb);
-                  }
-
-                  root.addView(tabs);
-                  root.addView(keyboardArea);
-
-                  // Action buttons
-                  LinearLayout actions = new LinearLayout(this);
-                  actions.setOrientation(LinearLayout.HORIZONTAL);
-                  LinearLayout.LayoutParams aLp = new LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                  aLp.topMargin = dp(10);
-                  actions.setLayoutParams(aLp);
-
-                  Button btnClear = new Button(this);
-                  btnClear.setText("Очистить");
-                  btnClear.setTextColor(Color.WHITE);
-                  btnClear.setBackgroundResource(R.drawable.btn_red);
-                  btnClear.setOnClickListener(v -> display.setText(""));
-                  LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, dp(44), 1f);
-                  btnClear.setLayoutParams(clp);
-                  actions.addView(btnClear);
-
-                  Button btnBackspace = new Button(this);
-                  btnBackspace.setText("⌫");
-                  btnBackspace.setTextColor(Color.WHITE);
-                  btnBackspace.setTextSize(18f);
-                  btnBackspace.setBackgroundResource(R.drawable.btn_dark);
-                  btnBackspace.setOnClickListener(v -> {
-                      String cur = display.getText().toString();
-                      if(!cur.isEmpty()){
-                          int sel = display.getSelectionStart();
-                          if(sel > 0){
-                              display.getText().delete(sel-1, sel);
-                          } else {
-                              display.setText(cur.substring(0, cur.length()-1));
-                              display.setSelection(display.getText().length());
-                          }
-                      }
+                  findViewById(R.id.btn_up).setOnTouchListener((v,e)->{
+                      if(e.getAction()==MotionEvent.ACTION_DOWN||e.getAction()==MotionEvent.ACTION_MOVE)ren.pY+=.5f;
+                      return true;
                   });
-                  LinearLayout.LayoutParams blp2 = new LinearLayout.LayoutParams(0, dp(44), 1f);
-                  blp2.leftMargin = dp(6);
-                  btnBackspace.setLayoutParams(blp2);
-                  actions.addView(btnBackspace);
-
-                  Button btnCopy = new Button(this);
-                  btnCopy.setText("Копия");
-                  btnCopy.setTextColor(Color.WHITE);
-                  btnCopy.setBackgroundResource(R.drawable.btn_teal);
-                  btnCopy.setOnClickListener(v -> {
-                      ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                      cm.setPrimaryClip(ClipData.newPlainText("formula", display.getText().toString()));
-                      toast("Скопировано");
+                  findViewById(R.id.btn_down).setOnTouchListener((v,e)->{
+                      if(e.getAction()==MotionEvent.ACTION_DOWN||e.getAction()==MotionEvent.ACTION_MOVE){ren.pY-=.5f;if(ren.pY<1)ren.pY=1;}
+                      return true;
                   });
-                  LinearLayout.LayoutParams blp3 = new LinearLayout.LayoutParams(0, dp(44), 1f);
-                  blp3.leftMargin = dp(6);
-                  btnCopy.setLayoutParams(blp3);
-                  actions.addView(btnCopy);
 
-                  root.addView(actions);
+                  shapeBtn=new Button[]{findViewById(R.id.shape_cube),findViewById(R.id.shape_flat),findViewById(R.id.shape_tall)};
+                  float[][] shapes={{4,4,4},{8,1,8},{2,8,2}};
+                  for(int i=0;i<3;i++){final int idx=i;shapeBtn[i].setOnClickListener(v->{ren.blockSX=shapes[idx][0];ren.blockSY=shapes[idx][1];ren.blockSZ=shapes[idx][2];updBtnGrp(shapeBtn,idx);});}
 
-                  // Fill initial tab
-                  fillKeyboard(keyboardArea, display, 0);
+                  sizeBtn=new Button[]{findViewById(R.id.size_s),findViewById(R.id.size_m),findViewById(R.id.size_l)};
+                  float[] sizes={.5f,1f,2f};
+                  for(int i=0;i<3;i++){final int idx=i;sizeBtn[i].setOnClickListener(v->{float m=sizes[idx];ren.blockSX=4*m;ren.blockSY=4*m;ren.blockSZ=4*m;updBtnGrp(sizeBtn,idx);updBtnGrp(shapeBtn,0);});}
 
-                  ScrollView scroll = new ScrollView(this);
-                  scroll.addView(root);
+                  distBtn=new Button[]{findViewById(R.id.dist_near),findViewById(R.id.dist_mid),findViewById(R.id.dist_far)};
+                  float[] dists={3f,6f,12f};
+                  for(int i=0;i<3;i++){final int idx=i;distBtn[i].setOnClickListener(v->{ren.placeDist=dists[idx];updBtnGrp(distBtn,idx);});}
 
-                  builder.setView(scroll);
-                  builder.setTitle("Редактор формул");
+                  colorBtn=new View[]{findViewById(R.id.color_red),findViewById(R.id.color_green),findViewById(R.id.color_blue),findViewById(R.id.color_yellow),findViewById(R.id.color_white)};
+                  float[][] colors={{1f,.2f,.2f},{.2f,1f,.2f},{.2f,.5f,1f},{1f,1f,.2f},{1f,1f,1f}};
+                  for(int i=0;i<5;i++){final int idx=i;colorBtn[i].setOnClickListener(v->{ren.blockR=colors[idx][0];ren.blockG=colors[idx][1];ren.blockB=colors[idx][2];if(ren.selectedIndex>=0&&ren.selectedIndex<ren.blocks.size()){Block b=ren.blocks.get(ren.selectedIndex);b.r=ren.blockR;b.g=ren.blockG;b.b=ren.blockB;}updColSel(idx);});}
 
-                  if(callback != null){
-                      builder.setPositiveButton("Вставить", (d,w) -> {
-                          callback.ok(display.getText().toString());
-                      });
-                  } else {
-                      builder.setPositiveButton("ОК", null);
-                  }
-                  builder.setNegativeButton("Отмена", null);
-                  builder.show();
-              }
+                  setupJoy(findViewById(R.id.joy_base),findViewById(R.id.joy_stick));
+                  setupJoy(findViewById(R.id.engine_joy_base),findViewById(R.id.engine_joy_stick));
+                  setupJoy(findViewById(R.id.playtest_joy_base),findViewById(R.id.playtest_joy_stick));
+                  setupLook(findViewById(R.id.look_zone));
+                  setupLook(findViewById(R.id.playtest_look_zone));
 
-              private void fillKeyboard(LinearLayout area, EditText display, int tab){
-                  area.removeAllViews();
-
-                  String[][] buttons;
-                  int bgRes;
-
-                  switch(tab){
-                      case 0: // Numbers
-                          buttons = new String[][]{
-                              {"7", "8", "9", "."},
-                              {"4", "5", "6", "("},
-                              {"1", "2", "3", ")"},
-                              {"0", ",", "-", "\""}
-                          };
-                          bgRes = R.drawable.btn_formula_num;
-                          break;
-                      case 1: // Operators
-                          buttons = new String[][]{
-                              {"+", "-", "*", "/"},
-                              {"=", "<", ">", "!="},
-                              {"<=", ">=", "и", "или"},
-                              {"не", "%", "^", "пробел"}
-                          };
-                          bgRes = R.drawable.btn_formula_op;
-                          break;
-                      case 2: // Functions
-                          buttons = new String[][]{
-                              {"sin(", "cos(", "tan(", "atan("},
-                              {"sqrt(", "abs(", "round(", "floor("},
-                              {"ceil(", "ln(", "log(", "pow("},
-                              {"mod(", "min(", "max(", "random("},
-                              {"pi", "e", ")", ""}
-                          };
-                          bgRes = R.drawable.btn_formula_func;
-                          break;
-                      case 3: // Sensors
-                          buttons = new String[][]{
-                              {"X", "Y", "W", "H"},
-                              {"касаниеX", "касаниеY", "колКасаний", ""}
-                          };
-                          bgRes = R.drawable.btn_formula_sensor;
-                          break;
-                      case 4: // Variables
-                      default:
-                          ProjectItem p = currentProject();
-                          ArrayList<String> varNames = new ArrayList<>();
-                          if(p != null){
-                              for(VariableItem v : p.variables) varNames.add(v.name);
-                              for(ListItemModel li : p.lists) varNames.add("список:" + li.name);
+                  findViewById(R.id.engine_touch_zone).setOnTouchListener((v,e)->{
+                      if(e.getAction()==MotionEvent.ACTION_DOWN){lx=e.getX();ly=e.getY();}
+                      else if(e.getAction()==MotionEvent.ACTION_UP){
+                          if(Math.abs(e.getX()-lx)<25&&Math.abs(e.getY()-ly)<25){
+                              ren.selectedIndex=ren.raycastBlock(e.getX(),e.getY());
+                              updAxis();
                           }
-                          if(varNames.isEmpty()) varNames.add("(нет)");
-                          int rows = (varNames.size() + 3) / 4;
-                          buttons = new String[rows][4];
-                          for(int r=0; r<rows; r++){
-                              for(int c=0; c<4; c++){
-                                  int idx = r*4+c;
-                                  buttons[r][c] = idx < varNames.size() ? varNames.get(idx) : "";
-                              }
-                          }
-                          bgRes = R.drawable.btn_formula_var;
-                          break;
-                  }
-
-                  for(String[] row : buttons){
-                      LinearLayout rowLayout = new LinearLayout(this);
-                      rowLayout.setOrientation(LinearLayout.HORIZONTAL);
-                      LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                      rlp.topMargin = dp(4);
-                      rowLayout.setLayoutParams(rlp);
-
-                      for(String label : row){
-                          Button btn = new Button(this);
-                          btn.setText(label);
-                          btn.setTextColor(Color.WHITE);
-                          btn.setTextSize(13f);
-                          btn.setAllCaps(false);
-                          btn.setBackgroundResource(bgRes);
-                          LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0, dp(44), 1f);
-                          blp.rightMargin = dp(3);
-                          btn.setLayoutParams(blp);
-
-                          if(label.isEmpty() || "(нет)".equals(label)){
-                              btn.setEnabled(false);
-                              btn.setAlpha(0.3f);
-                          } else {
-                              final String insert = "пробел".equals(label) ? " " : label;
-                              btn.setOnClickListener(v -> {
-                                  int sel = display.getSelectionStart();
-                                  if(sel >= 0){
-                                      display.getText().insert(sel, insert);
-                                  } else {
-                                      display.append(insert);
-                                  }
-                              });
-                          }
-
-                          rowLayout.addView(btn);
                       }
-
-                      area.addView(rowLayout);
-                  }
-              }
-
-              // ===================== END FORMULA EDITOR =====================
-
-              private void handleStageTap(float tapX, float tapY){
-                  SceneItem sc = currentScene();
-                  if(sc == null) return;
-
-                  for(int i = sc.objects.size() - 1; i >= 0; i--){
-                      ObjectItem o = sc.objects.get(i);
-                      if(!o.visible) continue;
-
-                      float ow = o.w;
-                      float oh = o.h;
-
-                      if("emoji".equals(o.spriteType)){
-                          ow = Math.max(ow, 60f);
-                          oh = Math.max(oh, 60f);
-                      } else if("text".equals(o.spriteType)){
-                          ow = Math.max(ow, 100f);
-                          oh = Math.max(oh, 50f);
+                      else if(e.getAction()==MotionEvent.ACTION_MOVE){
+                          ren.rY+=(e.getX()-lx)*.2f;
+                          ren.rX=Math.max(-85,Math.min(85,ren.rX-(e.getY()-ly)*.2f));
+                          lx=e.getX();ly=e.getY();
                       }
-
-                      if(tapX >= o.x && tapX <= o.x + ow && tapY >= o.y && tapY <= o.y + oh){
-                          ScriptRuntime.tapped(this, o);
-                          break;
-                      }
-                  }
+                      return true;
+                  });
+              }
+              
+              @Override
+              protected void onSaveInstanceState(Bundle outState) {
+                  super.onSaveInstanceState(outState);
+                  outState.putInt("mode", pendingMode);
               }
 
-              private void saveAll(){ ProjectStore.save(this, projects); }
-              private void toast(String s){ Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
-
-              private ProjectItem currentProject(){
-                  if(currentProject < 0 || currentProject >= projects.size()) return null;
-                  return projects.get(currentProject);
-              }
-
-              private SceneItem currentScene(){
-                  ProjectItem p = currentProject();
-                  if(p == null || currentScene < 0 || currentScene >= p.scenes.size()) return null;
-                  return p.scenes.get(currentScene);
-              }
-
-              private ObjectItem currentObject(){
-                  SceneItem s = currentScene();
-                  if(s == null || currentObject < 0 || currentObject >= s.objects.size()) return null;
-                  return s.objects.get(currentObject);
-              }
-
-              private void showProjects(){
-                  screenProjects.setVisibility(View.VISIBLE);
-                  screenScenes.setVisibility(View.GONE);
-                  screenObjects.setVisibility(View.GONE);
-                  screenScripts.setVisibility(View.GONE);
-                  screenPlayer.setVisibility(View.GONE);
-                  renderProjects();
-              }
-
-              private void showScenes(){
-                  screenProjects.setVisibility(View.GONE);
-                  screenScenes.setVisibility(View.VISIBLE);
-                  screenObjects.setVisibility(View.GONE);
-                  screenScripts.setVisibility(View.GONE);
-                  screenPlayer.setVisibility(View.GONE);
-                  renderScenes();
-              }
-
-              private void showObjects(){
-                  screenProjects.setVisibility(View.GONE);
-                  screenScenes.setVisibility(View.GONE);
-                  screenObjects.setVisibility(View.VISIBLE);
-                  screenScripts.setVisibility(View.GONE);
-                  screenPlayer.setVisibility(View.GONE);
-                  renderObjects();
-              }
-
-              private void showScripts(){
-                  screenProjects.setVisibility(View.GONE);
-                  screenScenes.setVisibility(View.GONE);
-                  screenObjects.setVisibility(View.GONE);
-                  screenScripts.setVisibility(View.VISIBLE);
-                  screenPlayer.setVisibility(View.GONE);
-                  renderBlocks();
-              }
-
-              private void startPlayer(){
-                  SceneItem sc = currentScene();
-                  if(sc == null) return;
-
-                  for(ObjectItem o : sc.objects){
-                      o.x = o.startX;
-                      o.y = o.startY;
-                      o.visible = true;
-                      o.say = "";
-                  }
-
-                  stopFlag = false;
-                  screenProjects.setVisibility(View.GONE);
-                  screenScenes.setVisibility(View.GONE);
-                  screenObjects.setVisibility(View.GONE);
-                  screenScripts.setVisibility(View.GONE);
-                  screenPlayer.setVisibility(View.VISIBLE);
-
-                  drawPlayerScene();
-                  ScriptRuntime.runScene(this);
-              }
-
-              private void stopPlayer(){
-                  stopFlag = true;
-                  showObjects();
-              }
-
-              private void renderProjects(){
-                  projectsList.removeAllViews();
-                  for(int i=0;i<projects.size();i++){
-                      ProjectItem p = projects.get(i);
-                      LinearLayout card = makeCard();
-                      card.addView(title(p.name));
-                      card.addView(subtitle("Сцен: " + p.scenes.size() + "  |  Текстур: " + p.textures.size()));
-
-                      final int idx = i;
-                      card.setOnClickListener(v -> {
-                          currentProject = idx;
-                          currentScene = -1;
-                          currentObject = -1;
-                          showScenes();
-                      });
-
-                      card.setOnLongClickListener(v -> {
-                          showProjectMenu(idx);
-                          return true;
-                      });
-
-                      projectsList.addView(card);
-                  }
-              }
-
-              private void renderScenes(){
-                  ProjectItem p = currentProject();
-                  if(p == null) return;
-                  txtProjectTitle.setText(p.name + " / Сцены");
-
-                  scenesList.removeAllViews();
-                  for(int i=0;i<p.scenes.size();i++){
-                      SceneItem s = p.scenes.get(i);
-                      LinearLayout card = makeCard();
-                      card.addView(title(s.name));
-                      card.addView(subtitle("Объектов: " + s.objects.size()));
-
-                      final int idx = i;
-                      card.setOnClickListener(v -> {
-                          currentScene = idx;
-                          currentObject = -1;
-                          showObjects();
-                      });
-
-                      card.setOnLongClickListener(v -> {
-                          showSceneMenu(idx);
-                          return true;
-                      });
-
-                      scenesList.addView(card);
-                  }
-              }
-
-              private void renderObjects(){
-                  SceneItem s = currentScene();
-                  if(s == null) return;
-                  txtSceneTitle.setText(s.name + " / Объекты");
-
-                  objectsList.removeAllViews();
-                  for(int i=0;i<s.objects.size();i++){
-                      ObjectItem o = s.objects.get(i);
-                      LinearLayout card = makeCard();
-                      card.addView(title(o.name + " [" + o.spriteType + "]"));
-                      card.addView(subtitle("X=" + (int)o.startX + " Y=" + (int)o.startY));
-
-                      LinearLayout row = new LinearLayout(this);
-                      row.setOrientation(LinearLayout.HORIZONTAL);
-
-                      Button texBtn = new Button(this);
-                      texBtn.setText("Текстура");
-                      texBtn.setTextColor(Color.WHITE);
-                      texBtn.setBackgroundResource(R.drawable.btn_purple);
-
-                      Button scriptsBtn = new Button(this);
-                      scriptsBtn.setText("Скрипты");
-                      scriptsBtn.setTextColor(Color.WHITE);
-                      scriptsBtn.setBackgroundResource(R.drawable.btn_blue);
-
-                      LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0, dp(40), 1f);
-                      LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(0, dp(40), 1f);
-                      lp2.leftMargin = dp(8);
-
-                      texBtn.setLayoutParams(lp1);
-                      scriptsBtn.setLayoutParams(lp2);
-
-                      final int idx = i;
-                      texBtn.setOnClickListener(v -> showAssignTextureDialog(idx));
-                      scriptsBtn.setOnClickListener(v -> {
-                          currentObject = idx;
-                          showScripts();
-                      });
-
-                      row.addView(texBtn);
-                      row.addView(scriptsBtn);
-                      card.addView(row);
-
-                      card.setOnLongClickListener(v -> {
-                          showObjectMenu(idx);
-                          return true;
-                      });
-
-                      objectsList.addView(card);
-                  }
-              }
-
-              private void renderBlocks(){
-                  ObjectItem o = currentObject();
-                  if(o == null) return;
-                  txtObjectTitle.setText(o.name + " / Скрипты");
-
-                  blocksList.removeAllViews();
-                  for(int i=0;i<o.blocks.size();i++){
-                      BlockItem b = o.blocks.get(i);
-
-                      TextView tv = new TextView(this);
-                      String text = b.label;
-                      if(b.arg1 != null && !b.arg1.isEmpty()) text += " " + b.arg1;
-                      if(b.arg2 != null && !b.arg2.isEmpty()) text += " " + b.arg2;
-                      tv.setText(text);
-                      tv.setTextColor(Color.WHITE);
-                      tv.setTextSize(16f);
-                      tv.setPadding(dp(14), dp(10), dp(14), dp(10));
-
-                      if(b.type.startsWith("event_")) tv.setBackgroundResource(R.drawable.block_event);
-                      else if(b.type.startsWith("move") || "go_xy".equals(b.type) || "goto_scene".equals(b.type)) tv.setBackgroundResource(R.drawable.block_motion);
-                      else if("wait".equals(b.type) || "forever".equals(b.type) || "end_forever".equals(b.type)) tv.setBackgroundResource(R.drawable.block_control);
-                      else if(b.type.startsWith("set_var") || b.type.startsWith("change_var") || b.type.startsWith("list_")) tv.setBackgroundResource(R.drawable.block_data);
-                      else if(b.type.startsWith("signal")) tv.setBackgroundResource(R.drawable.block_signal);
-                      else tv.setBackgroundResource(R.drawable.block_looks);
-
-                      LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          LinearLayout.LayoutParams.WRAP_CONTENT
-                      );
-                      lp.topMargin = dp(8);
-                      tv.setLayoutParams(lp);
-
-                      final int idx = i;
-
-                      tv.setOnClickListener(v -> showBlockMenu(idx));
-
-                      tv.setOnLongClickListener(v -> {
-                          dragIndex = idx;
-                          toast("Выбран блок для перемещения: " + b.label);
-                          return true;
-                      });
-
-                      tv.setOnTouchListener((v, e) -> {
-                          if(dragIndex >= 0 && e.getAction() == MotionEvent.ACTION_UP){
-                              if(dragIndex != idx){
-                                  BlockItem moved = o.blocks.remove(dragIndex);
-                                  if(idx >= o.blocks.size()) o.blocks.add(moved);
-                                  else o.blocks.add(idx, moved);
-                                  dragIndex = -1;
-                                  saveAll();
-                                  renderBlocks();
-                              }
-                          }
-                          return false;
-                      });
-
-                      blocksList.addView(tv);
-                  }
-              }
-
-              @SuppressLint("ClickableViewAccessibility")
-              private void drawPlayerScene(){
-                  SceneItem sc = currentScene();
-                  if(sc == null) return;
-
-                  try{
-                      GradientDrawable bg = new GradientDrawable();
-                      bg.setColor(Color.parseColor(sc.bgColor));
-                      bg.setCornerRadius(dp(18));
-                      bg.setStroke(dp(2), Color.parseColor("#8AC4E8"));
-                      playerStage.setBackground(bg);
-                  }catch(Exception ignored){}
-
-                  playerStageLayer.removeAllViews();
-
-                  for(int i=0;i<sc.objects.size();i++){
-                      ObjectItem o = sc.objects.get(i);
-
-                      FrameLayout wrap = new FrameLayout(this);
-                      wrap.setClipChildren(false);
-                      wrap.setClipToPadding(false);
-
-                      FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(
-                          FrameLayout.LayoutParams.WRAP_CONTENT,
-                          FrameLayout.LayoutParams.WRAP_CONTENT
-                      );
-                      wrapLp.leftMargin = (int) o.x;
-                      wrapLp.topMargin = (int) o.y;
-                      wrap.setLayoutParams(wrapLp);
-
-                      View spriteView = buildSpriteView(o);
-                      spriteView.setVisibility(o.visible ? View.VISIBLE : View.INVISIBLE);
-
-                      wrap.addView(spriteView);
-
-                      if(o.say != null && !o.say.isEmpty()){
-                          TextView speech = new TextView(this);
-                          speech.setText(o.say);
-                          speech.setTextSize(14f);
-                          speech.setTextColor(Color.BLACK);
-                          speech.setPadding(dp(8), dp(4), dp(8), dp(4));
-                          speech.setBackgroundResource(R.drawable.bg_panel);
-
-                          FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(
-                              FrameLayout.LayoutParams.WRAP_CONTENT,
-                              FrameLayout.LayoutParams.WRAP_CONTENT
-                          );
-                          slp.leftMargin = dp(40);
-                          slp.topMargin = -dp(10);
-                          speech.setLayoutParams(slp);
-                          wrap.addView(speech);
-                      }
-
-                      playerStageLayer.addView(wrap);
-                  }
-              }
-
-              private View buildSpriteView(ObjectItem o){
-                  if("texture".equals(o.spriteType)){
-                      ImageView img = new ImageView(this);
-                      TextureItem t = findTextureById(o.textureId);
-                      if(t != null && t.uri != null && !t.uri.isEmpty()){
-                          img.setImageURI(Uri.parse(t.uri));
-                      }
-                      img.setAdjustViewBounds(true);
-                      img.setLayoutParams(new FrameLayout.LayoutParams((int)o.w, (int)o.h));
-                      return img;
-                  }
-
-                  if("text".equals(o.spriteType)){
-                      TextView tv = new TextView(this);
-                      tv.setText(o.text);
-                      tv.setTextSize(24f);
-                      try { tv.setTextColor(Color.parseColor(o.color)); } catch(Exception ignored){}
-                      return tv;
-                  }
-
-                  if("shape".equals(o.spriteType)){
-                      View v = new View(this);
-                      GradientDrawable g = new GradientDrawable();
-                      try { g.setColor(Color.parseColor(o.color)); } catch(Exception e){ g.setColor(Color.WHITE); }
-                      if("circle".equals(o.shape)) g.setShape(GradientDrawable.OVAL);
-                      else g.setShape(GradientDrawable.RECTANGLE);
-                      g.setCornerRadius("square".equals(o.shape) ? 0f : dp(12));
-                      v.setBackground(g);
-                      v.setLayoutParams(new FrameLayout.LayoutParams((int)o.w, (int)o.h));
-                      return v;
-                  }
-
-                  TextView tv = new TextView(this);
-                  tv.setText(o.emoji);
-                  tv.setTextSize(42f);
-                  tv.setMinWidth((int)o.w);
-                  tv.setMinHeight((int)o.h);
-                  return tv;
-              }
-
-              private TextureItem findTextureById(String id){
-                  ProjectItem p = currentProject();
-                  if(p == null) return null;
-                  for(TextureItem t : p.textures){
-                      if(t.id.equals(id)) return t;
-                  }
-                  return null;
-              }
-
-              private void createProjectDialog(){
-                  EditText input = new EditText(this);
-                  input.setHint("Название проекта");
-                  input.setText("Мой проект");
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Создать проект")
-                      .setView(input)
-                      .setPositiveButton("Создать", (d,w) -> {
-                          ProjectItem p = new ProjectItem();
-                          p.name = input.getText().toString().trim().isEmpty() ? "Проект" : input.getText().toString();
-                          projects.add(p);
-                          saveAll();
-                          renderProjects();
-                      })
-                      .setNegativeButton("Отмена", null)
-                      .show();
-              }
-
-              private void createSceneDialog(){
-                  ProjectItem p = currentProject();
-                  if(p == null) return;
-
-                  LinearLayout root = new LinearLayout(this);
-                  root.setOrientation(LinearLayout.VERTICAL);
-
-                  EditText name = new EditText(this);
-                  name.setHint("Название сцены");
-                  name.setText("Сцена " + (p.scenes.size()+1));
-
-                  EditText color = new EditText(this);
-                  color.setHint("#D8F0FF");
-                  color.setText("#D8F0FF");
-
-                  root.addView(name);
-                  root.addView(color);
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Создать сцену")
-                      .setView(root)
-                      .setPositiveButton("Создать", (d,w) -> {
-                          SceneItem s = new SceneItem();
-                          s.name = name.getText().toString().trim().isEmpty() ? "Сцена" : name.getText().toString();
-                          s.bgColor = color.getText().toString().trim().isEmpty() ? "#D8F0FF" : color.getText().toString();
-                          p.scenes.add(s);
-                          saveAll();
-                          renderScenes();
-                      })
-                      .setNegativeButton("Отмена", null)
-                      .show();
-              }
-
-              private void createObjectDialog(){
-                  SceneItem s = currentScene();
-                  if(s == null) return;
-
-                  String[] types = {"Emoji", "Текст", "Квадрат", "Круг", "Текстура"};
-                  new AlertDialog.Builder(this)
-                      .setTitle("Тип объекта")
-                      .setItems(types, (d,w) -> {
-                          if(w == 0) createEmojiObject();
-                          else if(w == 1) createTextObject();
-                          else if(w == 2) createShapeObject("square");
-                          else if(w == 3) createShapeObject("circle");
-                          else createTextureObject();
-                      })
-                      .show();
-              }
-
-              private void createEmojiObject(){
-                  SceneItem s = currentScene();
-                  if(s == null) return;
-
-                  LinearLayout root = new LinearLayout(this);
-                  root.setOrientation(LinearLayout.VERTICAL);
-
-                  EditText name = new EditText(this); name.setHint("Название"); name.setText("Объект " + (s.objects.size()+1));
-                  EditText emoji = new EditText(this); emoji.setHint("Emoji"); emoji.setText("🐱");
-                  EditText x = new EditText(this); x.setHint("X"); x.setText("100");
-                  EditText y = new EditText(this); y.setHint("Y"); y.setText("80");
-
-                  root.addView(name); root.addView(emoji); root.addView(x); root.addView(y);
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Новый emoji-объект")
-                      .setView(root)
-                      .setPositiveButton("Создать", (d,w) -> {
-                          ObjectItem o = new ObjectItem();
-                          o.name = textOr(name, "Объект");
-                          o.spriteType = "emoji";
-                          o.emoji = textOr(emoji, "🐱");
-                          o.startX = parseFloat(x.getText().toString(), 100f);
-                          o.startY = parseFloat(y.getText().toString(), 80f);
-                          o.x = o.startX; o.y = o.startY;
-                          s.objects.add(o);
-                          saveAll();
-                          renderObjects();
-                      })
-                      .setNegativeButton("Отмена", null)
-                      .show();
-              }
-
-              private void createTextObject(){
-                  SceneItem s = currentScene();
-                  if(s == null) return;
-
-                  LinearLayout root = new LinearLayout(this);
-                  root.setOrientation(LinearLayout.VERTICAL);
-
-                  EditText name = new EditText(this); name.setHint("Название"); name.setText("Текст");
-                  EditText text = new EditText(this); text.setHint("Текст"); text.setText("Привет");
-                  EditText color = new EditText(this); color.setHint("#FFFFFF"); color.setText("#000000");
-                  EditText x = new EditText(this); x.setHint("X"); x.setText("100");
-                  EditText y = new EditText(this); y.setHint("Y"); y.setText("80");
-
-                  root.addView(name); root.addView(text); root.addView(color); root.addView(x); root.addView(y);
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Новый текстовый объект")
-                      .setView(root)
-                      .setPositiveButton("Создать", (d,w) -> {
-                          ObjectItem o = new ObjectItem();
-                          o.name = textOr(name, "Текст");
-                          o.spriteType = "text";
-                          o.text = textOr(text, "Привет");
-                          o.color = textOr(color, "#000000");
-                          o.startX = parseFloat(x.getText().toString(), 100f);
-                          o.startY = parseFloat(y.getText().toString(), 80f);
-                          o.x = o.startX; o.y = o.startY;
-                          s.objects.add(o);
-                          saveAll();
-                          renderObjects();
-                      })
-                      .setNegativeButton("Отмена", null)
-                      .show();
-              }
-
-              private void createShapeObject(String shape){
-                  SceneItem s = currentScene();
-                  if(s == null) return;
-
-                  LinearLayout root = new LinearLayout(this);
-                  root.setOrientation(LinearLayout.VERTICAL);
-
-                  EditText name = new EditText(this); name.setHint("Название"); name.setText("Фигура");
-                  EditText color = new EditText(this); color.setHint("#FFFFFF"); color.setText("#FF4444");
-                  EditText x = new EditText(this); x.setHint("X"); x.setText("100");
-                  EditText y = new EditText(this); y.setHint("Y"); y.setText("80");
-                  EditText w = new EditText(this); w.setHint("Ширина"); w.setText("72");
-                  EditText h = new EditText(this); h.setHint("Высота"); h.setText("72");
-
-                  root.addView(name); root.addView(color); root.addView(x); root.addView(y); root.addView(w); root.addView(h);
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Новая фигура")
-                      .setView(root)
-                      .setPositiveButton("Создать", (d,ww) -> {
-                          ObjectItem o = new ObjectItem();
-                          o.name = textOr(name, "Фигура");
-                          o.spriteType = "shape";
-                          o.shape = shape;
-                          o.color = textOr(color, "#FF4444");
-                          o.startX = parseFloat(x.getText().toString(), 100f);
-                          o.startY = parseFloat(y.getText().toString(), 80f);
-                          o.x = o.startX; o.y = o.startY;
-                          o.w = parseFloat(w.getText().toString(), 72f);
-                          o.h = parseFloat(h.getText().toString(), 72f);
-                          s.objects.add(o);
-                          saveAll();
-                          renderObjects();
-                      })
-                      .setNegativeButton("Отмена", null)
-                      .show();
-              }
-
-              private void createTextureObject(){
-                  SceneItem s = currentScene();
-                  ProjectItem p = currentProject();
-                  if(s == null || p == null) return;
-
-                  if(p.textures.isEmpty()){
-                      pendingTextureProject = currentProject;
-                      pendingAssignProject = -1;
-                      pendingAssignScene = -1;
-                      pendingAssignObject = -1;
-                      openImagePicker();
-                      toast("Сначала импортируется текстура");
-                      return;
-                  }
-
-                  String[] names = new String[p.textures.size()];
-                  for(int i=0;i<p.textures.size();i++) names[i] = p.textures.get(i).name;
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Выбери текстуру")
-                      .setItems(names, (d,w) -> {
-                          TextureItem tx = p.textures.get(w);
-                          ObjectItem o = new ObjectItem();
-                          o.name = tx.name;
-                          o.spriteType = "texture";
-                          o.textureId = tx.id;
-                          s.objects.add(o);
-                          saveAll();
-                          renderObjects();
-                      })
-                      .setNegativeButton("Импортировать новую", (d,w) -> {
-                          pendingTextureProject = currentProject;
-                          pendingAssignProject = currentProject;
-                          pendingAssignScene = currentScene;
-                          pendingAssignObject = s.objects.size();
-                          ObjectItem o = new ObjectItem();
-                          o.name = "Текстура";
-                          o.spriteType = "texture";
-                          s.objects.add(o);
-                          saveAll();
-                          openImagePicker();
-                          renderObjects();
-                      })
-                      .show();
-              }
-
-              private void openImagePicker(){
-                  Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                  i.addCategory(Intent.CATEGORY_OPENABLE);
-                  i.setType("image/*");
-                  i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                  i.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-                  imagePickerTexture.launch(i);
-              }
-
-              private void showTextureLibrary(){
-                  ProjectItem p = currentProject();
-                  if(p == null){
-                      toast("Сначала открой проект");
-                      return;
-                  }
-
-                  String[] items = new String[p.textures.size()+1];
-                  items[0] = "+ Импортировать новую";
-                  for(int i=0;i<p.textures.size();i++) items[i+1] = p.textures.get(i).name;
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Библиотека текстур")
-                      .setItems(items, (d,w) -> {
-                          if(w == 0){
-                              pendingTextureProject = currentProject;
-                              pendingAssignProject = -1;
-                              pendingAssignScene = -1;
-                              pendingAssignObject = -1;
-                              openImagePicker();
-                          }
-                      })
-                      .show();
-              }
-
-              private void showAssignTextureDialog(int objectIndex){
-                  ProjectItem p = currentProject();
-                  SceneItem s = currentScene();
-                  if(p == null || s == null) return;
-
-                  String[] items = new String[p.textures.size()+1];
-                  items[0] = "+ Импортировать новую";
-                  for(int i=0;i<p.textures.size();i++) items[i+1] = p.textures.get(i).name;
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Назначить текстуру")
-                      .setItems(items, (d,w) -> {
-                          ObjectItem o = s.objects.get(objectIndex);
-                          if(w == 0){
-                              pendingTextureProject = currentProject;
-                              pendingAssignProject = currentProject;
-                              pendingAssignScene = currentScene;
-                              pendingAssignObject = objectIndex;
-                              openImagePicker();
-                          } else {
-                              TextureItem tx = p.textures.get(w-1);
-                              o.spriteType = "texture";
-                              o.textureId = tx.id;
-                              saveAll();
-                              renderObjects();
-                          }
-                      })
-                      .show();
-              }
-
-              private void showDataManager(){
-                  ProjectItem p = currentProject();
-                  if(p == null){
-                      if(projects.isEmpty()){
-                          toast("Сначала создай проект");
-                          return;
-                      }
-                      toast("Открой проект и зайди снова");
-                      return;
-                  }
-
-                  String[] items = {"Переменные", "Списки"};
-                  new AlertDialog.Builder(this)
-                      .setTitle("Данные")
-                      .setItems(items, (d,w) -> {
-                          if(w == 0) showVariablesManager();
-                          else showListsManager();
-                      })
-                      .show();
-              }
-
-              private void showVariablesManager(){
-                  ProjectItem p = currentProject();
-                  if(p == null) return;
-
-                  String[] items = new String[p.variables.size()+1];
-                  items[0] = "+ Новая переменная";
-                  for(int i=0;i<p.variables.size();i++){
-                      VariableItem v = p.variables.get(i);
-                      items[i+1] = v.name + " = " + v.value;
-                  }
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Переменные")
-                      .setItems(items, (d,w) -> {
-                          if(w == 0){
-                              LinearLayout root = new LinearLayout(this);
-                              root.setOrientation(LinearLayout.VERTICAL);
-                              EditText name = new EditText(this);
-                              name.setHint("Имя");
-                              EditText value = new EditText(this);
-                              value.setHint("Значение");
-                              value.setText("0");
-                              root.addView(name);
-                              root.addView(value);
-                              new AlertDialog.Builder(this)
-                                  .setTitle("Новая переменная")
-                                  .setView(root)
-                                  .setPositiveButton("Создать", (dd,ww) -> {
-                                      VariableItem v = new VariableItem();
-                                      v.name = textOr(name, "переменная");
-                                      v.value = textOr(value, "0");
-                                      p.variables.add(v);
-                                      saveAll();
-                                  })
-                                  .setNegativeButton("Отмена", null)
-                                  .show();
-                          }
-                      })
-                      .show();
-              }
-
-              private void showListsManager(){
-                  ProjectItem p = currentProject();
-                  if(p == null) return;
-
-                  String[] items = new String[p.lists.size()+1];
-                  items[0] = "+ Новый список";
-                  for(int i=0;i<p.lists.size();i++){
-                      ListItemModel li = p.lists.get(i);
-                      items[i+1] = li.name + " (" + li.items.size() + ")";
-                  }
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Списки")
-                      .setItems(items, (d,w) -> {
-                          if(w == 0){
-                              EditText input = new EditText(this);
-                              input.setHint("Имя списка");
-                              new AlertDialog.Builder(this)
-                                  .setTitle("Новый список")
-                                  .setView(input)
-                                  .setPositiveButton("Создать", (dd,ww) -> {
-                                      ListItemModel li = new ListItemModel();
-                                      li.name = textOr(input, "список");
-                                      p.lists.add(li);
-                                      saveAll();
-                                  })
-                                  .setNegativeButton("Отмена", null)
-                                  .show();
-                          }
-                      })
-                      .show();
-              }
-
-              private void showCategoryDialog(){
-                  String[] cats = {"События", "Движение", "Внешность", "Управление", "Данные", "Сигналы"};
-                  new AlertDialog.Builder(this)
-                      .setTitle("Категория")
-                      .setItems(cats, (d,w) -> {
-                          if(w == 0) showBlockTypeDialog("event");
-                          else if(w == 1) showBlockTypeDialog("motion");
-                          else if(w == 2) showBlockTypeDialog("looks");
-                          else if(w == 3) showBlockTypeDialog("control");
-                          else if(w == 4) showBlockTypeDialog("data");
-                          else showBlockTypeDialog("signal");
-                      })
-                      .show();
-              }
-
-              private void showBlockTypeDialog(String cat){
-                  if("event".equals(cat)){
-                      String[] items = {"Когда запущено", "Когда объект нажат", "Когда получен сигнал"};
-                      new AlertDialog.Builder(this)
-                          .setTitle("События")
-                          .setItems(items, (d,w) -> {
-                              if(w == 0) insertBlockDialog(new BlockItem("event_start", "Когда запущено", "", ""));
-                              else if(w == 1) insertBlockDialog(new BlockItem("event_tap", "Когда объект нажат", "", ""));
-                              else askOneArg("Имя сигнала", "сигнал1", v -> insertBlockDialog(new BlockItem("event_signal", "Когда получен сигнал", v, "")));
-                          }).show();
-                  } else if("motion".equals(cat)){
-                      String[] items = {"Двигаться по X", "Двигаться по Y", "Перейти в X Y", "Перейти в сцену"};
-                      new AlertDialog.Builder(this)
-                          .setTitle("Движение")
-                          .setItems(items, (d,w) -> {
-                              if(w == 0) askOneArg("Формула X", "10", v -> insertBlockDialog(new BlockItem("move_x", "Двигаться по X", v, "")));
-                              else if(w == 1) askOneArg("Формула Y", "10", v -> insertBlockDialog(new BlockItem("move_y", "Двигаться по Y", v, "")));
-                              else if(w == 2) askTwoArg("Перейти в X Y", "X+10", "Y", (a,b) -> insertBlockDialog(new BlockItem("go_xy", "Перейти в", a, b)));
-                              else askOneArg("Имя сцены", "\"Сцена 2\"", v -> insertBlockDialog(new BlockItem("goto_scene", "Перейти в сцену", v, "")));
-                          }).show();
-                  } else if("looks".equals(cat)){
-                      String[] items = {"Сказать", "Скрыть", "Показать", "Текст объекта"};
-                      new AlertDialog.Builder(this)
-                          .setTitle("Внешность")
-                          .setItems(items, (d,w) -> {
-                              if(w == 0) askOneArg("Текст / формула", "\"Привет\"", v -> insertBlockDialog(new BlockItem("say", "Сказать", v, "")));
-                              else if(w == 1) insertBlockDialog(new BlockItem("hide", "Скрыть", "", ""));
-                              else if(w == 2) insertBlockDialog(new BlockItem("show", "Показать", "", ""));
-                              else askOneArg("Новый текст", "\"Текст\"", v -> {
-                                  ObjectItem o = currentObject();
-                                  if(o != null){
-                                      o.spriteType = "text";
-                                      o.text = v.replace("\"", "");
-                                      saveAll();
-                                      renderObjects();
-                                  }
-                              });
-                          }).show();
-                  } else if("control".equals(cat)){
-                      String[] items = {"Ждать", "Вечно", "Конец вечно"};
-                      new AlertDialog.Builder(this)
-                          .setTitle("Управление")
-                          .setItems(items, (d,w) -> {
-                              if(w == 0) askOneArg("Секунды", "1", v -> insertBlockDialog(new BlockItem("wait", "Ждать", v, "")));
-                              else if(w == 1) insertBlockDialog(new BlockItem("forever", "Вечно", "", ""));
-                              else insertBlockDialog(new BlockItem("end_forever", "Конец вечно", "", ""));
-                          }).show();
-                  } else if("data".equals(cat)){
-                      String[] items = {"Установить переменную", "Изменить переменную", "Добавить в список"};
-                      new AlertDialog.Builder(this)
-                          .setTitle("Данные")
-                          .setItems(items, (d,w) -> {
-                              if(w == 0) chooseVariable((name) -> askOneArg("Значение / формула", "10", val -> insertBlockDialog(new BlockItem("set_var", "Установить переменную", name, val))));
-                              else if(w == 1) chooseVariable((name) -> askOneArg("Прибавить / формула", "1", val -> insertBlockDialog(new BlockItem("change_var", "Изменить переменную", name, val))));
-                              else chooseList((name) -> askOneArg("Значение", "\"элемент\"", val -> insertBlockDialog(new BlockItem("list_add", "Добавить в список", name, val))));
-                          }).show();
-                  } else if("signal".equals(cat)){
-                      String[] items = {"Послать сигнал"};
-                      new AlertDialog.Builder(this)
-                          .setTitle("Сигналы")
-                          .setItems(items, (d,w) -> askOneArg("Имя сигнала", "сигнал1", v -> insertBlockDialog(new BlockItem("signal", "Послать сигнал", v, ""))))
-                          .show();
-                  }
-              }
-
-              private interface OneArg { void ok(String v); }
-              private interface TwoArg { void ok(String a, String b); }
-              private interface PickName { void pick(String name); }
-
-              private void chooseVariable(PickName cb){
-                  ProjectItem p = currentProject();
-                  if(p == null || p.variables.isEmpty()){
-                      toast("Сначала создай переменную");
-                      return;
-                  }
-                  String[] arr = new String[p.variables.size()];
-                  for(int i=0;i<p.variables.size();i++) arr[i] = p.variables.get(i).name;
-                  new AlertDialog.Builder(this)
-                      .setTitle("Выбери переменную")
-                      .setItems(arr, (d,w) -> cb.pick(arr[w]))
-                      .show();
-              }
-
-              private void chooseList(PickName cb){
-                  ProjectItem p = currentProject();
-                  if(p == null || p.lists.isEmpty()){
-                      toast("Сначала создай список");
-                      return;
-                  }
-                  String[] arr = new String[p.lists.size()];
-                  for(int i=0;i<p.lists.size();i++) arr[i] = p.lists.get(i).name;
-                  new AlertDialog.Builder(this)
-                      .setTitle("Выбери список")
-                      .setItems(arr, (d,w) -> cb.pick(arr[w]))
-                      .show();
-              }
-
-              private void askOneArg(String title, String def, OneArg cb){
-                  EditText input = new EditText(this);
-                  input.setText(def);
-
-                  new AlertDialog.Builder(this)
-                      .setTitle(title)
-                      .setView(input)
-                      .setPositiveButton("ОК", (d,w) -> cb.ok(input.getText().toString()))
-                      .setNeutralButton("Формула", (d,w) -> showFormulaEditor(cb))
-                      .setNegativeButton("Отмена", null)
-                      .show();
-              }
-
-              private void askTwoArg(String title, String d1, String d2, TwoArg cb){
-                  LinearLayout root = new LinearLayout(this);
-                  root.setOrientation(LinearLayout.VERTICAL);
-                  EditText a = new EditText(this);
-                  EditText b = new EditText(this);
-                  a.setText(d1);
-                  b.setText(d2);
-                  a.setHint("X");
-                  b.setHint("Y");
-                  root.addView(a);
-                  root.addView(b);
-
-                  new AlertDialog.Builder(this)
-                      .setTitle(title)
-                      .setView(root)
-                      .setPositiveButton("ОК", (d,w) -> cb.ok(a.getText().toString(), b.getText().toString()))
-                      .setNegativeButton("Отмена", null)
-                      .show();
-              }
-
-              private void insertBlockDialog(BlockItem block){
-                  ObjectItem o = currentObject();
-                  if(o == null) return;
-
-                  String[] opts = new String[o.blocks.size()+1];
-                  opts[0] = "В конец";
-                  for(int i=0;i<o.blocks.size();i++){
-                      opts[i+1] = "Перед: " + o.blocks.get(i).label;
-                  }
-
-                  new AlertDialog.Builder(this)
-                      .setTitle("Куда вставить блок?")
-                      .setItems(opts, (d,w) -> {
-                          if(w == 0) o.blocks.add(block);
-                          else o.blocks.add(w-1, block);
-                          saveAll();
-                          renderBlocks();
-                      })
-                      .show();
-              }
-
-              private void showBlockMenu(int idx){
-                  ObjectItem o = currentObject();
-                  if(o == null) return;
-                  BlockItem b = o.blocks.get(idx);
-
-                  String[] items = {"Удалить", "Изменить Arg1", "Изменить Arg2", "Редактор формул → Arg1", "Редактор формул → Arg2"};
-                  new AlertDialog.Builder(this)
-                      .setTitle("Блок: " + b.label)
-                      .setItems(items, (d,w) -> {
-                          if(w == 0){
-                              o.blocks.remove(idx);
-                              saveAll();
-                              renderBlocks();
-                          } else if(w == 1){
-                              askOneArg("Arg1", b.arg1 == null ? "" : b.arg1, val -> {
-                                  b.arg1 = val;
-                                  saveAll();
-                                  renderBlocks();
-                              });
-                          } else if(w == 2){
-                              askOneArg("Arg2", b.arg2 == null ? "" : b.arg2, val -> {
-                                  b.arg2 = val;
-                                  saveAll();
-                                  renderBlocks();
-                              });
-                          } else if(w == 3){
-                              showFormulaEditor(val -> {
-                                  b.arg1 = val;
-                                  saveAll();
-                                  renderBlocks();
-                              });
-                          } else if(w == 4){
-                              showFormulaEditor(val -> {
-                                  b.arg2 = val;
-                                  saveAll();
-                                  renderBlocks();
-                              });
-                          }
-                      })
-                      .show();
-              }
-
-              private void showProjectMenu(int idx){
-                  String[] items = {"Переименовать", "Удалить"};
-                  new AlertDialog.Builder(this)
-                      .setTitle(projects.get(idx).name)
-                      .setItems(items, (d,w) -> {
-                          if(w == 0){
-                              EditText input = new EditText(this);
-                              input.setText(projects.get(idx).name);
-                              new AlertDialog.Builder(this)
-                                  .setTitle("Переименовать проект")
-                                  .setView(input)
-                                  .setPositiveButton("ОК", (dd,ww) -> {
-                                      projects.get(idx).name = input.getText().toString();
-                                      saveAll();
-                                      renderProjects();
-                                  })
-                                  .setNegativeButton("Отмена", null)
-                                  .show();
-                          } else {
-                              projects.remove(idx);
-                              saveAll();
-                              renderProjects();
-                          }
-                      })
-                      .show();
-              }
-
-              private void showSceneMenu(int idx){
-                  ProjectItem p = currentProject();
-                  if(p == null) return;
-                  String[] items = {"Переименовать", "Удалить"};
-                  new AlertDialog.Builder(this)
-                      .setTitle(p.scenes.get(idx).name)
-                      .setItems(items, (d,w) -> {
-                          if(w == 0){
-                              EditText input = new EditText(this);
-                              input.setText(p.scenes.get(idx).name);
-                              new AlertDialog.Builder(this)
-                                  .setTitle("Переименовать сцену")
-                                  .setView(input)
-                                  .setPositiveButton("ОК", (dd,ww) -> {
-                                      p.scenes.get(idx).name = input.getText().toString();
-                                      saveAll();
-                                      renderScenes();
-                                  })
-                                  .setNegativeButton("Отмена", null)
-                                  .show();
-                          } else {
-                              p.scenes.remove(idx);
-                              saveAll();
-                              renderScenes();
-                          }
-                      })
-                      .show();
-              }
-
-              private void showObjectMenu(int idx){
-                  SceneItem s = currentScene();
-                  if(s == null) return;
-                  String[] items = {"Переименовать", "Удалить"};
-                  new AlertDialog.Builder(this)
-                      .setTitle(s.objects.get(idx).name)
-                      .setItems(items, (d,w) -> {
-                          if(w == 0){
-                              EditText input = new EditText(this);
-                              input.setText(s.objects.get(idx).name);
-                              new AlertDialog.Builder(this)
-                                  .setTitle("Переименовать объект")
-                                  .setView(input)
-                                  .setPositiveButton("ОК", (dd,ww) -> {
-                                      s.objects.get(idx).name = input.getText().toString();
-                                      saveAll();
-                                      renderObjects();
-                                  })
-                                  .setNegativeButton("Отмена", null)
-                                  .show();
-                          } else {
-                              s.objects.remove(idx);
-                              saveAll();
-                              renderObjects();
-                          }
-                      })
-                      .show();
-              }
-
-              private LinearLayout makeCard(){
-                  LinearLayout card = new LinearLayout(this);
-                  card.setOrientation(LinearLayout.VERTICAL);
-                  card.setBackgroundResource(R.drawable.bg_panel);
-                  card.setPadding(dp(12), dp(12), dp(12), dp(12));
-                  LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT,
-                      LinearLayout.LayoutParams.WRAP_CONTENT
-                  );
-                  lp.topMargin = dp(10);
-                  card.setLayoutParams(lp);
-                  return card;
-              }
-
-              private TextView title(String s){
-                  TextView tv = new TextView(this);
-                  tv.setText(s);
-                  tv.setTextSize(18f);
-                  tv.setTextColor(Color.parseColor("#2E648F"));
-                  tv.setTypeface(null, Typeface.BOLD);
-                  return tv;
-              }
-
-              private TextView subtitle(String s){
-                  TextView tv = new TextView(this);
-                  tv.setText(s);
-                  tv.setTextSize(13f);
-                  tv.setTextColor(Color.parseColor("#5D88A8"));
-                  return tv;
-              }
-
-              private int dp(int v){
-                  return (int)(v * getResources().getDisplayMetrics().density);
-              }
-
-              private float parseFloat(String s, float d){
-                  try { return Float.parseFloat(s); } catch(Exception e){ return d; }
-              }
-
-              private String textOr(EditText e, String d){
-                  String s = e.getText().toString().trim();
-                  return s.isEmpty() ? d : s;
-              }
+              private void resetP(){ren.pX=0;ren.pY=7;ren.pZ=15;ren.vY=0;}
+              private void axisBtn(int id,float dx,float dy,float dz){findViewById(id).setOnTouchListener((v,e)->{if(e.getAction()==MotionEvent.ACTION_DOWN||e.getAction()==MotionEvent.ACTION_MOVE)ren.moveSelected(dx*.5f,dy*.5f,dz*.5f);return true;});}
+              private void updAxis(){runOnUiThread(()->axisPanel.setVisibility(ren.selectedIndex>=0?View.VISIBLE:View.GONE));}
+              private void setupJoy(View base,View stick){base.setOnTouchListener((v,e)->{float cx=v.getWidth()/2f,cy=v.getHeight()/2f;if(e.getAction()==MotionEvent.ACTION_MOVE||e.getAction()==MotionEvent.ACTION_DOWN){float dx=e.getX()-cx,dy=e.getY()-cy,d=(float)Math.sqrt(dx*dx+dy*dy),lim=cx-stick.getWidth()/2f;if(d>lim){dx*=lim/d;dy*=lim/d;}stick.setTranslationX(dx);stick.setTranslationY(dy);ren.jX=dx/lim;ren.jY=dy/lim;}else if(e.getAction()==MotionEvent.ACTION_UP){stick.setTranslationX(0);stick.setTranslationY(0);ren.jX=0;ren.jY=0;}return true;});}
+              private void setupLook(View z){z.setOnTouchListener((v,e)->{if(e.getAction()==MotionEvent.ACTION_DOWN){lx=e.getX();ly=e.getY();}else if(e.getAction()==MotionEvent.ACTION_MOVE){ren.rY+=(e.getX()-lx)*.25f;ren.rX=Math.max(-85,Math.min(85,ren.rX-(e.getY()-ly)*.25f));lx=e.getX();ly=e.getY();}return true;});}
+              private void updBtnGrp(Button[] btns,int sel){for(int i=0;i<btns.length;i++){if(i==sel){btns[i].setBackgroundResource(R.drawable.btn_blue_filled);btns[i].setTextColor(0xFF000000);}else{btns[i].setBackgroundResource(R.drawable.btn_blue);btns[i].setTextColor(0xFF00BFFF);}}}
+              private void updColSel(int sel){for(int i=0;i<colorBtn.length;i++){try{GradientDrawable bg=(GradientDrawable)colorBtn[i].getBackground();if(i==sel)bg.setStroke(6,0xFFFFFFFF);else bg.setStroke(2,0xFF00BFFF);}catch(Exception ignored){}}}
           }
           MAINACT
 
           cat <<EOF > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application
-                  android:label="Карманный Код Ультра"
-                  android:theme="@style/AppTheme">
-                  <activity
-                      android:name="com.pocketultra.ruv2.MainActivity"
-                      android:exported="true">
+              <application android:label="Enjoer 6.1" android:theme="@style/AppTheme">
+                  <activity android:name="com.enjoer.game.MainActivity" 
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
@@ -2841,34 +690,21 @@ jobs:
               repositories { google(); mavenCentral() }
               dependencies { classpath 'com.android.tools.build:gradle:8.2.2' }
           }
-          allprojects {
-              repositories { google(); mavenCentral() }
-          }
+          allprojects { repositories { google(); mavenCentral() } }
           EOF
 
           cat <<EOF > app/build.gradle
-          plugins {
-              id 'com.android.application'
-          }
-
+          plugins { id 'com.android.application' }
           android {
-              namespace 'com.pocketultra.ruv2'
+              namespace 'com.enjoer.game'
               compileSdk 34
-
               defaultConfig {
-                  applicationId 'com.pocketultra.ruv2'
+                  applicationId 'com.enjoer.game'
                   minSdk 24
                   targetSdk 34
               }
-
-              buildFeatures {
-                  buildConfig true
-              }
           }
-
-          dependencies {
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-          }
+          dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
 
       - name: Build APK
@@ -2879,5 +715,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Pocket_Code_Ultra_RU_v2_APK
+          name: Enjoer_6.1_Stars
           path: app/build/outputs/apk/debug/app-debug.apk
