@@ -1,4 +1,4 @@
-name: Enjoer_6.1_ThirdPerson_RunStamina
+name: Enjoer_6.2_RoundLobby_RunToggle
 on:
   push:
   workflow_dispatch:
@@ -116,7 +116,7 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application
                   android:allowBackup="true"
-                  android:label="Enjoer 6.1"
+                  android:label="Enjoer 6.2"
                   android:supportsRtl="true"
                   android:theme="@style/AppTheme">
                   <activity
@@ -143,20 +143,20 @@ jobs:
           cat <<EOF > app/src/main/res/drawable/joy_base.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
               <solid android:color="#AA202020"/>
-              <stroke android:width="2dp" android:color="#777777"/>
+              <stroke android:width="2dp" android:color="#707070"/>
           </shape>
           EOF
 
           cat <<EOF > app/src/main/res/drawable/joy_stick.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#C0C0C0"/>
+              <solid android:color="#BEBEBE"/>
           </shape>
           EOF
 
           cat <<EOF > app/src/main/res/drawable/run_btn.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
               <solid android:color="#CC2A2A2A"/>
-              <stroke android:width="2dp" android:color="#999999"/>
+              <stroke android:width="2dp" android:color="#9A9A9A"/>
           </shape>
           EOF
 
@@ -171,7 +171,22 @@ jobs:
           cat <<EOF > app/src/main/res/drawable/stamina_fill.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
               <corners android:radius="6dp"/>
-              <solid android:color="#B0B0B0"/>
+              <solid android:color="#C8C8C8"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/time_panel.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+              <corners android:radius="10dp"/>
+              <solid android:color="#B0101010"/>
+              <stroke android:width="2dp" android:color="#5C5C5C"/>
+          </shape>
+          EOF
+
+          cat <<EOF > app/src/main/res/drawable/run_btn_active.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+              <solid android:color="#E0E0E0"/>
+              <stroke android:width="2dp" android:color="#5A5A5A"/>
           </shape>
           EOF
 
@@ -195,6 +210,39 @@ jobs:
                       android:id="@+id/look_zone"
                       android:layout_width="match_parent"
                       android:layout_height="match_parent"/>
+
+                  <LinearLayout
+                      android:id="@+id/top_panel"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:layout_centerHorizontal="true"
+                      android:layout_marginTop="18dp"
+                      android:orientation="vertical"
+                      android:gravity="center"
+                      android:background="@drawable/time_panel"
+                      android:paddingLeft="16dp"
+                      android:paddingTop="8dp"
+                      android:paddingRight="16dp"
+                      android:paddingBottom="8dp">
+
+                      <TextView
+                          android:id="@+id/txt_phase"
+                          android:layout_width="wrap_content"
+                          android:layout_height="wrap_content"
+                          android:text="ROUND"
+                          android:textColor="#E0E0E0"
+                          android:textStyle="bold"
+                          android:textSize="14sp"/>
+
+                      <TextView
+                          android:id="@+id/txt_timer"
+                          android:layout_width="wrap_content"
+                          android:layout_height="wrap_content"
+                          android:text="3:50"
+                          android:textColor="#FFFFFF"
+                          android:textStyle="bold"
+                          android:textSize="24sp"/>
+                  </LinearLayout>
 
                   <FrameLayout
                       android:id="@+id/joy_base"
@@ -327,8 +375,13 @@ jobs:
               public float walkTime = 0f;
               public float moveAmount = 0f;
 
-              public boolean runPressed = false;
+              public boolean runToggle = false;
+              public boolean runHold = false;
               public float stamina = 100f;
+              public long staminaCooldownUntil = 0L;
+
+              public boolean inLobby = false;
+              public long phaseEndTimeMs = 0L;
 
               private int prog;
               private FloatBuffer vBuf;
@@ -341,7 +394,49 @@ jobs:
               private static final float PLAYER_HEIGHT = 2.4f;
               private static final float PLAYER_SCALE = 0.68f;
 
-              public void loadBuiltInLevel() {
+              public static final long ROUND_MS = 230000L;
+              public static final long LOBBY_MS = 30000L;
+
+              public GameRenderer() {
+                  startRound();
+              }
+
+              public void startRound() {
+                  inLobby = false;
+                  phaseEndTimeMs = System.currentTimeMillis() + ROUND_MS;
+                  pX = 0f;
+                  pY = 1f;
+                  pZ = 0f;
+                  bodyYaw = 180f;
+                  loadRoundMap();
+              }
+
+              public void startLobby() {
+                  inLobby = true;
+                  phaseEndTimeMs = System.currentTimeMillis() + LOBBY_MS;
+                  pX = 0f;
+                  pY = 1f;
+                  pZ = 0f;
+                  bodyYaw = 180f;
+                  loadLobbyMap();
+              }
+
+              public long getTimeLeftMs() {
+                  return Math.max(0L, phaseEndTimeMs - System.currentTimeMillis());
+              }
+
+              public String getPhaseName() {
+                  return inLobby ? "LOBBY" : "ROUND";
+              }
+
+              public void updatePhase() {
+                  if (System.currentTimeMillis() >= phaseEndTimeMs) {
+                      if (inLobby) startRound();
+                      else startLobby();
+                  }
+              }
+
+              public void loadRoundMap() {
                   blocks.clear();
 
                   blocks.add(new Block(0, 1, -10, 6, 2, 6, 0.75f, 0.2f, 0.2f));
@@ -350,10 +445,24 @@ jobs:
                   blocks.add(new Block(0, 1, -30, 12, 2, 12, 0.6f, 0.6f, 0.6f));
                   blocks.add(new Block(-14, 1, -36, 5, 2, 5, 0.35f, 0.35f, 0.35f));
                   blocks.add(new Block(14, 1, -36, 5, 2, 5, 0.5f, 0.5f, 0.5f));
-
                   blocks.add(new Block(0, 4, -46, 8, 8, 8, 0.38f, 0.38f, 0.38f));
                   blocks.add(new Block(-18, 3, -52, 6, 6, 6, 0.28f, 0.28f, 0.28f));
                   blocks.add(new Block(18, 3, -52, 6, 6, 6, 0.72f, 0.72f, 0.72f));
+                  blocks.add(new Block(0, 2, 18, 14, 4, 6, 0.25f, 0.25f, 0.25f));
+                  blocks.add(new Block(-22, 2, 6, 6, 4, 12, 0.40f, 0.40f, 0.40f));
+                  blocks.add(new Block(22, 2, 6, 6, 4, 12, 0.55f, 0.55f, 0.55f));
+              }
+
+              public void loadLobbyMap() {
+                  blocks.clear();
+
+                  blocks.add(new Block(0, 1, -12, 10, 2, 10, 0.45f, 0.45f, 0.45f));
+                  blocks.add(new Block(-14, 1, -14, 8, 2, 8, 0.30f, 0.30f, 0.30f));
+                  blocks.add(new Block(14, 1, -14, 8, 2, 8, 0.30f, 0.30f, 0.30f));
+                  blocks.add(new Block(0, 1, 12, 18, 2, 8, 0.55f, 0.55f, 0.55f));
+                  blocks.add(new Block(-20, 2, 10, 4, 4, 4, 0.72f, 0.72f, 0.72f));
+                  blocks.add(new Block(20, 2, 10, 4, 4, 4, 0.72f, 0.72f, 0.72f));
+                  blocks.add(new Block(0, 3, 0, 6, 6, 6, 0.22f, 0.22f, 0.22f));
               }
 
               @Override
@@ -442,7 +551,7 @@ jobs:
                   nBuf = ByteBuffer.allocateDirect(nc.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
                   nBuf.put(nc).position(0);
 
-                  loadBuiltInLevel();
+                  if (inLobby) loadLobbyMap(); else loadRoundMap();
               }
 
               @Override
@@ -522,9 +631,7 @@ jobs:
 
                   for (Block b : blocks) {
                       float t = segmentAabb(targetX, targetY, targetZ, desiredX, desiredY, desiredZ, b);
-                      if (t >= 0f && t < bestT) {
-                          bestT = t;
-                      }
+                      if (t >= 0f && t < bestT) bestT = t;
                   }
 
                   float camX;
@@ -603,8 +710,12 @@ jobs:
               }
 
               private void update() {
+                  updatePhase();
+
                   boolean hasInput = Math.abs(jX) > 0.02f || Math.abs(jY) > 0.02f;
-                  boolean canRun = runPressed && stamina > 0.5f && hasInput;
+                  boolean wantsRun = runToggle || runHold;
+                  boolean cooldownActive = System.currentTimeMillis() < staminaCooldownUntil;
+                  boolean canRun = wantsRun && hasInput && stamina > 0.5f && !cooldownActive;
 
                   float walkSpeed = 0.16f;
                   float runSpeed = 0.29f;
@@ -649,16 +760,21 @@ jobs:
 
                   if (moveAmount > 0.001f) {
                       float desiredYaw = (float)Math.toDegrees(Math.atan2(moveX, -moveZ));
-                      bodyYaw = lerpAngle(bodyYaw, desiredYaw, 0.22f);
+                      bodyYaw = lerpAngle(bodyYaw, desiredYaw, 0.32f);
                       walkTime += canRun ? 0.48f : 0.30f;
                   }
 
                   if (canRun) {
                       stamina -= 0.55f;
-                      if (stamina < 0f) stamina = 0f;
+                      if (stamina <= 0f) {
+                          stamina = 0f;
+                          staminaCooldownUntil = System.currentTimeMillis() + 750L;
+                      }
                   } else {
-                      stamina += 0.28f;
-                      if (stamina > 100f) stamina = 100f;
+                      if (!cooldownActive) {
+                          stamina += 0.22f;
+                          if (stamina > 100f) stamina = 100f;
+                      }
                   }
               }
 
@@ -751,14 +867,25 @@ jobs:
           import android.view.MotionEvent;
           import android.view.View;
           import android.view.ViewGroup;
+          import android.widget.Button;
+          import android.widget.TextView;
 
           import androidx.appcompat.app.AppCompatActivity;
+
+          import java.util.Locale;
 
           public class MainActivity extends AppCompatActivity {
               private GameRenderer ren;
               private float lx;
               private float ly;
+
               private View staminaFill;
+              private TextView txtTimer;
+              private TextView txtPhase;
+              private Button btnRun;
+
+              private boolean runPressedDown = false;
+              private boolean movedWhilePress = false;
 
               @SuppressLint("ClickableViewAccessibility")
               @Override
@@ -773,10 +900,13 @@ jobs:
                   gv.setRenderer(ren);
 
                   staminaFill = findViewById(R.id.stamina_fill);
+                  txtTimer = findViewById(R.id.txt_timer);
+                  txtPhase = findViewById(R.id.txt_phase);
+                  btnRun = findViewById(R.id.btn_run);
 
                   setupJoy(findViewById(R.id.joy_base), findViewById(R.id.joy_stick));
                   setupLook(findViewById(R.id.look_zone));
-                  setupRunButton(findViewById(R.id.btn_run));
+                  setupRunButton(btnRun);
 
                   gv.post(updateUiRunnable);
               }
@@ -784,18 +914,49 @@ jobs:
               private final Runnable updateUiRunnable = new Runnable() {
                   @Override
                   public void run() {
-                      if (staminaFill != null && ren != null) {
-                          ViewGroup.LayoutParams lp = staminaFill.getLayoutParams();
-                          int max = dp(214);
-                          int w = (int)(max * (ren.stamina / 100f));
-                          if (w < dp(8)) w = Math.max(0, w);
-                          lp.width = w;
-                          staminaFill.setLayoutParams(lp);
-                          staminaFill.setAlpha(ren.stamina <= 15f ? 0.45f : 1f);
+                      if (ren != null) {
+                          updateStaminaUi();
+                          updateTimerUi();
+                          updateRunButtonUi();
                       }
-                      staminaFill.postDelayed(this, 16);
+                      if (staminaFill != null) staminaFill.postDelayed(this, 16);
                   }
               };
+
+              private void updateStaminaUi() {
+                  if (staminaFill == null) return;
+
+                  ViewGroup.LayoutParams lp = staminaFill.getLayoutParams();
+                  int max = dp(214);
+                  int w = (int)(max * (ren.stamina / 100f));
+                  if (w < 0) w = 0;
+                  lp.width = w;
+                  staminaFill.setLayoutParams(lp);
+
+                  boolean cooldown = System.currentTimeMillis() < ren.staminaCooldownUntil;
+                  staminaFill.setAlpha(cooldown ? 0.35f : (ren.stamina <= 15f ? 0.55f : 1f));
+              }
+
+              private void updateTimerUi() {
+                  if (txtTimer == null || txtPhase == null) return;
+
+                  long left = ren.getTimeLeftMs();
+                  int totalSec = (int)(left / 1000L);
+                  int min = totalSec / 60;
+                  int sec = totalSec % 60;
+
+                  txtPhase.setText(ren.getPhaseName());
+                  txtTimer.setText(String.format(Locale.US, "%d:%02d", min, sec));
+              }
+
+              private void updateRunButtonUi() {
+                  if (btnRun == null) return;
+
+                  boolean active = ren.runToggle || ren.runHold;
+                  btnRun.setBackgroundResource(active ? R.drawable.run_btn_active : R.drawable.run_btn);
+                  btnRun.setTextColor(active ? 0xFF111111 : 0xFFE0E0E0);
+                  btnRun.setAlpha(System.currentTimeMillis() < ren.staminaCooldownUntil ? 0.55f : 1f);
+              }
 
               private int dp(int v) {
                   return (int)(v * getResources().getDisplayMetrics().density);
@@ -856,12 +1017,33 @@ jobs:
               @SuppressLint("ClickableViewAccessibility")
               private void setupRunButton(View btn) {
                   btn.setOnTouchListener((v, e) -> {
-                      if (e.getAction() == MotionEvent.ACTION_DOWN || e.getAction() == MotionEvent.ACTION_MOVE) {
-                          ren.runPressed = true;
-                          v.setAlpha(0.7f);
-                      } else if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) {
-                          ren.runPressed = false;
-                          v.setAlpha(1f);
+                      switch (e.getAction()) {
+                          case MotionEvent.ACTION_DOWN:
+                              runPressedDown = true;
+                              movedWhilePress = false;
+                              ren.runHold = true;
+                              v.setAlpha(0.8f);
+                              return true;
+
+                          case MotionEvent.ACTION_MOVE:
+                              movedWhilePress = true;
+                              ren.runHold = true;
+                              return true;
+
+                          case MotionEvent.ACTION_UP:
+                              if (!movedWhilePress) {
+                                  ren.runToggle = !ren.runToggle;
+                              }
+                              ren.runHold = false;
+                              runPressedDown = false;
+                              v.setAlpha(1f);
+                              return true;
+
+                          case MotionEvent.ACTION_CANCEL:
+                              ren.runHold = false;
+                              runPressedDown = false;
+                              v.setAlpha(1f);
+                              return true;
                       }
                       return true;
                   });
@@ -870,9 +1052,7 @@ jobs:
               @Override
               protected void onDestroy() {
                   super.onDestroy();
-                  if (staminaFill != null) {
-                      staminaFill.removeCallbacks(updateUiRunnable);
-                  }
+                  if (staminaFill != null) staminaFill.removeCallbacks(updateUiRunnable);
               }
           }
           EOF
@@ -894,5 +1074,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_6.1_ThirdPerson_RunStamina_APK
+          name: Enjoer_6.2_RoundLobby_RunToggle_APK
           path: app/build/outputs/apk/debug/app-debug.apk
