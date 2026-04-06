@@ -1,4 +1,4 @@
-name: Enjoer_6.2_RoundLobby_RunToggle
+name: Enjoer_6.3_FixedTurn_Run_Stamina
 on:
   push:
   workflow_dispatch:
@@ -83,9 +83,7 @@ jobs:
               }
 
               buildTypes {
-                  debug {
-                      minifyEnabled false
-                  }
+                  debug { minifyEnabled false }
                   release {
                       minifyEnabled false
                       proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -116,7 +114,7 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application
                   android:allowBackup="true"
-                  android:label="Enjoer 6.2"
+                  android:label="Enjoer 6.3"
                   android:supportsRtl="true"
                   android:theme="@style/AppTheme">
                   <activity
@@ -160,6 +158,13 @@ jobs:
           </shape>
           EOF
 
+          cat <<EOF > app/src/main/res/drawable/run_btn_active.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+              <solid android:color="#E0E0E0"/>
+              <stroke android:width="2dp" android:color="#5A5A5A"/>
+          </shape>
+          EOF
+
           cat <<EOF > app/src/main/res/drawable/stamina_bg.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
               <corners android:radius="8dp"/>
@@ -180,13 +185,6 @@ jobs:
               <corners android:radius="10dp"/>
               <solid android:color="#B0101010"/>
               <stroke android:width="2dp" android:color="#5C5C5C"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/run_btn_active.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#E0E0E0"/>
-              <stroke android:width="2dp" android:color="#5A5A5A"/>
           </shape>
           EOF
 
@@ -347,12 +345,10 @@ jobs:
           import android.opengl.GLES30;
           import android.opengl.GLSurfaceView;
           import android.opengl.Matrix;
-
           import java.nio.ByteBuffer;
           import java.nio.ByteOrder;
           import java.nio.FloatBuffer;
           import java.util.concurrent.CopyOnWriteArrayList;
-
           import javax.microedition.khronos.egl.EGLConfig;
           import javax.microedition.khronos.opengles.GL10;
 
@@ -361,32 +357,24 @@ jobs:
               private final float[] view = new float[16];
               private final float[] model = new float[16];
 
-              public float pX = 0f;
-              public float pY = 1.0f;
-              public float pZ = 0f;
-
-              public float rY = 180f;
-              public float rX = 15f;
-
-              public float jX = 0f;
-              public float jY = 0f;
+              public float pX = 0f, pY = 1f, pZ = 0f;
+              public float rY = 180f, rX = 15f;
+              public float jX = 0f, jY = 0f;
 
               public float bodyYaw = 180f;
               public float walkTime = 0f;
               public float moveAmount = 0f;
 
-              public boolean runToggle = false;
-              public boolean runHold = false;
+              public boolean runEnabled = false;
               public float stamina = 100f;
               public long staminaCooldownUntil = 0L;
+              public boolean staminaBroken = false;
 
               public boolean inLobby = false;
               public long phaseEndTimeMs = 0L;
 
               private int prog;
-              private FloatBuffer vBuf;
-              private FloatBuffer nBuf;
-
+              private FloatBuffer vBuf, nBuf;
               public CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
 
               private static final float FLOOR_Y = 0f;
@@ -401,12 +389,18 @@ jobs:
                   startRound();
               }
 
+              public void toggleRun() {
+                  runEnabled = !runEnabled;
+              }
+
+              public void forceStopRun() {
+                  runEnabled = false;
+              }
+
               public void startRound() {
                   inLobby = false;
                   phaseEndTimeMs = System.currentTimeMillis() + ROUND_MS;
-                  pX = 0f;
-                  pY = 1f;
-                  pZ = 0f;
+                  pX = 0f; pY = 1f; pZ = 0f;
                   bodyYaw = 180f;
                   loadRoundMap();
               }
@@ -414,9 +408,7 @@ jobs:
               public void startLobby() {
                   inLobby = true;
                   phaseEndTimeMs = System.currentTimeMillis() + LOBBY_MS;
-                  pX = 0f;
-                  pY = 1f;
-                  pZ = 0f;
+                  pX = 0f; pY = 1f; pZ = 0f;
                   bodyYaw = 180f;
                   loadLobbyMap();
               }
@@ -431,14 +423,12 @@ jobs:
 
               public void updatePhase() {
                   if (System.currentTimeMillis() >= phaseEndTimeMs) {
-                      if (inLobby) startRound();
-                      else startLobby();
+                      if (inLobby) startRound(); else startLobby();
                   }
               }
 
               public void loadRoundMap() {
                   blocks.clear();
-
                   blocks.add(new Block(0, 1, -10, 6, 2, 6, 0.75f, 0.2f, 0.2f));
                   blocks.add(new Block(-10, 1, -18, 5, 2, 5, 0.3f, 0.3f, 0.3f));
                   blocks.add(new Block(10, 1, -18, 5, 2, 5, 0.45f, 0.45f, 0.45f));
@@ -455,7 +445,6 @@ jobs:
 
               public void loadLobbyMap() {
                   blocks.clear();
-
                   blocks.add(new Block(0, 1, -12, 10, 2, 10, 0.45f, 0.45f, 0.45f));
                   blocks.add(new Block(-14, 1, -14, 8, 2, 8, 0.30f, 0.30f, 0.30f));
                   blocks.add(new Block(14, 1, -14, 8, 2, 8, 0.30f, 0.30f, 0.30f));
@@ -479,51 +468,39 @@ jobs:
                           "out vec3 vN;" +
                           "out vec3 vP;" +
                           "void main(){" +
-                          "  vP = vec3(uM * aP);" +
-                          "  vN = normalize(mat3(uM) * aN);" +
-                          "  gl_Position = uMVP * aP;" +
+                          "vP=vec3(uM*aP);" +
+                          "vN=normalize(mat3(uM)*aN);" +
+                          "gl_Position=uMVP*aP;" +
                           "}";
 
                   String fs =
-                          "#version 300 es\n" +
-                          "precision highp float;" +
-                          "in vec3 vN;" +
-                          "in vec3 vP;" +
-                          "uniform vec3 camP;" +
-                          "uniform vec4 uC;" +
-                          "out vec4 fC;" +
-                          "float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }" +
+                          "#version 300 es\nprecision highp float;" +
+                          "in vec3 vN;in vec3 vP;uniform vec3 camP;uniform vec4 uC;out vec4 fC;" +
+                          "float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}" +
                           "vec3 sky(vec3 d){" +
-                          "  float t = clamp(d.y * 0.5 + 0.5, 0.0, 1.0);" +
-                          "  vec3 base = mix(vec3(0.01,0.01,0.01), vec3(0.22,0.22,0.22), t);" +
-                          "  if(d.y > 0.05){" +
-                          "    vec2 uv = d.xz / (d.y + 0.001);" +
-                          "    vec2 id = floor(uv * 80.0);" +
-                          "    float star = hash(id);" +
-                          "    if(star > 0.975){" +
-                          "      vec2 gv = fract(uv * 80.0) - 0.5;" +
-                          "      float dist = length(gv);" +
-                          "      float brightness = hash(id + 0.1);" +
-                          "      float s = smoothstep(0.15, 0.0, dist) * brightness;" +
-                          "      base += vec3(0.9) * s * 1.2;" +
-                          "    }" +
-                          "  }" +
-                          "  return base;" +
-                          "}" +
+                          "float t=clamp(d.y*.5+.5,0.,1.);" +
+                          "vec3 base=mix(vec3(.01,.01,.01),vec3(.22,.22,.22),t);" +
+                          "if(d.y>0.05){" +
+                          "vec2 uv=d.xz/(d.y+.001);" +
+                          "vec2 id=floor(uv*80.);" +
+                          "float star=hash(id);" +
+                          "if(star>.975){" +
+                          "vec2 gv=fract(uv*80.)-.5;" +
+                          "float dist=length(gv);" +
+                          "float brightness=hash(id+.1);" +
+                          "float s=smoothstep(.15,.0,dist)*brightness;" +
+                          "base+=vec3(.9)*s*1.2;}}" +
+                          "return base;}" +
                           "void main(){" +
-                          "  vec3 n = normalize(vN);" +
-                          "  vec3 vD = normalize(camP - vP);" +
-                          "  vec3 lD = normalize(vec3(0.3,1.0,0.15));" +
-                          "  float diff = max(dot(n, lD), 0.0);" +
-                          "  vec3 h = normalize(lD + vD);" +
-                          "  float spec = pow(max(dot(n, h), 0.0), 28.0) * 0.18;" +
-                          "  vec3 amb = vec3(0.10, 0.10, 0.10);" +
-                          "  vec3 fin = uC.rgb * (diff + amb) + spec;" +
-                          "  float dist = length(camP - vP);" +
-                          "  float fog = 1.0 - exp(-dist * 0.012);" +
-                          "  vec3 c = mix(fin, sky(vD), clamp(fog, 0.0, 0.90));" +
-                          "  fC = vec4(c, uC.a);" +
-                          "}";
+                          "vec3 n=normalize(vN),vD=normalize(camP-vP),lD=normalize(vec3(.3,1.,.15));" +
+                          "float diff=max(dot(n,lD),0.);" +
+                          "vec3 h=normalize(lD+vD);" +
+                          "float spec=pow(max(dot(n,h),0.),28.)*.18;" +
+                          "vec3 amb=vec3(.10,.10,.10);" +
+                          "vec3 fin=uC.rgb*(diff+amb)+spec;" +
+                          "float dist=length(camP-vP),fog=1.-exp(-dist*.012);" +
+                          "vec3 c=mix(fin,sky(vD),clamp(fog,0.,.90));" +
+                          "fC=vec4(c,uC.a);}";
 
                   prog = mkProg(vs, fs);
 
@@ -535,7 +512,6 @@ jobs:
                           -.5f,.5f,-.5f,  -.5f,-.5f,-.5f,  -.5f,.5f,.5f,  -.5f,-.5f,.5f,
                            .5f,.5f,-.5f,   .5f,-.5f,-.5f,   .5f,.5f,.5f,   .5f,-.5f,.5f
                   };
-
                   float[] nc = {
                           0,0,1, 0,0,1, 0,0,1, 0,0,1,
                           0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1,
@@ -547,7 +523,6 @@ jobs:
 
                   vBuf = ByteBuffer.allocateDirect(vc.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
                   vBuf.put(vc).position(0);
-
                   nBuf = ByteBuffer.allocateDirect(nc.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
                   nBuf.put(nc).position(0);
 
@@ -568,28 +543,20 @@ jobs:
                   GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT | GLES30.GL_DEPTH_BUFFER_BIT);
 
                   float[] cam = computeCamera();
-                  float camX = cam[0];
-                  float camY = cam[1];
-                  float camZ = cam[2];
+                  float camX = cam[0], camY = cam[1], camZ = cam[2];
 
-                  float targetX = pX;
-                  float targetY = pY + 1.25f;
-                  float targetZ = pZ;
-
+                  float targetX = pX, targetY = pY + 1.25f, targetZ = pZ;
                   Matrix.setLookAtM(view, 0, camX, camY, camZ, targetX, targetY, targetZ, 0, 1, 0);
 
                   GLES30.glUseProgram(prog);
-
                   int uMVP = GLES30.glGetUniformLocation(prog, "uMVP");
                   int uM = GLES30.glGetUniformLocation(prog, "uM");
                   int uC = GLES30.glGetUniformLocation(prog, "uC");
                   int camLoc = GLES30.glGetUniformLocation(prog, "camP");
-
                   GLES30.glUniform3f(camLoc, camX, camY, camZ);
 
                   GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 0, vBuf);
                   GLES30.glEnableVertexAttribArray(0);
-
                   GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 0, nBuf);
                   GLES30.glEnableVertexAttribArray(1);
 
@@ -612,12 +579,8 @@ jobs:
                   float yawRad = (float) Math.toRadians(rY);
                   float pitchRad = (float) Math.toRadians(rX);
 
-                  float targetX = pX;
-                  float targetY = pY + 1.25f;
-                  float targetZ = pZ;
-
-                  float desiredDist = 8.3f;
-                  float minDist = 1.9f;
+                  float targetX = pX, targetY = pY + 1.25f, targetZ = pZ;
+                  float desiredDist = 8.3f, minDist = 1.9f;
 
                   float dirX = (float)(-Math.sin(yawRad) * Math.cos(pitchRad));
                   float dirY = (float)( Math.sin(pitchRad));
@@ -628,27 +591,20 @@ jobs:
                   float desiredZ = targetZ + dirZ * desiredDist;
 
                   float bestT = 1f;
-
                   for (Block b : blocks) {
                       float t = segmentAabb(targetX, targetY, targetZ, desiredX, desiredY, desiredZ, b);
                       if (t >= 0f && t < bestT) bestT = t;
                   }
 
-                  float camX;
-                  float camY;
-                  float camZ;
-
+                  float camX, camY, camZ;
                   if (bestT < 1f) {
                       float safeT = Math.max(0f, bestT - 0.06f);
                       camX = targetX + (desiredX - targetX) * safeT;
                       camY = targetY + (desiredY - targetY) * safeT;
                       camZ = targetZ + (desiredZ - targetZ) * safeT;
 
-                      float dx = camX - targetX;
-                      float dy = camY - targetY;
-                      float dz = camZ - targetZ;
-                      float dist = (float)Math.sqrt(dx * dx + dy * dy + dz * dz);
-
+                      float dx = camX - targetX, dy = camY - targetY, dz = camZ - targetZ;
+                      float dist = (float)Math.sqrt(dx*dx + dy*dy + dz*dz);
                       if (dist < minDist) {
                           float len = Math.max(0.0001f, dist);
                           camX = targetX + dx / len * minDist;
@@ -656,36 +612,27 @@ jobs:
                           camZ = targetZ + dz / len * minDist;
                       }
                   } else {
-                      camX = desiredX;
-                      camY = desiredY;
-                      camZ = desiredZ;
+                      camX = desiredX; camY = desiredY; camZ = desiredZ;
                   }
 
                   return new float[]{camX, camY, camZ};
               }
 
               private float segmentAabb(float sx, float sy, float sz, float ex, float ey, float ez, Block b) {
-                  float dx = ex - sx;
-                  float dy = ey - sy;
-                  float dz = ez - sz;
-
-                  float tMin = 0f;
-                  float tMax = 1f;
+                  float dx = ex - sx, dy = ey - sy, dz = ez - sz;
+                  float tMin = 0f, tMax = 1f;
 
                   float[] xRes = slabRange(sx, dx, b.minX(), b.maxX());
                   if (xRes == null) return -1f;
-                  tMin = Math.max(tMin, xRes[0]);
-                  tMax = Math.min(tMax, xRes[1]);
+                  tMin = Math.max(tMin, xRes[0]); tMax = Math.min(tMax, xRes[1]);
 
                   float[] yRes = slabRange(sy, dy, b.minY(), b.maxY());
                   if (yRes == null) return -1f;
-                  tMin = Math.max(tMin, yRes[0]);
-                  tMax = Math.min(tMax, yRes[1]);
+                  tMin = Math.max(tMin, yRes[0]); tMax = Math.min(tMax, yRes[1]);
 
                   float[] zRes = slabRange(sz, dz, b.minZ(), b.maxZ());
                   if (zRes == null) return -1f;
-                  tMin = Math.max(tMin, zRes[0]);
-                  tMax = Math.min(tMax, zRes[1]);
+                  tMin = Math.max(tMin, zRes[0]); tMax = Math.min(tMax, zRes[1]);
 
                   if (tMax >= tMin && tMax >= 0f && tMin <= 1f) return Math.max(0f, tMin);
                   return -1f;
@@ -696,16 +643,8 @@ jobs:
                       if (s < min || s > max) return null;
                       return new float[]{0f, 1f};
                   }
-
-                  float t1 = (min - s) / d;
-                  float t2 = (max - s) / d;
-
-                  if (t1 > t2) {
-                      float tmp = t1;
-                      t1 = t2;
-                      t2 = tmp;
-                  }
-
+                  float t1 = (min - s) / d, t2 = (max - s) / d;
+                  if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
                   return new float[]{t1, t2};
               }
 
@@ -713,27 +652,41 @@ jobs:
                   updatePhase();
 
                   boolean hasInput = Math.abs(jX) > 0.02f || Math.abs(jY) > 0.02f;
-                  boolean wantsRun = runToggle || runHold;
-                  boolean cooldownActive = System.currentTimeMillis() < staminaCooldownUntil;
-                  boolean canRun = wantsRun && hasInput && stamina > 0.5f && !cooldownActive;
+                  long now = System.currentTimeMillis();
+                  boolean cooldownActive = now < staminaCooldownUntil;
 
+                  if (staminaBroken && !cooldownActive) {
+                      if (stamina >= 35f) staminaBroken = false;
+                  }
+
+                  boolean canUseRun = runEnabled && hasInput && !cooldownActive && !staminaBroken && stamina > 0f;
                   float walkSpeed = 0.16f;
                   float runSpeed = 0.29f;
-                  float speed = canRun ? runSpeed : walkSpeed;
+                  float speed = canUseRun ? runSpeed : walkSpeed;
 
                   float camYawRad = (float) Math.toRadians(rY);
-
                   float inputX = jX;
                   float inputY = -jY;
 
-                  float moveX = ((float)Math.sin(camYawRad) * inputY + (float)Math.cos(camYawRad) * inputX) * speed;
-                  float moveZ = ((float)-Math.cos(camYawRad) * inputY + (float)Math.sin(camYawRad) * inputX) * speed;
+                  float worldMoveX = ((float)Math.sin(camYawRad) * inputY + (float)Math.cos(camYawRad) * inputX);
+                  float worldMoveZ = ((float)-Math.cos(camYawRad) * inputY + (float)Math.sin(camYawRad) * inputX);
+
+                  float len = (float)Math.sqrt(worldMoveX * worldMoveX + worldMoveZ * worldMoveZ);
+                  if (len > 0.0001f) {
+                      worldMoveX /= len;
+                      worldMoveZ /= len;
+                  } else {
+                      worldMoveX = 0f;
+                      worldMoveZ = 0f;
+                  }
+
+                  float moveX = worldMoveX * speed;
+                  float moveZ = worldMoveZ * speed;
 
                   float nX = pX + moveX;
                   float nZ = pZ + moveZ;
 
                   boolean blocked = false;
-
                   for (Block b : blocks) {
                       boolean hitXZ =
                               nX + PLAYER_RADIUS > b.minX() &&
@@ -741,14 +694,8 @@ jobs:
                               nZ + PLAYER_RADIUS > b.minZ() &&
                               nZ - PLAYER_RADIUS < b.maxZ();
 
-                      boolean hitY =
-                              FLOOR_Y < b.maxY() &&
-                              PLAYER_HEIGHT > b.minY();
-
-                      if (hitXZ && hitY) {
-                          blocked = true;
-                          break;
-                      }
+                      boolean hitY = FLOOR_Y < b.maxY() && PLAYER_HEIGHT > b.minY();
+                      if (hitXZ && hitY) { blocked = true; break; }
                   }
 
                   if (!blocked) {
@@ -758,21 +705,23 @@ jobs:
 
                   moveAmount = (float)Math.sqrt(moveX * moveX + moveZ * moveZ);
 
-                  if (moveAmount > 0.001f) {
-                      float desiredYaw = (float)Math.toDegrees(Math.atan2(moveX, -moveZ));
-                      bodyYaw = lerpAngle(bodyYaw, desiredYaw, 0.32f);
-                      walkTime += canRun ? 0.48f : 0.30f;
+                  if (hasInput && len > 0.0001f) {
+                      float desiredYaw = (float)Math.toDegrees(Math.atan2(worldMoveX, worldMoveZ));
+                      bodyYaw = lerpAngle(bodyYaw, desiredYaw, 0.28f);
+                      walkTime += canUseRun ? 0.48f : 0.30f;
                   }
 
-                  if (canRun) {
+                  if (canUseRun) {
                       stamina -= 0.55f;
                       if (stamina <= 0f) {
                           stamina = 0f;
-                          staminaCooldownUntil = System.currentTimeMillis() + 750L;
+                          staminaCooldownUntil = now + 750L;
+                          staminaBroken = true;
+                          runEnabled = false;
                       }
                   } else {
                       if (!cooldownActive) {
-                          stamina += 0.22f;
+                          stamina += 0.16f;
                           if (stamina > 100f) stamina = 100f;
                       }
                   }
@@ -827,18 +776,13 @@ jobs:
 
               private void draw(int uM, int uMVP, int uC, float r, float g, float b, float a) {
                   GLES30.glUniformMatrix4fv(uM, 1, false, model, 0);
-
                   float[] pv = new float[16];
                   float[] mvp = new float[16];
                   Matrix.multiplyMM(pv, 0, proj, 0, view, 0);
                   Matrix.multiplyMM(mvp, 0, pv, 0, model, 0);
-
                   GLES30.glUniformMatrix4fv(uMVP, 1, false, mvp, 0);
                   GLES30.glUniform4f(uC, r, g, b, a);
-
-                  for (int i = 0; i < 6; i++) {
-                      GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, i * 4, 4);
-                  }
+                  for (int i = 0; i < 6; i++) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, i * 4, 4);
               }
 
               private int mkProg(String v, String f) {
@@ -869,23 +813,15 @@ jobs:
           import android.view.ViewGroup;
           import android.widget.Button;
           import android.widget.TextView;
-
           import androidx.appcompat.app.AppCompatActivity;
-
           import java.util.Locale;
 
           public class MainActivity extends AppCompatActivity {
               private GameRenderer ren;
-              private float lx;
-              private float ly;
-
+              private float lx, ly;
               private View staminaFill;
-              private TextView txtTimer;
-              private TextView txtPhase;
+              private TextView txtTimer, txtPhase;
               private Button btnRun;
-
-              private boolean runPressedDown = false;
-              private boolean movedWhilePress = false;
 
               @SuppressLint("ClickableViewAccessibility")
               @Override
@@ -925,7 +861,6 @@ jobs:
 
               private void updateStaminaUi() {
                   if (staminaFill == null) return;
-
                   ViewGroup.LayoutParams lp = staminaFill.getLayoutParams();
                   int max = dp(214);
                   int w = (int)(max * (ren.stamina / 100f));
@@ -934,28 +869,25 @@ jobs:
                   staminaFill.setLayoutParams(lp);
 
                   boolean cooldown = System.currentTimeMillis() < ren.staminaCooldownUntil;
-                  staminaFill.setAlpha(cooldown ? 0.35f : (ren.stamina <= 15f ? 0.55f : 1f));
+                  staminaFill.setAlpha(cooldown || ren.staminaBroken ? 0.35f : (ren.stamina <= 15f ? 0.55f : 1f));
               }
 
               private void updateTimerUi() {
                   if (txtTimer == null || txtPhase == null) return;
-
                   long left = ren.getTimeLeftMs();
                   int totalSec = (int)(left / 1000L);
                   int min = totalSec / 60;
                   int sec = totalSec % 60;
-
                   txtPhase.setText(ren.getPhaseName());
                   txtTimer.setText(String.format(Locale.US, "%d:%02d", min, sec));
               }
 
               private void updateRunButtonUi() {
                   if (btnRun == null) return;
-
-                  boolean active = ren.runToggle || ren.runHold;
+                  boolean active = ren.runEnabled;
                   btnRun.setBackgroundResource(active ? R.drawable.run_btn_active : R.drawable.run_btn);
                   btnRun.setTextColor(active ? 0xFF111111 : 0xFFE0E0E0);
-                  btnRun.setAlpha(System.currentTimeMillis() < ren.staminaCooldownUntil ? 0.55f : 1f);
+                  btnRun.setAlpha((System.currentTimeMillis() < ren.staminaCooldownUntil || ren.staminaBroken) ? 0.55f : 1f);
               }
 
               private int dp(int v) {
@@ -982,7 +914,6 @@ jobs:
 
                           stick.setTranslationX(dx);
                           stick.setTranslationY(dy);
-
                           ren.jX = dx / lim;
                           ren.jY = dy / lim;
                       } else if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) {
@@ -1003,10 +934,8 @@ jobs:
                       } else if (e.getAction() == MotionEvent.ACTION_MOVE) {
                           ren.rY += (e.getX() - lx) * 0.25f;
                           ren.rX += (e.getY() - ly) * 0.18f;
-
                           if (ren.rX < -10f) ren.rX = -10f;
                           if (ren.rX > 55f) ren.rX = 55f;
-
                           lx = e.getX();
                           ly = e.getY();
                       }
@@ -1016,36 +945,8 @@ jobs:
 
               @SuppressLint("ClickableViewAccessibility")
               private void setupRunButton(View btn) {
-                  btn.setOnTouchListener((v, e) -> {
-                      switch (e.getAction()) {
-                          case MotionEvent.ACTION_DOWN:
-                              runPressedDown = true;
-                              movedWhilePress = false;
-                              ren.runHold = true;
-                              v.setAlpha(0.8f);
-                              return true;
-
-                          case MotionEvent.ACTION_MOVE:
-                              movedWhilePress = true;
-                              ren.runHold = true;
-                              return true;
-
-                          case MotionEvent.ACTION_UP:
-                              if (!movedWhilePress) {
-                                  ren.runToggle = !ren.runToggle;
-                              }
-                              ren.runHold = false;
-                              runPressedDown = false;
-                              v.setAlpha(1f);
-                              return true;
-
-                          case MotionEvent.ACTION_CANCEL:
-                              ren.runHold = false;
-                              runPressedDown = false;
-                              v.setAlpha(1f);
-                              return true;
-                      }
-                      return true;
+                  btn.setOnClickListener(v -> {
+                      ren.toggleRun();
                   });
               }
 
@@ -1074,5 +975,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_6.2_RoundLobby_RunToggle_APK
+          name: Enjoer_6.3_FixedTurn_Run_Stamina_APK
           path: app/build/outputs/apk/debug/app-debug.apk
