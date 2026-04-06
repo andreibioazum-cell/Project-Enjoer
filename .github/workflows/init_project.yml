@@ -1,4 +1,4 @@
-name: Enjoer_6.3_FixedTurn_Run_Stamina
+name: Enjoer_6.4_FinalFix
 on:
   push:
   workflow_dispatch:
@@ -114,7 +114,7 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application
                   android:allowBackup="true"
-                  android:label="Enjoer 6.3"
+                  android:label="Enjoer 6.4"
                   android:supportsRtl="true"
                   android:theme="@style/AppTheme">
                   <activity
@@ -167,7 +167,7 @@ jobs:
 
           cat <<EOF > app/src/main/res/drawable/stamina_bg.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-              <corners android:radius="8dp"/>
+              <corners android:radius="6dp"/>
               <solid android:color="#AA111111"/>
               <stroke android:width="2dp" android:color="#666666"/>
           </shape>
@@ -175,15 +175,15 @@ jobs:
 
           cat <<EOF > app/src/main/res/drawable/stamina_fill.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-              <corners android:radius="6dp"/>
+              <corners android:radius="4dp"/>
               <solid android:color="#C8C8C8"/>
           </shape>
           EOF
 
           cat <<EOF > app/src/main/res/drawable/time_panel.xml
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-              <corners android:radius="10dp"/>
-              <solid android:color="#B0101010"/>
+              <corners android:radius="8dp"/>
+              <solid android:color="#98101010"/>
               <stroke android:width="2dp" android:color="#5C5C5C"/>
           </shape>
           EOF
@@ -210,36 +210,26 @@ jobs:
                       android:layout_height="match_parent"/>
 
                   <LinearLayout
-                      android:id="@+id/top_panel"
                       android:layout_width="wrap_content"
                       android:layout_height="wrap_content"
                       android:layout_centerHorizontal="true"
-                      android:layout_marginTop="18dp"
+                      android:layout_marginTop="14dp"
                       android:orientation="vertical"
                       android:gravity="center"
                       android:background="@drawable/time_panel"
-                      android:paddingLeft="16dp"
-                      android:paddingTop="8dp"
-                      android:paddingRight="16dp"
-                      android:paddingBottom="8dp">
-
-                      <TextView
-                          android:id="@+id/txt_phase"
-                          android:layout_width="wrap_content"
-                          android:layout_height="wrap_content"
-                          android:text="ROUND"
-                          android:textColor="#E0E0E0"
-                          android:textStyle="bold"
-                          android:textSize="14sp"/>
+                      android:paddingLeft="12dp"
+                      android:paddingTop="6dp"
+                      android:paddingRight="12dp"
+                      android:paddingBottom="6dp">
 
                       <TextView
                           android:id="@+id/txt_timer"
                           android:layout_width="wrap_content"
                           android:layout_height="wrap_content"
-                          android:text="3:50"
+                          android:text="1:10"
                           android:textColor="#FFFFFF"
                           android:textStyle="bold"
-                          android:textSize="24sp"/>
+                          android:textSize="18sp"/>
                   </LinearLayout>
 
                   <FrameLayout
@@ -276,12 +266,12 @@ jobs:
                       android:textSize="18sp"/>
 
                   <LinearLayout
-                      android:layout_width="220dp"
+                      android:layout_width="150dp"
                       android:layout_height="wrap_content"
                       android:layout_alignParentStart="true"
                       android:layout_alignParentBottom="true"
                       android:layout_marginStart="28dp"
-                      android:layout_marginBottom="205dp"
+                      android:layout_marginBottom="188dp"
                       android:orientation="vertical">
 
                       <TextView
@@ -289,20 +279,20 @@ jobs:
                           android:layout_height="wrap_content"
                           android:text="STAMINA"
                           android:textColor="#D0D0D0"
-                          android:textSize="14sp"
+                          android:textSize="11sp"
                           android:textStyle="bold"
-                          android:layout_marginBottom="6dp"/>
+                          android:layout_marginBottom="4dp"/>
 
                       <FrameLayout
                           android:id="@+id/stamina_bg"
-                          android:layout_width="220dp"
-                          android:layout_height="22dp"
+                          android:layout_width="150dp"
+                          android:layout_height="16dp"
                           android:background="@drawable/stamina_bg"
-                          android:padding="3dp">
+                          android:padding="2dp">
 
                           <View
                               android:id="@+id/stamina_fill"
-                              android:layout_width="214dp"
+                              android:layout_width="146dp"
                               android:layout_height="match_parent"
                               android:background="@drawable/stamina_fill"/>
                       </FrameLayout>
@@ -382,7 +372,7 @@ jobs:
               private static final float PLAYER_HEIGHT = 2.4f;
               private static final float PLAYER_SCALE = 0.68f;
 
-              public static final long ROUND_MS = 230000L;
+              public static final long ROUND_MS = 70000L;
               public static final long LOBBY_MS = 30000L;
 
               public GameRenderer() {
@@ -391,10 +381,6 @@ jobs:
 
               public void toggleRun() {
                   runEnabled = !runEnabled;
-              }
-
-              public void forceStopRun() {
-                  runEnabled = false;
               }
 
               public void startRound() {
@@ -415,10 +401,6 @@ jobs:
 
               public long getTimeLeftMs() {
                   return Math.max(0L, phaseEndTimeMs - System.currentTimeMillis());
-              }
-
-              public String getPhaseName() {
-                  return inLobby ? "LOBBY" : "ROUND";
               }
 
               public void updatePhase() {
@@ -445,13 +427,13 @@ jobs:
 
               public void loadLobbyMap() {
                   blocks.clear();
-                  blocks.add(new Block(0, 1, -12, 10, 2, 10, 0.45f, 0.45f, 0.45f));
-                  blocks.add(new Block(-14, 1, -14, 8, 2, 8, 0.30f, 0.30f, 0.30f));
-                  blocks.add(new Block(14, 1, -14, 8, 2, 8, 0.30f, 0.30f, 0.30f));
-                  blocks.add(new Block(0, 1, 12, 18, 2, 8, 0.55f, 0.55f, 0.55f));
-                  blocks.add(new Block(-20, 2, 10, 4, 4, 4, 0.72f, 0.72f, 0.72f));
-                  blocks.add(new Block(20, 2, 10, 4, 4, 4, 0.72f, 0.72f, 0.72f));
-                  blocks.add(new Block(0, 3, 0, 6, 6, 6, 0.22f, 0.22f, 0.22f));
+                  blocks.add(new Block(0, 1, -12, 10, 2, 10, 0.04f, 0.04f, 0.04f));
+                  blocks.add(new Block(-14, 1, -14, 8, 2, 8, 0.03f, 0.03f, 0.03f));
+                  blocks.add(new Block(14, 1, -14, 8, 2, 8, 0.03f, 0.03f, 0.03f));
+                  blocks.add(new Block(0, 1, 12, 18, 2, 8, 0.05f, 0.05f, 0.05f));
+                  blocks.add(new Block(-20, 2, 10, 4, 4, 4, 0.08f, 0.08f, 0.08f));
+                  blocks.add(new Block(20, 2, 10, 4, 4, 4, 0.08f, 0.08f, 0.08f));
+                  blocks.add(new Block(0, 3, 0, 6, 6, 6, 0.02f, 0.02f, 0.02f));
               }
 
               @Override
@@ -467,11 +449,7 @@ jobs:
                           "uniform mat4 uM;" +
                           "out vec3 vN;" +
                           "out vec3 vP;" +
-                          "void main(){" +
-                          "vP=vec3(uM*aP);" +
-                          "vN=normalize(mat3(uM)*aN);" +
-                          "gl_Position=uMVP*aP;" +
-                          "}";
+                          "void main(){vP=vec3(uM*aP);vN=normalize(mat3(uM)*aN);gl_Position=uMVP*aP;}";
 
                   String fs =
                           "#version 300 es\nprecision highp float;" +
@@ -479,27 +457,27 @@ jobs:
                           "float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}" +
                           "vec3 sky(vec3 d){" +
                           "float t=clamp(d.y*.5+.5,0.,1.);" +
-                          "vec3 base=mix(vec3(.01,.01,.01),vec3(.22,.22,.22),t);" +
+                          "vec3 base=mix(vec3(.01,.01,.01),vec3(.18,.18,.18),t);" +
                           "if(d.y>0.05){" +
                           "vec2 uv=d.xz/(d.y+.001);" +
                           "vec2 id=floor(uv*80.);" +
                           "float star=hash(id);" +
-                          "if(star>.975){" +
+                          "if(star>.978){" +
                           "vec2 gv=fract(uv*80.)-.5;" +
                           "float dist=length(gv);" +
                           "float brightness=hash(id+.1);" +
                           "float s=smoothstep(.15,.0,dist)*brightness;" +
-                          "base+=vec3(.9)*s*1.2;}}" +
+                          "base+=vec3(.85)*s;}}" +
                           "return base;}" +
                           "void main(){" +
                           "vec3 n=normalize(vN),vD=normalize(camP-vP),lD=normalize(vec3(.3,1.,.15));" +
                           "float diff=max(dot(n,lD),0.);" +
                           "vec3 h=normalize(lD+vD);" +
-                          "float spec=pow(max(dot(n,h),0.),28.)*.18;" +
-                          "vec3 amb=vec3(.10,.10,.10);" +
+                          "float spec=pow(max(dot(n,h),0.),28.)*.15;" +
+                          "vec3 amb=vec3(.09,.09,.09);" +
                           "vec3 fin=uC.rgb*(diff+amb)+spec;" +
-                          "float dist=length(camP-vP),fog=1.-exp(-dist*.012);" +
-                          "vec3 c=mix(fin,sky(vD),clamp(fog,0.,.90));" +
+                          "float dist=length(camP-vP),fog=1.-exp(-dist*.013);" +
+                          "vec3 c=mix(fin,sky(vD),clamp(fog,0.,.92));" +
                           "fC=vec4(c,uC.a);}";
 
                   prog = mkProg(vs, fs);
@@ -579,8 +557,12 @@ jobs:
                   float yawRad = (float) Math.toRadians(rY);
                   float pitchRad = (float) Math.toRadians(rX);
 
-                  float targetX = pX, targetY = pY + 1.25f, targetZ = pZ;
-                  float desiredDist = 8.3f, minDist = 1.9f;
+                  float targetX = pX;
+                  float targetY = pY + 1.25f;
+                  float targetZ = pZ;
+
+                  float desiredDist = 8.3f;
+                  float minDist = 2.2f;
 
                   float dirX = (float)(-Math.sin(yawRad) * Math.cos(pitchRad));
                   float dirY = (float)( Math.sin(pitchRad));
@@ -591,46 +573,52 @@ jobs:
                   float desiredZ = targetZ + dirZ * desiredDist;
 
                   float bestT = 1f;
+
                   for (Block b : blocks) {
-                      float t = segmentAabb(targetX, targetY, targetZ, desiredX, desiredY, desiredZ, b);
+                      float t = segmentAabbExpanded(targetX, targetY, targetZ, desiredX, desiredY, desiredZ, b, 0.35f);
                       if (t >= 0f && t < bestT) bestT = t;
                   }
 
                   float camX, camY, camZ;
                   if (bestT < 1f) {
-                      float safeT = Math.max(0f, bestT - 0.06f);
+                      float safeT = Math.max(0f, bestT - 0.10f);
                       camX = targetX + (desiredX - targetX) * safeT;
                       camY = targetY + (desiredY - targetY) * safeT;
                       camZ = targetZ + (desiredZ - targetZ) * safeT;
-
-                      float dx = camX - targetX, dy = camY - targetY, dz = camZ - targetZ;
-                      float dist = (float)Math.sqrt(dx*dx + dy*dy + dz*dz);
-                      if (dist < minDist) {
-                          float len = Math.max(0.0001f, dist);
-                          camX = targetX + dx / len * minDist;
-                          camY = targetY + dy / len * minDist;
-                          camZ = targetZ + dz / len * minDist;
-                      }
                   } else {
-                      camX = desiredX; camY = desiredY; camZ = desiredZ;
+                      camX = desiredX;
+                      camY = desiredY;
+                      camZ = desiredZ;
+                  }
+
+                  float dx = camX - targetX;
+                  float dy = camY - targetY;
+                  float dz = camZ - targetZ;
+                  float dist = (float)Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                  if (dist < minDist) {
+                      float len = Math.max(0.0001f, dist);
+                      camX = targetX + dx / len * minDist;
+                      camY = targetY + dy / len * minDist;
+                      camZ = targetZ + dz / len * minDist;
                   }
 
                   return new float[]{camX, camY, camZ};
               }
 
-              private float segmentAabb(float sx, float sy, float sz, float ex, float ey, float ez, Block b) {
+              private float segmentAabbExpanded(float sx, float sy, float sz, float ex, float ey, float ez, Block b, float expand) {
                   float dx = ex - sx, dy = ey - sy, dz = ez - sz;
                   float tMin = 0f, tMax = 1f;
 
-                  float[] xRes = slabRange(sx, dx, b.minX(), b.maxX());
+                  float[] xRes = slabRange(sx, dx, b.minX() - expand, b.maxX() + expand);
                   if (xRes == null) return -1f;
                   tMin = Math.max(tMin, xRes[0]); tMax = Math.min(tMax, xRes[1]);
 
-                  float[] yRes = slabRange(sy, dy, b.minY(), b.maxY());
+                  float[] yRes = slabRange(sy, dy, b.minY() - expand, b.maxY() + expand);
                   if (yRes == null) return -1f;
                   tMin = Math.max(tMin, yRes[0]); tMax = Math.min(tMax, yRes[1]);
 
-                  float[] zRes = slabRange(sz, dz, b.minZ(), b.maxZ());
+                  float[] zRes = slabRange(sz, dz, b.minZ() - expand, b.maxZ() + expand);
                   if (zRes == null) return -1f;
                   tMin = Math.max(tMin, zRes[0]); tMax = Math.min(tMax, zRes[1]);
 
@@ -655,13 +643,13 @@ jobs:
                   long now = System.currentTimeMillis();
                   boolean cooldownActive = now < staminaCooldownUntil;
 
-                  if (staminaBroken && !cooldownActive) {
-                      if (stamina >= 35f) staminaBroken = false;
+                  if (staminaBroken && !cooldownActive && stamina >= 35f) {
+                      staminaBroken = false;
                   }
 
                   boolean canUseRun = runEnabled && hasInput && !cooldownActive && !staminaBroken && stamina > 0f;
                   float walkSpeed = 0.16f;
-                  float runSpeed = 0.29f;
+                  float runSpeed = 0.24f;
                   float speed = canUseRun ? runSpeed : walkSpeed;
 
                   float camYawRad = (float) Math.toRadians(rY);
@@ -683,36 +671,32 @@ jobs:
                   float moveX = worldMoveX * speed;
                   float moveZ = worldMoveZ * speed;
 
-                  float nX = pX + moveX;
-                  float nZ = pZ + moveZ;
+                  float newX = pX;
+                  float newZ = pZ;
 
-                  boolean blocked = false;
-                  for (Block b : blocks) {
-                      boolean hitXZ =
-                              nX + PLAYER_RADIUS > b.minX() &&
-                              nX - PLAYER_RADIUS < b.maxX() &&
-                              nZ + PLAYER_RADIUS > b.minZ() &&
-                              nZ - PLAYER_RADIUS < b.maxZ();
-
-                      boolean hitY = FLOOR_Y < b.maxY() && PLAYER_HEIGHT > b.minY();
-                      if (hitXZ && hitY) { blocked = true; break; }
+                  if (moveX != 0f) {
+                      float testX = pX + moveX;
+                      if (!collides(testX, pZ)) newX = testX;
                   }
 
-                  if (!blocked) {
-                      pX = nX;
-                      pZ = nZ;
+                  if (moveZ != 0f) {
+                      float testZ = pZ + moveZ;
+                      if (!collides(newX, testZ)) newZ = testZ;
                   }
+
+                  pX = newX;
+                  pZ = newZ;
 
                   moveAmount = (float)Math.sqrt(moveX * moveX + moveZ * moveZ);
 
                   if (hasInput && len > 0.0001f) {
                       float desiredYaw = (float)Math.toDegrees(Math.atan2(worldMoveX, worldMoveZ));
                       bodyYaw = lerpAngle(bodyYaw, desiredYaw, 0.28f);
-                      walkTime += canUseRun ? 0.48f : 0.30f;
+                      walkTime += canUseRun ? 0.40f : 0.24f;
                   }
 
                   if (canUseRun) {
-                      stamina -= 0.55f;
+                      stamina -= 0.22f;
                       if (stamina <= 0f) {
                           stamina = 0f;
                           staminaCooldownUntil = now + 750L;
@@ -721,10 +705,25 @@ jobs:
                       }
                   } else {
                       if (!cooldownActive) {
-                          stamina += 0.16f;
+                          stamina += 0.10f;
                           if (stamina > 100f) stamina = 100f;
                       }
                   }
+              }
+
+              private boolean collides(float x, float z) {
+                  float pad = 0.02f;
+                  for (Block b : blocks) {
+                      boolean hitXZ =
+                              x + PLAYER_RADIUS > b.minX() - pad &&
+                              x - PLAYER_RADIUS < b.maxX() + pad &&
+                              z + PLAYER_RADIUS > b.minZ() - pad &&
+                              z - PLAYER_RADIUS < b.maxZ() + pad;
+
+                      boolean hitY = FLOOR_Y < b.maxY() && PLAYER_HEIGHT > b.minY();
+                      if (hitXZ && hitY) return true;
+                  }
+                  return false;
               }
 
               private float lerpAngle(float from, float to, float t) {
@@ -733,7 +732,7 @@ jobs:
               }
 
               private void drawPlayer(int uM, int uMVP, int uC) {
-                  float swing = (float)Math.sin(walkTime) * 32f * Math.min(1f, moveAmount * 9f);
+                  float swing = (float)Math.sin(walkTime) * 28f * Math.min(1f, moveAmount * 8f);
 
                   drawBodyPart(uM, uMVP, uC, 0f, 2.8f, 0f, 1.2f, 1.2f, 1.2f, 0.92f, 0.80f, 0.65f);
                   drawBodyPart(uM, uMVP, uC, 0f, 1.3f, 0f, 1.6f, 1.8f, 0.9f, 0.20f, 0.20f, 0.20f);
@@ -820,7 +819,7 @@ jobs:
               private GameRenderer ren;
               private float lx, ly;
               private View staminaFill;
-              private TextView txtTimer, txtPhase;
+              private TextView txtTimer;
               private Button btnRun;
 
               @SuppressLint("ClickableViewAccessibility")
@@ -837,7 +836,6 @@ jobs:
 
                   staminaFill = findViewById(R.id.stamina_fill);
                   txtTimer = findViewById(R.id.txt_timer);
-                  txtPhase = findViewById(R.id.txt_phase);
                   btnRun = findViewById(R.id.btn_run);
 
                   setupJoy(findViewById(R.id.joy_base), findViewById(R.id.joy_stick));
@@ -862,7 +860,7 @@ jobs:
               private void updateStaminaUi() {
                   if (staminaFill == null) return;
                   ViewGroup.LayoutParams lp = staminaFill.getLayoutParams();
-                  int max = dp(214);
+                  int max = dp(146);
                   int w = (int)(max * (ren.stamina / 100f));
                   if (w < 0) w = 0;
                   lp.width = w;
@@ -873,12 +871,11 @@ jobs:
               }
 
               private void updateTimerUi() {
-                  if (txtTimer == null || txtPhase == null) return;
+                  if (txtTimer == null) return;
                   long left = ren.getTimeLeftMs();
                   int totalSec = (int)(left / 1000L);
                   int min = totalSec / 60;
                   int sec = totalSec % 60;
-                  txtPhase.setText(ren.getPhaseName());
                   txtTimer.setText(String.format(Locale.US, "%d:%02d", min, sec));
               }
 
@@ -945,9 +942,7 @@ jobs:
 
               @SuppressLint("ClickableViewAccessibility")
               private void setupRunButton(View btn) {
-                  btn.setOnClickListener(v -> {
-                      ren.toggleRun();
-                  });
+                  btn.setOnClickListener(v -> ren.toggleRun());
               }
 
               @Override
@@ -975,5 +970,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Enjoer_6.3_FixedTurn_Run_Stamina_APK
+          name: Enjoer_6.4_FinalFix_APK
           path: app/build/outputs/apk/debug/app-debug.apk
