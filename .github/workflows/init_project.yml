@@ -94,43 +94,42 @@ jobs:
           }
 
           fn setup(mut cmd: Commands, mut mesh: ResMut<Assets<Mesh>>, mut mat: ResMut<Assets<StandardMaterial>>) {
-              // Оптимизация: простое освещение без теней
-              cmd.insert_resource(AmbientLight { color: Color::srgb(0.5, 0.5, 0.6), brightness: 500.0 });
+              cmd.insert_resource(AmbientLight { color: Color::srgb(0.6, 0.6, 0.7), brightness: 600.0 });
               cmd.spawn(DirectionalLightBundle { 
-                  directional_light: DirectionalLight { illuminance: 4000., shadows_enabled: false, ..default() }, 
+                  directional_light: DirectionalLight { illuminance: 3000., shadows_enabled: false, ..default() }, 
                   transform: Transform::from_xyz(5., 10., 3.).looking_at(Vec3::ZERO, Vec3::Y), ..default() 
               });
 
-              let ground_mat = mat.add(Color::srgb(0.2, 0.2, 0.2));
-              cmd.spawn(PbrBundle { mesh: mesh.add(Plane3d::default().mesh().size(500., 500.)), material: ground_mat, ..default() });
+              cmd.spawn(PbrBundle { 
+                  mesh: mesh.add(Plane3d::default().mesh().size(1000., 1000.)), 
+                  material: mat.add(Color::srgb(0.15, 0.15, 0.15)), ..default() 
+              });
               
-              let gray = mat.add(Color::srgb(0.7, 0.7, 0.7));
+              let gray = mat.add(Color::srgb(0.8, 0.8, 0.8));
 
-              // Персонаж. Корень на высоте 2.0 (центр торса), чтобы ноги касались земли (y=0)
-              cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., 2.0, 0.)), Player { walk: 0. }))
+              // Спавним на y=3.0. Торсо(2) + Ноги(2).
+              cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., 3.0, 0.)), Player { walk: 0. }))
               .with_children(|p| {
                   p.spawn((SpatialBundle::default(), Pivot)).with_children(|piv| {
-                      piv.spawn(Camera3dBundle { transform: Transform::from_xyz(0., 4., 10.).looking_at(Vec3::Y * 1.5, Vec3::Y), ..default() });
+                      piv.spawn(Camera3dBundle { transform: Transform::from_xyz(0., 5., 12.).looking_at(Vec3::Y * 1.5, Vec3::Y), ..default() });
                   });
                   p.spawn((SpatialBundle::default(), Model)).with_children(|m| {
-                      // Торсо: 2.0 ширина, 2.0 высота, 1.0 глубина
+                      // Торс 2x2x1
                       m.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(2.0, 2.0, 1.0)), material: gray.clone(), ..default() });
-                      // Голова: 1.0 куб сверху
+                      // Голова 1x1x1
                       m.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(1.0, 1.0, 1.0)), material: gray.clone(), transform: Transform::from_xyz(0., 1.5, 0.), ..default() });
                       
                       let mut limb = |p: &mut ChildBuilder, a: bool, l: bool, pos: Vec3| {
-                          let size = Vec3::new(1.0, 2.0, 1.0);
+                          // Конечности 1x2x1
                           p.spawn((SpatialBundle::from_transform(Transform::from_translation(pos)), if a { Limb::Arm(if l{1.}else{-1.}) } else { Limb::Leg(if l{1.}else{-1.}) }))
                           .with_children(|c| { 
-                              c.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(size.x, size.y, size.z)), material: gray.clone(), transform: Transform::from_xyz(0., -1.0, 0.), ..default() }); 
+                              c.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(1.0, 2.0, 1.0)), material: gray.clone(), transform: Transform::from_xyz(0., -1.0, 0.), ..default() }); 
                           });
                       };
-                      // Руки (по бокам торса)
-                      limb(m, true, true, Vec3::new(-1.5, 1.0, 0.));
-                      limb(m, true, false, Vec3::new(1.5, 1.0, 0.));
-                      // Ноги (под торсом)
-                      limb(m, false, true, Vec3::new(-0.5, -1.0, 0.));
-                      limb(m, false, false, Vec3::new(0.5, -1.0, 0.));
+                      limb(m, true, true, Vec3::new(-1.5, 1.0, 0.));   // Левая рука
+                      limb(m, true, false, Vec3::new(1.5, 1.0, 0.));  // Правая рука
+                      limb(m, false, true, Vec3::new(-0.5, -1.0, 0.)); // Левая нога
+                      limb(m, false, false, Vec3::new(0.5, -1.0, 0.)); // Правая нога
                   });
               });
           }
@@ -168,14 +167,13 @@ jobs:
               for (mut pt, mut pl) in q_pl.iter_mut() {
                   let mut dir = rot_y * Vec3::NEG_Z * ctrl.move_dir.y + rot_y * Vec3::X * ctrl.move_dir.x;
                   dir.y = 0.; 
-                  let mag = dir.length();
-                  if mag > 0.1 { 
-                      dir = dir.normalize(); 
-                      pt.translation += dir * 10.0 * dt;
+                  if dir.length() > 0.1 { 
+                      let d = dir.normalize();
+                      pt.translation += d * 12.0 * dt;
                       for mut m in q_mod.iter_mut() { 
-                          m.rotation = m.rotation.slerp(Quat::from_rotation_y(f32::atan2(dir.x, dir.z)), 15. * dt); 
+                          m.rotation = m.rotation.slerp(Quat::from_rotation_y(f32::atan2(d.x, d.z)), 15. * dt); 
                       }
-                      pl.walk += dt * 10. * mag;
+                      pl.walk += dt * 12.0;
                   } else {
                       pl.walk = 0.;
                   }
@@ -187,8 +185,8 @@ jobs:
                   let w = pl.walk.sin();
                   for (l, mut t) in q_l.iter_mut() {
                       match l { 
-                          Limb::Arm(s) => t.rotation = Quat::from_rotation_x(w * 0.6 * s), 
-                          Limb::Leg(s) => t.rotation = Quat::from_rotation_x(-w * 0.8 * s) 
+                          Limb::Arm(s) => t.rotation = Quat::from_rotation_x(w * 0.7 * s), 
+                          Limb::Leg(s) => t.rotation = Quat::from_rotation_x(-w * 0.7 * s) 
                       }
                   }
               }
@@ -196,7 +194,7 @@ jobs:
 
           fn style(mut ctx: EguiContexts) {
               let mut v = egui::Visuals::dark();
-              v.window_fill = egui::Color32::from_rgb(10, 10, 10);
+              v.window_fill = egui::Color32::from_rgb(15, 15, 15);
               ctx.ctx_mut().set_visuals(v);
           }
 
@@ -204,9 +202,9 @@ jobs:
               egui::CentralPanel::default().show(ctx.ctx_mut(), |ui| {
                   ui.vertical_centered(|ui| {
                       ui.add_space(100.);
-                      ui.heading(egui::RichText::new("ENJOER").size(80.).strong());
-                      ui.add_space(50.);
-                      if ui.add_sized([300., 80.], egui::Button::new("PLAY")).clicked() { next.set(GameState::Play); }
+                      ui.heading(egui::RichText::new("ENJOER").size(80.).strong().color(egui::Color32::LIGHT_BLUE));
+                      ui.add_space(60.);
+                      if ui.add_sized([250., 80.], egui::Button::new("PLAY")).clicked() { next.set(GameState::Play); }
                   });
               });
           }
@@ -218,20 +216,19 @@ jobs:
                   if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(80., 40.)), egui::Button::new("Exit")).clicked() { 
                       next.set(GameState::Menu); 
                   }
-
                   let p = ui.painter();
                   if let (Some(c), Some(cur)) = (ctrl.joy_c, ctrl.joy_cur) {
-                      p.circle_filled(egui::pos2(c.x, c.y), 60., egui::Color32::from_black_alpha(100));
+                      p.circle_filled(egui::pos2(c.x, c.y), 60., egui::Color32::from_black_alpha(120));
                       p.circle_filled(egui::pos2(cur.x, cur.y), 25., egui::Color32::WHITE);
                   } else { 
-                      p.circle_filled(egui::pos2(120., h - 120.), 60., egui::Color32::from_black_alpha(50)); 
+                      p.circle_filled(egui::pos2(120., h - 120.), 60., egui::Color32::from_black_alpha(60)); 
                   }
               });
           }
           EOF
 
       - name: Setup Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
 
       - name: Setup NDK/SDK
