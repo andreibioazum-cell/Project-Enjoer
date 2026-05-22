@@ -32,12 +32,16 @@ jobs:
           crate-type = ["cdylib"]
 
           [dependencies]
+          # Добавлены критически важные фичи: bevy_state, bevy_color, bevy_scene
           bevy = { version = "0.14.0", default-features = false, features = [
               "bevy_pbr",
               "bevy_render",
               "bevy_winit",
               "bevy_core_pipeline",
               "bevy_asset",
+              "bevy_state",
+              "bevy_color",
+              "bevy_scene",
               "multi_threaded",
               "x11",
               "default_font",
@@ -114,9 +118,7 @@ jobs:
               cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., 3.4, 0.)), Player { vel: 0., ground: false, walk: 0. }))
               .with_children(|p| {
                   p.spawn((SpatialBundle::default(), Pivot)).with_children(|piv| {
-                      piv.spawn((
-                          Camera3dBundle { transform: Transform::from_xyz(0., 3., 12.).looking_at(Vec3::Y * 2., Vec3::Y), ..default() },
-                      ));
+                      piv.spawn(Camera3dBundle { transform: Transform::from_xyz(0., 3., 12.).looking_at(Vec3::Y * 2., Vec3::Y), ..default() });
                   });
                   p.spawn((SpatialBundle::default(), Model)).with_children(|m| {
                       m.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(1.4, 1.8, 0.8)), material: torso, ..default() });
@@ -234,7 +236,6 @@ jobs:
       - name: Setup NDK/SDK
         run: |
           yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
-          # ДОБАВЛЕНО "platforms;android-30", так как cargo-apk требует её
           ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "ndk;25.2.9519653" "platforms;android-30" "platforms;android-33" "build-tools;33.0.2"
 
       - name: Setup Rust
