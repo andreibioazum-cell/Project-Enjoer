@@ -32,7 +32,6 @@ jobs:
           crate-type = ["cdylib"]
 
           [dependencies]
-          # Оптимизированный набор фичей Bevy для быстрой сборки
           bevy = { version = "0.14.0", default-features = false, features = [
               "bevy_pbr",
               "bevy_render",
@@ -156,14 +155,13 @@ jobs:
 
           fn move_player(time: Res<Time>, ctrl: Res<Controls>, mut q_pl: Query<(&mut Transform, &mut Player)>, mut q_piv: Query<&mut Transform, (With<Pivot>, Without<Player>)>, mut q_mod: Query<&mut Transform, (With<Model>, Without<Player>, Without<Pivot>)>) {
               let Ok(mut piv_trans) = q_piv.get_single_mut() else { return };
+              let (y, p, _) = piv_trans.rotation.to_euler(EulerRot::YXZ);
               
               if ctrl.look != Vec2::ZERO {
-                  let (y, p, _) = piv_trans.rotation.to_euler(EulerRot::YXZ);
                   piv_trans.rotation = Quat::from_euler(EulerRot::YXZ, y - ctrl.look.x * 0.005, (p - ctrl.look.y * 0.005).clamp(-0.8, 0.5), 0.);
               }
 
-              let py = piv_trans.rotation.to_euler(EulerRot::YXZ).0;
-              let rot_y = Quat::from_rotation_y(py);
+              let rot_y = Quat::from_rotation_y(y);
               
               for (mut pt, mut pl) in q_pl.iter_mut() {
                   let mut dir = rot_y * Vec3::NEG_Z * ctrl.move_dir.y + rot_y * Vec3::X * ctrl.move_dir.x;
@@ -236,7 +234,8 @@ jobs:
       - name: Setup NDK/SDK
         run: |
           yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
-          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "ndk;25.2.9519653" "platforms;android-33" "build-tools;33.0.2"
+          # ДОБАВЛЕНО "platforms;android-30", так как cargo-apk требует её
+          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "ndk;25.2.9519653" "platforms;android-30" "platforms;android-33" "build-tools;33.0.2"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -252,8 +251,7 @@ jobs:
           cargo install cargo-apk
           cd enjoer_game
           export ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/25.2.9519653
-          export ANDROID_SDK_ROOT=${ANDROID_HOME}
-          # Используем LLD линкер для мега-ускорения
+          export ANDROID_HOME=${ANDROID_HOME}
           export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
           cargo apk build --release
 
