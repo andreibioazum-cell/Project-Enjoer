@@ -32,7 +32,6 @@ jobs:
           crate-type = ["cdylib"]
 
           [dependencies]
-          # Добавлены критически важные фичи: bevy_state, bevy_color, bevy_scene
           bevy = { version = "0.14.0", default-features = false, features = [
               "bevy_pbr",
               "bevy_render",
@@ -216,12 +215,19 @@ jobs:
               let Ok(win) = q_win.get_single() else { return };
               let (w, h) = (win.width(), win.height());
               egui::Area::new(egui::Id::new("h")).fixed_pos(egui::pos2(0., 0.)).show(ctx.ctx_mut(), |ui| {
+                  // Исправление E0502: сначала используем ui для кнопок (mutable)
+                  if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(80., 40.)), egui::Button::new(egui::RichText::new("Exit").color(egui::Color32::RED))).clicked() { 
+                      next.set(GameState::Menu); 
+                  }
+
+                  // Затем берем painter (immutable borrow)
                   let p = ui.painter();
-                  if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(80., 40.)), egui::Button::new(egui::RichText::new("Exit").color(egui::Color32::RED))).clicked() { next.set(GameState::Menu); }
                   if let (Some(c), Some(cur)) = (ctrl.joy_c, ctrl.joy_cur) {
                       p.circle_filled(egui::pos2(c.x, c.y), 60., egui::Color32::from_black_alpha(100));
                       p.circle_filled(egui::pos2(cur.x, cur.y), 25., egui::Color32::from_white_alpha(200));
-                  } else { p.circle_filled(egui::pos2(120., h - 120.), 60., egui::Color32::from_black_alpha(50)); }
+                  } else { 
+                      p.circle_filled(egui::pos2(120., h - 120.), 60., egui::Color32::from_black_alpha(50)); 
+                  }
                   let jc = egui::pos2(w - 120., h - 120.);
                   p.circle_filled(jc, 60., if ctrl.jump { egui::Color32::from_white_alpha(200) } else { egui::Color32::from_black_alpha(100) });
                   p.text(jc, egui::Align2::CENTER_CENTER, "JUMP", egui::FontId::proportional(20.), egui::Color32::WHITE);
