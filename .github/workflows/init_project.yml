@@ -1,974 +1,262 @@
-name: Enjoer_6.4_FinalFix
-on:
-  push:
-  workflow_dispatch:
+name: Build APK
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+
+      - name: Install LLD Linker
+        run: sudo apt-get update && sudo apt-get install -y lld
+
+      - name: Generate Project
+        run: |
+          mkdir enjoer_game && cd enjoer_game
+          keytool -genkey -v -keystore release.keystore -alias mykey -keyalg RSA -keysize 2048 -validity 10000 -storepass password -keypass password -dname "CN=E,O=E,C=US"
+          
+          cat << 'EOF' > Cargo.toml
+          [package]
+          name = "enjoer_game"
+          version = "7.0.0"
+          edition = "2021"
+
+          [lib]
+          name = "enjoer_game"
+          crate-type = ["cdylib"]
+
+          [dependencies]
+          # Оптимизированный набор фичей Bevy для быстрой сборки
+          bevy = { version = "0.14.0", default-features = false, features = [
+              "bevy_pbr",
+              "bevy_render",
+              "bevy_winit",
+              "bevy_core_pipeline",
+              "bevy_asset",
+              "multi_threaded",
+              "x11",
+              "default_font",
+              "tonemapping_luts",
+              "android_shared_stdcxx"
+          ] }
+          bevy_egui = "0.28.0"
+
+          [package.metadata.android]
+          apk_name = "EnjoerGame"
+          build_targets = ["aarch64-linux-android"]
+          min_sdk_version = 24
+          target_sdk_version = 33
+          strip = "strip"
+          fullscreen = true
+
+          [package.metadata.android.activity_attributes]
+          "android:screenOrientation" = "sensorLandscape"
+          "android:resizeableActivity" = "false"
+
+          [package.metadata.android.signing.release]
+          path = "release.keystore"
+          keystore_password = "password"
+          key_alias = "mykey"
+          key_password = "password"
+
+          [profile.release]
+          opt-level = 3
+          lto = "thin" 
+          codegen-units = 1
+          EOF
+          
+          mkdir src
+          cat << 'EOF' > src/lib.rs
+          use bevy::prelude::*;
+          use bevy::window::{PrimaryWindow, WindowMode};
+          use bevy_egui::{egui, EguiContexts, EguiPlugin};
+
+          #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
+          enum GameState { #[default] Menu, Play }
+
+          #[derive(Component)] struct Player { vel: f32, ground: bool, walk: f32 }
+          #[derive(Component)] struct Pivot;
+          #[derive(Component)] struct Model;
+          #[derive(Component)] enum Limb { Arm(f32), Leg(f32) }
+
+          #[derive(Resource, Default)]
+          struct Controls { move_dir: Vec2, look: Vec2, jump: bool, joy_c: Option<Vec2>, joy_cur: Option<Vec2> }
+
+          #[bevy_main]
+          fn main() {
+              App::new()
+                  .add_plugins(DefaultPlugins.set(WindowPlugin {
+                      primary_window: Some(Window { title: "Enjoer".into(), mode: WindowMode::BorderlessFullscreen, ..default() }), ..default()
+                  }))
+                  .insert_resource(Msaa::Off)
+                  .add_plugins(EguiPlugin)
+                  .init_state::<GameState>()
+                  .init_resource::<Controls>()
+                  .add_systems(Startup, setup)
+                  .add_systems(Update, style)
+                  .add_systems(Update, menu.run_if(in_state(GameState::Menu)))
+                  .add_systems(Update, (touch, hud, move_player, animate).run_if(in_state(GameState::Play)))
+                  .run();
+          }
+
+          fn setup(mut cmd: Commands, mut mesh: ResMut<Assets<Mesh>>, mut mat: ResMut<Assets<StandardMaterial>>) {
+              cmd.insert_resource(AmbientLight { color: Color::srgb(0.16, 0.20, 0.26), brightness: 400.0 });
+              cmd.spawn(DirectionalLightBundle { directional_light: DirectionalLight { illuminance: 8000., shadows_enabled: true, ..default() }, transform: Transform::from_xyz(5., 10., 3.).looking_at(Vec3::ZERO, Vec3::Y), ..default() });
+              cmd.spawn(PbrBundle { mesh: mesh.add(Plane3d::default().mesh().size(200., 200.)), material: mat.add(Color::srgb(0.07, 0.12, 0.2)), ..default() });
+              
+              let (skin, torso, legs) = (mat.add(Color::srgb(1., 0.82, 0.6)), mat.add(Color::srgb(0.1, 0.4, 1.)), mat.add(Color::srgb(0.1, 0.8, 0.2)));
+
+              cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., 3.4, 0.)), Player { vel: 0., ground: false, walk: 0. }))
+              .with_children(|p| {
+                  p.spawn((SpatialBundle::default(), Pivot)).with_children(|piv| {
+                      piv.spawn((
+                          Camera3dBundle { transform: Transform::from_xyz(0., 3., 12.).looking_at(Vec3::Y * 2., Vec3::Y), ..default() },
+                      ));
+                  });
+                  p.spawn((SpatialBundle::default(), Model)).with_children(|m| {
+                      m.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(1.4, 1.8, 0.8)), material: torso, ..default() });
+                      m.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(1.15, 1.15, 1.15)), material: skin.clone(), transform: Transform::from_xyz(0., 1.475, 0.), ..default() });
+                      let mut limb = |p: &mut ChildBuilder, m: Handle<StandardMaterial>, a: bool, l: bool, s: Vec3, pos: Vec3| {
+                          p.spawn((SpatialBundle::from_transform(Transform::from_translation(pos)), if a { Limb::Arm(if l{1.}else{-1.}) } else { Limb::Leg(if l{1.}else{-1.}) }))
+                          .with_children(|c| { c.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(s.x, s.y, s.z)), material: m, transform: Transform::from_xyz(0., -s.y/2., 0.), ..default() }); });
+                      };
+                      limb(m, skin.clone(), true, true, Vec3::new(0.55, 1.6, 0.55), Vec3::new(-0.975, 0.8, 0.));
+                      limb(m, skin, true, false, Vec3::new(0.55, 1.6, 0.55), Vec3::new(0.975, 0.8, 0.));
+                      limb(m, legs.clone(), false, true, Vec3::new(0.7, 1.6, 0.7), Vec3::new(-0.35, -0.9, 0.));
+                      limb(m, legs, false, false, Vec3::new(0.7, 1.6, 0.7), Vec3::new(0.35, -0.9, 0.));
+                  });
+              });
+          }
+
+          fn touch(touches: Res<Touches>, q_win: Query<&Window, With<PrimaryWindow>>, mut ctrl: ResMut<Controls>) {
+              ctrl.move_dir = Vec2::ZERO; ctrl.look = Vec2::ZERO; ctrl.jump = false;
+              let Ok(w) = q_win.get_single() else { return };
+              let mut joy = false;
+              for t in touches.iter() {
+                  let p = t.position();
+                  if p.x < w.width() / 2. {
+                      joy = true;
+                      if ctrl.joy_c.is_none() || touches.just_pressed(t.id()) { ctrl.joy_c = Some(p); }
+                      ctrl.joy_cur = Some(p);
+                      ctrl.move_dir = ((p - ctrl.joy_c.unwrap()) / 80.).clamp_length_max(1.);
+                      ctrl.move_dir.y = -ctrl.move_dir.y;
+                  } else {
+                      if p.distance(Vec2::new(w.width() - 120., w.height() - 120.)) < 80. { ctrl.jump = true; } 
+                      else { ctrl.look += t.delta(); }
+                  }
+              }
+              if !joy { ctrl.joy_c = None; ctrl.joy_cur = None; }
+          }
+
+          fn move_player(time: Res<Time>, ctrl: Res<Controls>, mut q_pl: Query<(&mut Transform, &mut Player)>, mut q_piv: Query<&mut Transform, (With<Pivot>, Without<Player>)>, mut q_mod: Query<&mut Transform, (With<Model>, Without<Player>, Without<Pivot>)>) {
+              let Ok(mut piv_trans) = q_piv.get_single_mut() else { return };
+              
+              if ctrl.look != Vec2::ZERO {
+                  let (y, p, _) = piv_trans.rotation.to_euler(EulerRot::YXZ);
+                  piv_trans.rotation = Quat::from_euler(EulerRot::YXZ, y - ctrl.look.x * 0.005, (p - ctrl.look.y * 0.005).clamp(-0.8, 0.5), 0.);
+              }
+
+              let py = piv_trans.rotation.to_euler(EulerRot::YXZ).0;
+              let rot_y = Quat::from_rotation_y(py);
+              
+              for (mut pt, mut pl) in q_pl.iter_mut() {
+                  let mut dir = rot_y * Vec3::NEG_Z * ctrl.move_dir.y + rot_y * Vec3::X * ctrl.move_dir.x;
+                  dir.y = 0.; let mag = dir.length();
+                  if mag > 0.1 { dir = dir.normalize(); }
+
+                  if pt.translation.y <= 3.4 { pt.translation.y = 3.4; pl.ground = true; pl.vel = 0.; } 
+                  else { pl.ground = false; pl.vel -= 25. * time.delta_seconds(); }
+                  
+                  if ctrl.jump && pl.ground { pl.vel = 12.0; }
+                  pt.translation += dir * 12. * time.delta_seconds();
+                  pt.translation.y += pl.vel * time.delta_seconds();
+
+                  if mag > 0.1 {
+                      for mut m in q_mod.iter_mut() { m.rotation = m.rotation.slerp(Quat::from_rotation_y(f32::atan2(dir.x, dir.z)), 15. * time.delta_seconds()); }
+                      if pl.ground { pl.walk += time.delta_seconds() * 10. * mag; }
+                  } else { pl.walk = 0.; }
+              }
+          }
+
+          fn animate(q_pl: Query<&Player>, mut q_l: Query<(&Limb, &mut Transform)>) {
+              if let Ok(pl) = q_pl.get_single() {
+                  let jsp = if !pl.ground { 2.5 } else { 0. };
+                  let w = pl.walk.sin();
+                  for (l, mut t) in q_l.iter_mut() {
+                      match l { Limb::Arm(s) => t.rotation = Quat::from_rotation_x(w * 0.6 * s - jsp), Limb::Leg(s) => t.rotation = Quat::from_rotation_x(-w * 0.5 * s) }
+                  }
+              }
+          }
+
+          fn style(mut ctx: EguiContexts) {
+              let mut v = egui::Visuals::dark();
+              v.window_fill = egui::Color32::from_rgb(2, 5, 10);
+              v.panel_fill = egui::Color32::from_rgb(2, 5, 10);
+              ctx.ctx_mut().set_visuals(v);
+          }
+
+          fn menu(mut ctx: EguiContexts, mut next: ResMut<NextState<GameState>>) {
+              egui::CentralPanel::default().show(ctx.ctx_mut(), |ui| {
+                  ui.vertical_centered(|ui| {
+                      ui.add_space(80.);
+                      ui.heading(egui::RichText::new("ENJOER").size(70.).color(egui::Color32::from_rgb(0, 191, 255)).strong());
+                      ui.add_space(50.);
+                      if ui.add_sized([300., 80.], egui::Button::new(egui::RichText::new("PLAY").size(30.).color(egui::Color32::WHITE))).clicked() { next.set(GameState::Play); }
+                  });
+              });
+          }
+
+          fn hud(mut ctx: EguiContexts, mut next: ResMut<NextState<GameState>>, ctrl: Res<Controls>, q_win: Query<&Window, With<PrimaryWindow>>) {
+              let Ok(win) = q_win.get_single() else { return };
+              let (w, h) = (win.width(), win.height());
+              egui::Area::new(egui::Id::new("h")).fixed_pos(egui::pos2(0., 0.)).show(ctx.ctx_mut(), |ui| {
+                  let p = ui.painter();
+                  if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(80., 40.)), egui::Button::new(egui::RichText::new("Exit").color(egui::Color32::RED))).clicked() { next.set(GameState::Menu); }
+                  if let (Some(c), Some(cur)) = (ctrl.joy_c, ctrl.joy_cur) {
+                      p.circle_filled(egui::pos2(c.x, c.y), 60., egui::Color32::from_black_alpha(100));
+                      p.circle_filled(egui::pos2(cur.x, cur.y), 25., egui::Color32::from_white_alpha(200));
+                  } else { p.circle_filled(egui::pos2(120., h - 120.), 60., egui::Color32::from_black_alpha(50)); }
+                  let jc = egui::pos2(w - 120., h - 120.);
+                  p.circle_filled(jc, 60., if ctrl.jump { egui::Color32::from_white_alpha(200) } else { egui::Color32::from_black_alpha(100) });
+                  p.text(jc, egui::Align2::CENTER_CENTER, "JUMP", egui::FontId::proportional(20.), egui::Color32::WHITE);
+              });
+          }
+          EOF
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with: { distribution: 'temurin', java-version: '17' }
+
+      - name: Setup NDK/SDK
+        run: |
+          yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
+          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "ndk;25.2.9519653" "platforms;android-33" "build-tools;33.0.2"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with: { targets: aarch64-linux-android }
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
         with:
-          distribution: temurin
-          java-version: '17'
+          work-dir: enjoer_game
 
-      - name: Install Android SDK components
+      - name: Build APK
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
-
-      - name: Create Android project
-        run: |
-          mkdir -p app/src/main/java/com/enjoer/game
-          mkdir -p app/src/main/res/layout
-          mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/drawable
-
-          cat <<EOF > gradle.properties
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          android.enableJetifier=true
-          EOF
-
-          cat <<EOF > settings.gradle
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-
-          rootProject.name = "Enjoer"
-          include(":app")
-          EOF
-
-          cat <<EOF > build.gradle
-          plugins {
-              id 'com.android.application' version '8.2.2' apply false
-          }
-          EOF
-
-          cat <<EOF > app/build.gradle
-          plugins {
-              id 'com.android.application'
-          }
-
-          android {
-              namespace 'com.enjoer.game'
-              compileSdk 34
-
-              defaultConfig {
-                  applicationId "com.enjoer.game"
-                  minSdk 24
-                  targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
-              }
-
-              buildTypes {
-                  debug { minifyEnabled false }
-                  release {
-                      minifyEnabled false
-                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-                  }
-              }
-
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-          }
-
-          dependencies {
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-          }
-          EOF
-
-          cat <<EOF > app/proguard-rules.pro
-          # empty
-          EOF
-
-          cat <<EOF > local.properties
-          sdk.dir=$ANDROID_HOME
-          EOF
-
-          cat <<EOF > app/src/main/AndroidManifest.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application
-                  android:allowBackup="true"
-                  android:label="Enjoer 6.4"
-                  android:supportsRtl="true"
-                  android:theme="@style/AppTheme">
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true"
-                      android:screenOrientation="landscape">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
-
-          cat <<EOF > app/src/main/res/values/themes.xml
-          <resources>
-              <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
-                  <item name="android:windowFullscreen">true</item>
-              </style>
-          </resources>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/joy_base.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#AA202020"/>
-              <stroke android:width="2dp" android:color="#707070"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/joy_stick.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#BEBEBE"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/run_btn.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#CC2A2A2A"/>
-              <stroke android:width="2dp" android:color="#9A9A9A"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/run_btn_active.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#E0E0E0"/>
-              <stroke android:width="2dp" android:color="#5A5A5A"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/stamina_bg.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-              <corners android:radius="6dp"/>
-              <solid android:color="#AA111111"/>
-              <stroke android:width="2dp" android:color="#666666"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/stamina_fill.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-              <corners android:radius="4dp"/>
-              <solid android:color="#C8C8C8"/>
-          </shape>
-          EOF
-
-          cat <<EOF > app/src/main/res/drawable/time_panel.xml
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-              <corners android:radius="8dp"/>
-              <solid android:color="#98101010"/>
-              <stroke android:width="2dp" android:color="#5C5C5C"/>
-          </shape>
-          EOF
-
-          cat <<'EOF' > app/src/main/res/layout/activity_main.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:background="#050505">
-
-              <android.opengl.GLSurfaceView
-                  android:id="@+id/gl_view"
-                  android:layout_width="match_parent"
-                  android:layout_height="match_parent"/>
-
-              <RelativeLayout
-                  android:layout_width="match_parent"
-                  android:layout_height="match_parent">
-
-                  <View
-                      android:id="@+id/look_zone"
-                      android:layout_width="match_parent"
-                      android:layout_height="match_parent"/>
-
-                  <LinearLayout
-                      android:layout_width="wrap_content"
-                      android:layout_height="wrap_content"
-                      android:layout_centerHorizontal="true"
-                      android:layout_marginTop="14dp"
-                      android:orientation="vertical"
-                      android:gravity="center"
-                      android:background="@drawable/time_panel"
-                      android:paddingLeft="12dp"
-                      android:paddingTop="6dp"
-                      android:paddingRight="12dp"
-                      android:paddingBottom="6dp">
-
-                      <TextView
-                          android:id="@+id/txt_timer"
-                          android:layout_width="wrap_content"
-                          android:layout_height="wrap_content"
-                          android:text="1:10"
-                          android:textColor="#FFFFFF"
-                          android:textStyle="bold"
-                          android:textSize="18sp"/>
-                  </LinearLayout>
-
-                  <FrameLayout
-                      android:id="@+id/joy_base"
-                      android:layout_width="140dp"
-                      android:layout_height="140dp"
-                      android:layout_alignParentBottom="true"
-                      android:layout_alignParentStart="true"
-                      android:layout_marginStart="40dp"
-                      android:layout_marginBottom="40dp"
-                      android:background="@drawable/joy_base"/>
-
-                  <View
-                      android:id="@+id/joy_stick"
-                      android:layout_width="60dp"
-                      android:layout_height="60dp"
-                      android:layout_alignLeft="@id/joy_base"
-                      android:layout_alignTop="@id/joy_base"
-                      android:layout_marginLeft="40dp"
-                      android:layout_marginTop="40dp"
-                      android:background="@drawable/joy_stick"/>
-
-                  <Button
-                      android:id="@+id/btn_run"
-                      android:layout_width="92dp"
-                      android:layout_height="92dp"
-                      android:layout_alignParentEnd="true"
-                      android:layout_centerVertical="true"
-                      android:layout_marginEnd="30dp"
-                      android:background="@drawable/run_btn"
-                      android:text="RUN"
-                      android:textColor="#E0E0E0"
-                      android:textStyle="bold"
-                      android:textSize="18sp"/>
-
-                  <LinearLayout
-                      android:layout_width="150dp"
-                      android:layout_height="wrap_content"
-                      android:layout_alignParentStart="true"
-                      android:layout_alignParentBottom="true"
-                      android:layout_marginStart="28dp"
-                      android:layout_marginBottom="188dp"
-                      android:orientation="vertical">
-
-                      <TextView
-                          android:layout_width="wrap_content"
-                          android:layout_height="wrap_content"
-                          android:text="STAMINA"
-                          android:textColor="#D0D0D0"
-                          android:textSize="11sp"
-                          android:textStyle="bold"
-                          android:layout_marginBottom="4dp"/>
-
-                      <FrameLayout
-                          android:id="@+id/stamina_bg"
-                          android:layout_width="150dp"
-                          android:layout_height="16dp"
-                          android:background="@drawable/stamina_bg"
-                          android:padding="2dp">
-
-                          <View
-                              android:id="@+id/stamina_fill"
-                              android:layout_width="146dp"
-                              android:layout_height="match_parent"
-                              android:background="@drawable/stamina_fill"/>
-                      </FrameLayout>
-                  </LinearLayout>
-
-              </RelativeLayout>
-          </FrameLayout>
-          EOF
-
-          cat <<EOF > app/src/main/java/com/enjoer/game/Block.java
-          package com.enjoer.game;
-
-          public class Block {
-              public float x, y, z, sx, sy, sz, r, g, b;
-
-              public Block(float x, float y, float z, float sx, float sy, float sz, float r, float g, float b) {
-                  this.x = x;
-                  this.y = y;
-                  this.z = z;
-                  this.sx = sx;
-                  this.sy = sy;
-                  this.sz = sz;
-                  this.r = r;
-                  this.g = g;
-                  this.b = b;
-              }
-
-              public float minX(){ return x - sx / 2f; }
-              public float maxX(){ return x + sx / 2f; }
-              public float minY(){ return y - sy / 2f; }
-              public float maxY(){ return y + sy / 2f; }
-              public float minZ(){ return z - sz / 2f; }
-              public float maxZ(){ return z + sz / 2f; }
-          }
-          EOF
-
-          cat <<'EOF' > app/src/main/java/com/enjoer/game/GameRenderer.java
-          package com.enjoer.game;
-
-          import android.opengl.GLES30;
-          import android.opengl.GLSurfaceView;
-          import android.opengl.Matrix;
-          import java.nio.ByteBuffer;
-          import java.nio.ByteOrder;
-          import java.nio.FloatBuffer;
-          import java.util.concurrent.CopyOnWriteArrayList;
-          import javax.microedition.khronos.egl.EGLConfig;
-          import javax.microedition.khronos.opengles.GL10;
-
-          public class GameRenderer implements GLSurfaceView.Renderer {
-              private final float[] proj = new float[16];
-              private final float[] view = new float[16];
-              private final float[] model = new float[16];
-
-              public float pX = 0f, pY = 1f, pZ = 0f;
-              public float rY = 180f, rX = 15f;
-              public float jX = 0f, jY = 0f;
-
-              public float bodyYaw = 180f;
-              public float walkTime = 0f;
-              public float moveAmount = 0f;
-
-              public boolean runEnabled = false;
-              public float stamina = 100f;
-              public long staminaCooldownUntil = 0L;
-              public boolean staminaBroken = false;
-
-              public boolean inLobby = false;
-              public long phaseEndTimeMs = 0L;
-
-              private int prog;
-              private FloatBuffer vBuf, nBuf;
-              public CopyOnWriteArrayList<Block> blocks = new CopyOnWriteArrayList<>();
-
-              private static final float FLOOR_Y = 0f;
-              private static final float PLAYER_RADIUS = 0.38f;
-              private static final float PLAYER_HEIGHT = 2.4f;
-              private static final float PLAYER_SCALE = 0.68f;
-
-              public static final long ROUND_MS = 70000L;
-              public static final long LOBBY_MS = 30000L;
-
-              public GameRenderer() {
-                  startRound();
-              }
-
-              public void toggleRun() {
-                  runEnabled = !runEnabled;
-              }
-
-              public void startRound() {
-                  inLobby = false;
-                  phaseEndTimeMs = System.currentTimeMillis() + ROUND_MS;
-                  pX = 0f; pY = 1f; pZ = 0f;
-                  bodyYaw = 180f;
-                  loadRoundMap();
-              }
-
-              public void startLobby() {
-                  inLobby = true;
-                  phaseEndTimeMs = System.currentTimeMillis() + LOBBY_MS;
-                  pX = 0f; pY = 1f; pZ = 0f;
-                  bodyYaw = 180f;
-                  loadLobbyMap();
-              }
-
-              public long getTimeLeftMs() {
-                  return Math.max(0L, phaseEndTimeMs - System.currentTimeMillis());
-              }
-
-              public void updatePhase() {
-                  if (System.currentTimeMillis() >= phaseEndTimeMs) {
-                      if (inLobby) startRound(); else startLobby();
-                  }
-              }
-
-              public void loadRoundMap() {
-                  blocks.clear();
-                  blocks.add(new Block(0, 1, -10, 6, 2, 6, 0.75f, 0.2f, 0.2f));
-                  blocks.add(new Block(-10, 1, -18, 5, 2, 5, 0.3f, 0.3f, 0.3f));
-                  blocks.add(new Block(10, 1, -18, 5, 2, 5, 0.45f, 0.45f, 0.45f));
-                  blocks.add(new Block(0, 1, -30, 12, 2, 12, 0.6f, 0.6f, 0.6f));
-                  blocks.add(new Block(-14, 1, -36, 5, 2, 5, 0.35f, 0.35f, 0.35f));
-                  blocks.add(new Block(14, 1, -36, 5, 2, 5, 0.5f, 0.5f, 0.5f));
-                  blocks.add(new Block(0, 4, -46, 8, 8, 8, 0.38f, 0.38f, 0.38f));
-                  blocks.add(new Block(-18, 3, -52, 6, 6, 6, 0.28f, 0.28f, 0.28f));
-                  blocks.add(new Block(18, 3, -52, 6, 6, 6, 0.72f, 0.72f, 0.72f));
-                  blocks.add(new Block(0, 2, 18, 14, 4, 6, 0.25f, 0.25f, 0.25f));
-                  blocks.add(new Block(-22, 2, 6, 6, 4, 12, 0.40f, 0.40f, 0.40f));
-                  blocks.add(new Block(22, 2, 6, 6, 4, 12, 0.55f, 0.55f, 0.55f));
-              }
-
-              public void loadLobbyMap() {
-                  blocks.clear();
-                  blocks.add(new Block(0, 1, -12, 10, 2, 10, 0.04f, 0.04f, 0.04f));
-                  blocks.add(new Block(-14, 1, -14, 8, 2, 8, 0.03f, 0.03f, 0.03f));
-                  blocks.add(new Block(14, 1, -14, 8, 2, 8, 0.03f, 0.03f, 0.03f));
-                  blocks.add(new Block(0, 1, 12, 18, 2, 8, 0.05f, 0.05f, 0.05f));
-                  blocks.add(new Block(-20, 2, 10, 4, 4, 4, 0.08f, 0.08f, 0.08f));
-                  blocks.add(new Block(20, 2, 10, 4, 4, 4, 0.08f, 0.08f, 0.08f));
-                  blocks.add(new Block(0, 3, 0, 6, 6, 6, 0.02f, 0.02f, 0.02f));
-              }
-
-              @Override
-              public void onSurfaceCreated(GL10 gl, EGLConfig config) {
-                  GLES30.glEnable(GLES30.GL_DEPTH_TEST);
-                  GLES30.glDisable(GLES30.GL_CULL_FACE);
-
-                  String vs =
-                          "#version 300 es\n" +
-                          "layout(location=0) in vec4 aP;" +
-                          "layout(location=1) in vec3 aN;" +
-                          "uniform mat4 uMVP;" +
-                          "uniform mat4 uM;" +
-                          "out vec3 vN;" +
-                          "out vec3 vP;" +
-                          "void main(){vP=vec3(uM*aP);vN=normalize(mat3(uM)*aN);gl_Position=uMVP*aP;}";
-
-                  String fs =
-                          "#version 300 es\nprecision highp float;" +
-                          "in vec3 vN;in vec3 vP;uniform vec3 camP;uniform vec4 uC;out vec4 fC;" +
-                          "float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}" +
-                          "vec3 sky(vec3 d){" +
-                          "float t=clamp(d.y*.5+.5,0.,1.);" +
-                          "vec3 base=mix(vec3(.01,.01,.01),vec3(.18,.18,.18),t);" +
-                          "if(d.y>0.05){" +
-                          "vec2 uv=d.xz/(d.y+.001);" +
-                          "vec2 id=floor(uv*80.);" +
-                          "float star=hash(id);" +
-                          "if(star>.978){" +
-                          "vec2 gv=fract(uv*80.)-.5;" +
-                          "float dist=length(gv);" +
-                          "float brightness=hash(id+.1);" +
-                          "float s=smoothstep(.15,.0,dist)*brightness;" +
-                          "base+=vec3(.85)*s;}}" +
-                          "return base;}" +
-                          "void main(){" +
-                          "vec3 n=normalize(vN),vD=normalize(camP-vP),lD=normalize(vec3(.3,1.,.15));" +
-                          "float diff=max(dot(n,lD),0.);" +
-                          "vec3 h=normalize(lD+vD);" +
-                          "float spec=pow(max(dot(n,h),0.),28.)*.15;" +
-                          "vec3 amb=vec3(.09,.09,.09);" +
-                          "vec3 fin=uC.rgb*(diff+amb)+spec;" +
-                          "float dist=length(camP-vP),fog=1.-exp(-dist*.013);" +
-                          "vec3 c=mix(fin,sky(vD),clamp(fog,0.,.92));" +
-                          "fC=vec4(c,uC.a);}";
-
-                  prog = mkProg(vs, fs);
-
-                  float[] vc = {
-                          -.5f,.5f,.5f,   -.5f,-.5f,.5f,   .5f,.5f,.5f,   .5f,-.5f,.5f,
-                          -.5f,.5f,-.5f,  -.5f,-.5f,-.5f,  .5f,.5f,-.5f,  .5f,-.5f,-.5f,
-                          -.5f,.5f,-.5f,  -.5f,.5f,.5f,    .5f,.5f,-.5f,  .5f,.5f,.5f,
-                          -.5f,-.5f,-.5f, -.5f,-.5f,.5f,   .5f,-.5f,-.5f, .5f,-.5f,.5f,
-                          -.5f,.5f,-.5f,  -.5f,-.5f,-.5f,  -.5f,.5f,.5f,  -.5f,-.5f,.5f,
-                           .5f,.5f,-.5f,   .5f,-.5f,-.5f,   .5f,.5f,.5f,   .5f,-.5f,.5f
-                  };
-                  float[] nc = {
-                          0,0,1, 0,0,1, 0,0,1, 0,0,1,
-                          0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1,
-                          0,1,0, 0,1,0, 0,1,0, 0,1,0,
-                          0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0,
-                          -1,0,0, -1,0,0, -1,0,0, -1,0,0,
-                          1,0,0, 1,0,0, 1,0,0, 1,0,0
-                  };
-
-                  vBuf = ByteBuffer.allocateDirect(vc.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
-                  vBuf.put(vc).position(0);
-                  nBuf = ByteBuffer.allocateDirect(nc.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
-                  nBuf.put(nc).position(0);
-
-                  if (inLobby) loadLobbyMap(); else loadRoundMap();
-              }
-
-              @Override
-              public void onSurfaceChanged(GL10 gl, int width, int height) {
-                  GLES30.glViewport(0, 0, width, height);
-                  Matrix.perspectiveM(proj, 0, 60f, (float) width / (float) height, 0.1f, 500f);
-              }
-
-              @Override
-              public void onDrawFrame(GL10 gl) {
-                  update();
-
-                  GLES30.glClearColor(0.01f, 0.01f, 0.01f, 1f);
-                  GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT | GLES30.GL_DEPTH_BUFFER_BIT);
-
-                  float[] cam = computeCamera();
-                  float camX = cam[0], camY = cam[1], camZ = cam[2];
-
-                  float targetX = pX, targetY = pY + 1.25f, targetZ = pZ;
-                  Matrix.setLookAtM(view, 0, camX, camY, camZ, targetX, targetY, targetZ, 0, 1, 0);
-
-                  GLES30.glUseProgram(prog);
-                  int uMVP = GLES30.glGetUniformLocation(prog, "uMVP");
-                  int uM = GLES30.glGetUniformLocation(prog, "uM");
-                  int uC = GLES30.glGetUniformLocation(prog, "uC");
-                  int camLoc = GLES30.glGetUniformLocation(prog, "camP");
-                  GLES30.glUniform3f(camLoc, camX, camY, camZ);
-
-                  GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 0, vBuf);
-                  GLES30.glEnableVertexAttribArray(0);
-                  GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 0, nBuf);
-                  GLES30.glEnableVertexAttribArray(1);
-
-                  Matrix.setIdentityM(model, 0);
-                  Matrix.translateM(model, 0, 0f, -0.05f, 0f);
-                  Matrix.scaleM(model, 0, 800f, 0.1f, 800f);
-                  draw(uM, uMVP, uC, 0.08f, 0.08f, 0.08f, 1f);
-
-                  for (Block b : blocks) {
-                      Matrix.setIdentityM(model, 0);
-                      Matrix.translateM(model, 0, b.x, b.y, b.z);
-                      Matrix.scaleM(model, 0, b.sx, b.sy, b.sz);
-                      draw(uM, uMVP, uC, b.r, b.g, b.b, 1f);
-                  }
-
-                  drawPlayer(uM, uMVP, uC);
-              }
-
-              private float[] computeCamera() {
-                  float yawRad = (float) Math.toRadians(rY);
-                  float pitchRad = (float) Math.toRadians(rX);
-
-                  float targetX = pX;
-                  float targetY = pY + 1.25f;
-                  float targetZ = pZ;
-
-                  float desiredDist = 8.3f;
-                  float minDist = 2.2f;
-
-                  float dirX = (float)(-Math.sin(yawRad) * Math.cos(pitchRad));
-                  float dirY = (float)( Math.sin(pitchRad));
-                  float dirZ = (float)( Math.cos(yawRad) * Math.cos(pitchRad));
-
-                  float desiredX = targetX + dirX * desiredDist;
-                  float desiredY = targetY + dirY * desiredDist + 1.0f;
-                  float desiredZ = targetZ + dirZ * desiredDist;
-
-                  float bestT = 1f;
-
-                  for (Block b : blocks) {
-                      float t = segmentAabbExpanded(targetX, targetY, targetZ, desiredX, desiredY, desiredZ, b, 0.35f);
-                      if (t >= 0f && t < bestT) bestT = t;
-                  }
-
-                  float camX, camY, camZ;
-                  if (bestT < 1f) {
-                      float safeT = Math.max(0f, bestT - 0.10f);
-                      camX = targetX + (desiredX - targetX) * safeT;
-                      camY = targetY + (desiredY - targetY) * safeT;
-                      camZ = targetZ + (desiredZ - targetZ) * safeT;
-                  } else {
-                      camX = desiredX;
-                      camY = desiredY;
-                      camZ = desiredZ;
-                  }
-
-                  float dx = camX - targetX;
-                  float dy = camY - targetY;
-                  float dz = camZ - targetZ;
-                  float dist = (float)Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-                  if (dist < minDist) {
-                      float len = Math.max(0.0001f, dist);
-                      camX = targetX + dx / len * minDist;
-                      camY = targetY + dy / len * minDist;
-                      camZ = targetZ + dz / len * minDist;
-                  }
-
-                  return new float[]{camX, camY, camZ};
-              }
-
-              private float segmentAabbExpanded(float sx, float sy, float sz, float ex, float ey, float ez, Block b, float expand) {
-                  float dx = ex - sx, dy = ey - sy, dz = ez - sz;
-                  float tMin = 0f, tMax = 1f;
-
-                  float[] xRes = slabRange(sx, dx, b.minX() - expand, b.maxX() + expand);
-                  if (xRes == null) return -1f;
-                  tMin = Math.max(tMin, xRes[0]); tMax = Math.min(tMax, xRes[1]);
-
-                  float[] yRes = slabRange(sy, dy, b.minY() - expand, b.maxY() + expand);
-                  if (yRes == null) return -1f;
-                  tMin = Math.max(tMin, yRes[0]); tMax = Math.min(tMax, yRes[1]);
-
-                  float[] zRes = slabRange(sz, dz, b.minZ() - expand, b.maxZ() + expand);
-                  if (zRes == null) return -1f;
-                  tMin = Math.max(tMin, zRes[0]); tMax = Math.min(tMax, zRes[1]);
-
-                  if (tMax >= tMin && tMax >= 0f && tMin <= 1f) return Math.max(0f, tMin);
-                  return -1f;
-              }
-
-              private float[] slabRange(float s, float d, float min, float max) {
-                  if (Math.abs(d) < 0.00001f) {
-                      if (s < min || s > max) return null;
-                      return new float[]{0f, 1f};
-                  }
-                  float t1 = (min - s) / d, t2 = (max - s) / d;
-                  if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
-                  return new float[]{t1, t2};
-              }
-
-              private void update() {
-                  updatePhase();
-
-                  boolean hasInput = Math.abs(jX) > 0.02f || Math.abs(jY) > 0.02f;
-                  long now = System.currentTimeMillis();
-                  boolean cooldownActive = now < staminaCooldownUntil;
-
-                  if (staminaBroken && !cooldownActive && stamina >= 35f) {
-                      staminaBroken = false;
-                  }
-
-                  boolean canUseRun = runEnabled && hasInput && !cooldownActive && !staminaBroken && stamina > 0f;
-                  float walkSpeed = 0.16f;
-                  float runSpeed = 0.24f;
-                  float speed = canUseRun ? runSpeed : walkSpeed;
-
-                  float camYawRad = (float) Math.toRadians(rY);
-                  float inputX = jX;
-                  float inputY = -jY;
-
-                  float worldMoveX = ((float)Math.sin(camYawRad) * inputY + (float)Math.cos(camYawRad) * inputX);
-                  float worldMoveZ = ((float)-Math.cos(camYawRad) * inputY + (float)Math.sin(camYawRad) * inputX);
-
-                  float len = (float)Math.sqrt(worldMoveX * worldMoveX + worldMoveZ * worldMoveZ);
-                  if (len > 0.0001f) {
-                      worldMoveX /= len;
-                      worldMoveZ /= len;
-                  } else {
-                      worldMoveX = 0f;
-                      worldMoveZ = 0f;
-                  }
-
-                  float moveX = worldMoveX * speed;
-                  float moveZ = worldMoveZ * speed;
-
-                  float newX = pX;
-                  float newZ = pZ;
-
-                  if (moveX != 0f) {
-                      float testX = pX + moveX;
-                      if (!collides(testX, pZ)) newX = testX;
-                  }
-
-                  if (moveZ != 0f) {
-                      float testZ = pZ + moveZ;
-                      if (!collides(newX, testZ)) newZ = testZ;
-                  }
-
-                  pX = newX;
-                  pZ = newZ;
-
-                  moveAmount = (float)Math.sqrt(moveX * moveX + moveZ * moveZ);
-
-                  if (hasInput && len > 0.0001f) {
-                      float desiredYaw = (float)Math.toDegrees(Math.atan2(worldMoveX, worldMoveZ));
-                      bodyYaw = lerpAngle(bodyYaw, desiredYaw, 0.28f);
-                      walkTime += canUseRun ? 0.40f : 0.24f;
-                  }
-
-                  if (canUseRun) {
-                      stamina -= 0.22f;
-                      if (stamina <= 0f) {
-                          stamina = 0f;
-                          staminaCooldownUntil = now + 750L;
-                          staminaBroken = true;
-                          runEnabled = false;
-                      }
-                  } else {
-                      if (!cooldownActive) {
-                          stamina += 0.10f;
-                          if (stamina > 100f) stamina = 100f;
-                      }
-                  }
-              }
-
-              private boolean collides(float x, float z) {
-                  float pad = 0.02f;
-                  for (Block b : blocks) {
-                      boolean hitXZ =
-                              x + PLAYER_RADIUS > b.minX() - pad &&
-                              x - PLAYER_RADIUS < b.maxX() + pad &&
-                              z + PLAYER_RADIUS > b.minZ() - pad &&
-                              z - PLAYER_RADIUS < b.maxZ() + pad;
-
-                      boolean hitY = FLOOR_Y < b.maxY() && PLAYER_HEIGHT > b.minY();
-                      if (hitXZ && hitY) return true;
-                  }
-                  return false;
-              }
-
-              private float lerpAngle(float from, float to, float t) {
-                  float diff = ((to - from + 540f) % 360f) - 180f;
-                  return from + diff * t;
-              }
-
-              private void drawPlayer(int uM, int uMVP, int uC) {
-                  float swing = (float)Math.sin(walkTime) * 28f * Math.min(1f, moveAmount * 8f);
-
-                  drawBodyPart(uM, uMVP, uC, 0f, 2.8f, 0f, 1.2f, 1.2f, 1.2f, 0.92f, 0.80f, 0.65f);
-                  drawBodyPart(uM, uMVP, uC, 0f, 1.3f, 0f, 1.6f, 1.8f, 0.9f, 0.20f, 0.20f, 0.20f);
-
-                  drawLimb(uM, uMVP, uC, -1.15f, 1.3f, 0f, 0.6f, 1.8f, 0.6f, 0.82f, 0.74f, 0.62f,  swing);
-                  drawLimb(uM, uMVP, uC,  1.15f, 1.3f, 0f, 0.6f, 1.8f, 0.6f, 0.82f, 0.74f, 0.62f, -swing);
-
-                  drawLimb(uM, uMVP, uC, -0.45f,-0.7f, 0f, 0.7f, 1.9f, 0.7f, 0.30f, 0.30f, 0.30f, -swing);
-                  drawLimb(uM, uMVP, uC,  0.45f,-0.7f, 0f, 0.7f, 1.9f, 0.7f, 0.30f, 0.30f, 0.30f,  swing);
-              }
-
-              private void drawBodyPart(int uM, int uMVP, int uC,
-                                        float localX, float localY, float localZ,
-                                        float sx, float sy, float sz,
-                                        float r, float g, float b) {
-                  Matrix.setIdentityM(model, 0);
-                  Matrix.translateM(model, 0, pX, pY, pZ);
-                  Matrix.rotateM(model, 0, bodyYaw, 0f, 1f, 0f);
-                  Matrix.scaleM(model, 0, PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
-                  Matrix.translateM(model, 0, localX, localY, localZ);
-                  Matrix.scaleM(model, 0, sx, sy, sz);
-                  draw(uM, uMVP, uC, r, g, b, 1f);
-              }
-
-              private void drawLimb(int uM, int uMVP, int uC,
-                                    float localX, float localY, float localZ,
-                                    float sx, float sy, float sz,
-                                    float r, float g, float b,
-                                    float rotX) {
-                  Matrix.setIdentityM(model, 0);
-                  Matrix.translateM(model, 0, pX, pY, pZ);
-                  Matrix.rotateM(model, 0, bodyYaw, 0f, 1f, 0f);
-                  Matrix.scaleM(model, 0, PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
-                  Matrix.translateM(model, 0, localX, localY + sy * 0.5f, localZ);
-                  Matrix.rotateM(model, 0, rotX, 1f, 0f, 0f);
-                  Matrix.translateM(model, 0, 0f, -sy * 0.5f, 0f);
-                  Matrix.scaleM(model, 0, sx, sy, sz);
-                  draw(uM, uMVP, uC, r, g, b, 1f);
-              }
-
-              private void draw(int uM, int uMVP, int uC, float r, float g, float b, float a) {
-                  GLES30.glUniformMatrix4fv(uM, 1, false, model, 0);
-                  float[] pv = new float[16];
-                  float[] mvp = new float[16];
-                  Matrix.multiplyMM(pv, 0, proj, 0, view, 0);
-                  Matrix.multiplyMM(mvp, 0, pv, 0, model, 0);
-                  GLES30.glUniformMatrix4fv(uMVP, 1, false, mvp, 0);
-                  GLES30.glUniform4f(uC, r, g, b, a);
-                  for (int i = 0; i < 6; i++) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, i * 4, 4);
-              }
-
-              private int mkProg(String v, String f) {
-                  int p = GLES30.glCreateProgram();
-                  GLES30.glAttachShader(p, mkSh(GLES30.GL_VERTEX_SHADER, v));
-                  GLES30.glAttachShader(p, mkSh(GLES30.GL_FRAGMENT_SHADER, f));
-                  GLES30.glLinkProgram(p);
-                  return p;
-              }
-
-              private int mkSh(int type, String src) {
-                  int sh = GLES30.glCreateShader(type);
-                  GLES30.glShaderSource(sh, src);
-                  GLES30.glCompileShader(sh);
-                  return sh;
-              }
-          }
-          EOF
-
-          cat <<'EOF' > app/src/main/java/com/enjoer/game/MainActivity.java
-          package com.enjoer.game;
-
-          import android.annotation.SuppressLint;
-          import android.opengl.GLSurfaceView;
-          import android.os.Bundle;
-          import android.view.MotionEvent;
-          import android.view.View;
-          import android.view.ViewGroup;
-          import android.widget.Button;
-          import android.widget.TextView;
-          import androidx.appcompat.app.AppCompatActivity;
-          import java.util.Locale;
-
-          public class MainActivity extends AppCompatActivity {
-              private GameRenderer ren;
-              private float lx, ly;
-              private View staminaFill;
-              private TextView txtTimer;
-              private Button btnRun;
-
-              @SuppressLint("ClickableViewAccessibility")
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  setContentView(R.layout.activity_main);
-
-                  GLSurfaceView gv = findViewById(R.id.gl_view);
-                  gv.setEGLContextClientVersion(3);
-
-                  ren = new GameRenderer();
-                  gv.setRenderer(ren);
-
-                  staminaFill = findViewById(R.id.stamina_fill);
-                  txtTimer = findViewById(R.id.txt_timer);
-                  btnRun = findViewById(R.id.btn_run);
-
-                  setupJoy(findViewById(R.id.joy_base), findViewById(R.id.joy_stick));
-                  setupLook(findViewById(R.id.look_zone));
-                  setupRunButton(btnRun);
-
-                  gv.post(updateUiRunnable);
-              }
-
-              private final Runnable updateUiRunnable = new Runnable() {
-                  @Override
-                  public void run() {
-                      if (ren != null) {
-                          updateStaminaUi();
-                          updateTimerUi();
-                          updateRunButtonUi();
-                      }
-                      if (staminaFill != null) staminaFill.postDelayed(this, 16);
-                  }
-              };
-
-              private void updateStaminaUi() {
-                  if (staminaFill == null) return;
-                  ViewGroup.LayoutParams lp = staminaFill.getLayoutParams();
-                  int max = dp(146);
-                  int w = (int)(max * (ren.stamina / 100f));
-                  if (w < 0) w = 0;
-                  lp.width = w;
-                  staminaFill.setLayoutParams(lp);
-
-                  boolean cooldown = System.currentTimeMillis() < ren.staminaCooldownUntil;
-                  staminaFill.setAlpha(cooldown || ren.staminaBroken ? 0.35f : (ren.stamina <= 15f ? 0.55f : 1f));
-              }
-
-              private void updateTimerUi() {
-                  if (txtTimer == null) return;
-                  long left = ren.getTimeLeftMs();
-                  int totalSec = (int)(left / 1000L);
-                  int min = totalSec / 60;
-                  int sec = totalSec % 60;
-                  txtTimer.setText(String.format(Locale.US, "%d:%02d", min, sec));
-              }
-
-              private void updateRunButtonUi() {
-                  if (btnRun == null) return;
-                  boolean active = ren.runEnabled;
-                  btnRun.setBackgroundResource(active ? R.drawable.run_btn_active : R.drawable.run_btn);
-                  btnRun.setTextColor(active ? 0xFF111111 : 0xFFE0E0E0);
-                  btnRun.setAlpha((System.currentTimeMillis() < ren.staminaCooldownUntil || ren.staminaBroken) ? 0.55f : 1f);
-              }
-
-              private int dp(int v) {
-                  return (int)(v * getResources().getDisplayMetrics().density);
-              }
-
-              private void setupJoy(View base, View stick) {
-                  base.setOnTouchListener((v, e) -> {
-                      float cx = v.getWidth() / 2f;
-                      float cy = v.getHeight() / 2f;
-
-                      if (e.getAction() == MotionEvent.ACTION_MOVE || e.getAction() == MotionEvent.ACTION_DOWN) {
-                          float dx = e.getX() - cx;
-                          float dy = e.getY() - cy;
-                          float d = (float)Math.sqrt(dx * dx + dy * dy);
-                          float lim = cx - stick.getWidth() / 2f;
-
-                          if (lim <= 0f) return true;
-
-                          if (d > lim) {
-                              dx *= lim / d;
-                              dy *= lim / d;
-                          }
-
-                          stick.setTranslationX(dx);
-                          stick.setTranslationY(dy);
-                          ren.jX = dx / lim;
-                          ren.jY = dy / lim;
-                      } else if (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL) {
-                          stick.setTranslationX(0f);
-                          stick.setTranslationY(0f);
-                          ren.jX = 0f;
-                          ren.jY = 0f;
-                      }
-                      return true;
-                  });
-              }
-
-              private void setupLook(View zone) {
-                  zone.setOnTouchListener((v, e) -> {
-                      if (e.getAction() == MotionEvent.ACTION_DOWN) {
-                          lx = e.getX();
-                          ly = e.getY();
-                      } else if (e.getAction() == MotionEvent.ACTION_MOVE) {
-                          ren.rY += (e.getX() - lx) * 0.25f;
-                          ren.rX += (e.getY() - ly) * 0.18f;
-                          if (ren.rX < -10f) ren.rX = -10f;
-                          if (ren.rX > 55f) ren.rX = 55f;
-                          lx = e.getX();
-                          ly = e.getY();
-                      }
-                      return true;
-                  });
-              }
-
-              @SuppressLint("ClickableViewAccessibility")
-              private void setupRunButton(View btn) {
-                  btn.setOnClickListener(v -> ren.toggleRun());
-              }
-
-              @Override
-              protected void onDestroy() {
-                  super.onDestroy();
-                  if (staminaFill != null) staminaFill.removeCallbacks(updateUiRunnable);
-              }
-          }
-          EOF
-
-      - name: Create Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.5
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
-      - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
-
-      - name: Verify APK exists
-        run: |
-          ls -R app/build/outputs || true
-          test -f app/build/outputs/apk/debug/app-debug.apk
+          cargo install cargo-apk
+          cd enjoer_game
+          export ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/25.2.9519653
+          export ANDROID_SDK_ROOT=${ANDROID_HOME}
+          # Используем LLD линкер для мега-ускорения
+          export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
+          cargo apk build --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
-        with:
-          name: Enjoer_6.4_FinalFix_APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+        with: { name: Enjoer-Game-APK, path: enjoer_game/target/release/apk/*.apk }
