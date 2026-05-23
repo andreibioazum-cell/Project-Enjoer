@@ -19,40 +19,35 @@ jobs:
 
       - name: Create Project Structure
         run: |
+          # Создаем структуру папок
           mkdir -p app/src/main/java/com/madgpt/ultra
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/assets
 
-          # 1. Android Manifest (Настройки разрешений)
-          cat > app/src/main/AndroidManifest.xml << 'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-              <application 
-                  android:label="MadGPT Ultra" 
-                  android:theme="@style/Theme.Material3.Dark"
-                  android:hardwareAccelerated="true">
-                  <activity android:name=".MainActivity" android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
+          # 1. settings.gradle (ЭТО ИСПРАВЛЯЕТ ОШИБКУ)
+          echo "include ':app'" > settings.gradle
 
-          # 2. Build.gradle (Самые быстрые зависимости)
+          # 2. Корневой build.gradle
           cat > build.gradle << 'EOF'
           buildscript {
               repositories { google(); mavenCentral() }
-              dependencies { classpath 'com.android.tools.build:gradle:8.2.2'; classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20' }
+              dependencies { 
+                  classpath 'com.android.tools.build:gradle:8.2.2'
+                  classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20' 
+              }
           }
-          allprojects { repositories { google(); mavenCentral() } }
+          allprojects {
+              repositories { google(); mavenCentral() }
+          }
           EOF
 
+          # 3. app/build.gradle
           cat > app/build.gradle << 'EOF'
-          plugins { id 'com.android.application'; id 'kotlin-android' }
+          plugins {
+              id 'com.android.application'
+              id 'kotlin-android'
+          }
           android {
               namespace 'com.madgpt.ultra'
               compileSdk 34
@@ -75,32 +70,43 @@ jobs:
               implementation 'androidx.core:core-ktx:1.12.0'
               implementation 'androidx.appcompat:appcompat:1.6.1'
               implementation 'com.google.android.material:material:1.11.0'
-              // Движок ONNX Runtime для Android
               implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.17.1'
           }
           EOF
 
-          # 3. UI Layout (Интерфейс как в Streamlit, но нативный)
+          # 4. Android Manifest
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+              <application 
+                  android:label="MadGPT Ultra" 
+                  android:theme="@style/Theme.Material3.Dark"
+                  android:hardwareAccelerated="true">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          # 5. UI Layout (activity_main.xml)
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent"
               android:orientation="vertical" android:background="#0E0E0E" android:padding="16dp">
-              
               <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
                   android:text="MadGPT Ultra V7" android:textColor="#00FF41" android:textSize="24sp"
                   android:fontFamily="monospace" android:gravity="center" android:paddingBottom="10dp"/>
-
               <ScrollView android:id="@+id/scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
                   <TextView android:id="@+id/chatLog" android:layout_width="match_parent" android:layout_height="wrap_content"
                       android:textColor="#FFFFFF" android:fontFamily="monospace" android:textSize="14sp"/>
               </ScrollView>
-
               <ProgressBar android:id="@+id/loader" android:layout_width="match_parent" android:layout_height="4dp"
                   style="@android:style/Widget.ProgressBar.Horizontal" android:visibility="gone" android:progressTint="#00FF41"/>
-
               <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-                  <Button android:id="@+id/btnFile" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                      android:text="📎" android:backgroundTint="#222222"/>
                   <EditText android:id="@+id/userInput" android:layout_width="0dp" android:layout_height="wrap_content"
                       android:layout_weight="1" android:hint="Злой запрос..." android:textColor="#FFFFFF" android:textColorHint="#555555"/>
                   <Button android:id="@+id/btnSend" android:layout_width="wrap_content" android:layout_height="wrap_content"
@@ -109,10 +115,9 @@ jobs:
           </LinearLayout>
           EOF
 
-          # 4. MainActivity.kt (Логика инференса и оптимизация ОЗУ)
+          # 6. MainActivity.kt (Логика)
           cat > app/src/main/java/com/madgpt/ultra/MainActivity.kt << 'EOF'
           package com.madgpt.ultra
-
           import android.os.Bundle
           import android.view.View
           import android.widget.*
@@ -131,13 +136,10 @@ jobs:
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   setContentView(R.layout.activity_main)
-
                   chatLog = findViewById(R.id.chatLog)
                   userInput = findViewById(R.id.userInput)
                   loader = findViewById(R.id.loader)
-
                   initEngine()
-
                   findViewById<Button>(R.id.btnSend).setOnClickListener {
                       val text = userInput.text.toString()
                       if (text.isNotEmpty()) processChat(text)
@@ -146,18 +148,15 @@ jobs:
 
               private fun initEngine() {
                   ortEnv = OrtEnvironment.getEnvironment()
-                  // Оптимизация: использование всех ядер процессора и NNAPI
                   val options = OrtSession.SessionOptions().apply {
-                      addConfigEntry("session.load_model_format", "ORT")
                       setInterOpNumThreads(Runtime.getRuntime().availableProcessors())
                       setIntraOpNumThreads(Runtime.getRuntime().availableProcessors())
                   }
-                  
                   try {
                       val modelBytes = assets.open("model.onnx").readBytes()
                       ortSession = ortEnv.createSession(modelBytes, options)
                   } catch (e: Exception) {
-                      chatLog.text = "Ошибка: Положите model.onnx в assets!"
+                      chatLog.text = "ОШИБКА: Положите model.onnx в папку assets!"
                   }
               }
 
@@ -165,26 +164,26 @@ jobs:
                   chatLog.append("\nЯ: $text\n")
                   userInput.setText("")
                   loader.visibility = View.VISIBLE
-
                   CoroutineScope(Dispatchers.Default).launch {
-                      // Тут вызывается токенизатор и прогон через ONNX
-                      // Для краткости примера — имитация ответа
                       delay(500)
                       withContext(Dispatchers.Main) {
                           loader.visibility = View.GONE
-                          chatLog.append("Бот: Я всё еще злой, но теперь на Kotlin!\n")
+                          chatLog.append("Бот: Машина готова. Но где мой файл модели?\n")
                       }
                   }
               }
           }
           EOF
-          
-          # Настройка Gradle Wrapper
+
+      - name: Build with Gradle
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          unzip -q gradle-8.5-bin.zip
+          export PATH="$PWD/gradle-8.5/bin:$PATH"
+          # Генерируем wrapper
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-
-      - name: Build APK
-        run: ./gradlew assembleDebug
+          ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
