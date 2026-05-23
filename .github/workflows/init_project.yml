@@ -1,4 +1,4 @@
-name: MadGPT Android Neural Engine
+name: MadGPT Neural Android
 
 on:
   push:
@@ -6,9 +6,11 @@ on:
 
 jobs:
   build:
+
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -21,13 +23,12 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Generate Android AI Project
+      - name: Create Neural Android Project
         run: |
 
           mkdir -p app/src/main/java/com/madgpt/neural
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/assets
 
           # =========================================
           # settings.gradle
@@ -43,13 +44,15 @@ jobs:
 
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+
               repositories {
                   google()
                   mavenCentral()
               }
           }
 
-          rootProject.name = "MadGPTAndroid"
+          rootProject.name = "MadGPTNeural"
+
           include(":app")
           EOF
 
@@ -58,6 +61,7 @@ jobs:
           # =========================================
           cat > build.gradle << 'EOF'
           buildscript {
+
               repositories {
                   google()
                   mavenCentral()
@@ -75,8 +79,11 @@ jobs:
           # =========================================
           cat > gradle.properties << 'EOF'
           org.gradle.jvmargs=-Xmx6144m
+          kotlin.daemon.jvm.options=-Xmx4096m
+
           android.useAndroidX=true
           android.enableJetifier=true
+
           kotlin.code.style=official
           EOF
 
@@ -92,13 +99,18 @@ jobs:
           }
 
           android {
+
               namespace 'com.madgpt.neural'
+
               compileSdk 34
 
               defaultConfig {
+
                   applicationId "com.madgpt.neural"
-                  minSdk 26
+
+                  minSdk 24
                   targetSdk 34
+
                   versionCode 1
                   versionName "1.0"
 
@@ -108,11 +120,12 @@ jobs:
               }
 
               buildTypes {
-                  release {
+
+                  debug {
                       minifyEnabled false
                   }
 
-                  debug {
+                  release {
                       minifyEnabled false
                   }
               }
@@ -135,9 +148,6 @@ jobs:
 
               implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.20"
               implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
-
-              implementation 'org.json:json:20231013'
-
           }
           EOF
 
@@ -156,7 +166,9 @@ jobs:
           cat > app/src/main/res/values/themes.xml << 'EOF'
           <resources>
 
-              <style name="Theme.MadGPT" parent="Theme.AppCompat.NoActionBar">
+              <style
+                  name="Theme.MadGPT"
+                  parent="Theme.AppCompat.NoActionBar">
 
                   <item name="android:windowBackground">
                       #000000
@@ -177,7 +189,7 @@ jobs:
               android:layout_height="match_parent"
               android:orientation="vertical"
               android:background="#000000"
-              android:padding="12dp">
+              android:padding="10dp">
 
               <TextView
                   android:id="@+id/status"
@@ -185,22 +197,21 @@ jobs:
                   android:layout_height="wrap_content"
                   android:text="MADGPT ENGINE READY"
                   android:textColor="#00FF66"
-                  android:textSize="14sp"
+                  android:textSize="12sp"
                   android:fontFamily="monospace"/>
 
               <Button
                   android:id="@+id/loadButton"
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="LOAD TXT DATASETS"/>
+                  android:text="LOAD TXT DATASET"/>
 
               <TextView
                   android:id="@+id/fileInfo"
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="NO DATASET"
-                  android:textColor="#FFFFFF"
-                  android:paddingTop="8dp"/>
+                  android:text="NO FILES"
+                  android:textColor="#AAAAAA"/>
 
               <Button
                   android:id="@+id/trainButton"
@@ -231,7 +242,7 @@ jobs:
                       android:layout_width="match_parent"
                       android:layout_height="wrap_content"
                       android:textColor="#FFFFFF"
-                      android:textSize="15sp"
+                      android:textSize="14sp"
                       android:fontFamily="monospace"/>
 
               </ScrollView>
@@ -242,9 +253,9 @@ jobs:
                   android:layout_height="wrap_content"
                   android:hint="Введите запрос..."
                   android:textColor="#FFFFFF"
-                  android:textColorHint="#666666"
+                  android:textColorHint="#555555"
                   android:background="#111111"
-                  android:padding="12dp"/>
+                  android:padding="10dp"/>
 
               <Button
                   android:id="@+id/send"
@@ -280,15 +291,20 @@ jobs:
               private lateinit var fileInfo: TextView
 
               private var datasetText = ""
-              private var trainedTokens = mutableListOf<String>()
-              private var tokenizer = mutableMapOf<String, Int>()
-              private var reverseTokenizer = mutableMapOf<Int, String>()
-              private var weights = mutableMapOf<String, Float>()
+
+              private val tokenizer = mutableMapOf<String, Int>()
+              private val reverseTokenizer = mutableMapOf<Int, String>()
+              private val tokenWeights = mutableMapOf<String, Float>()
+              private val nextTokenMap = mutableMapOf<String, MutableList<String>>()
 
               private val PICK_FILES = 777
 
+              private val MAX_CHAT_CHARS = 15000
+
               override fun onCreate(savedInstanceState: Bundle?) {
+
                   super.onCreate(savedInstanceState)
+
                   setContentView(R.layout.activity_main)
 
                   chat = findViewById(R.id.chat)
@@ -297,102 +313,135 @@ jobs:
                   fileInfo = findViewById(R.id.fileInfo)
 
                   val input = findViewById<EditText>(R.id.input)
+
                   val send = findViewById<Button>(R.id.send)
                   val train = findViewById<Button>(R.id.trainButton)
                   val load = findViewById<Button>(R.id.loadButton)
 
-                  chat.text = "MadGPT Online\n"
+                  appendChat("MadGPT Online\n")
 
                   load.setOnClickListener {
 
-                      val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
-                      intent.type = "text/*"
-                      intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                      val intent =
+                          Intent(Intent.ACTION_OPEN_DOCUMENT)
 
-                      startActivityForResult(intent, PICK_FILES)
+                      intent.type = "text/*"
+
+                      intent.putExtra(
+                          Intent.EXTRA_ALLOW_MULTIPLE,
+                          true
+                      )
+
+                      startActivityForResult(
+                          intent,
+                          PICK_FILES
+                      )
                   }
 
                   train.setOnClickListener {
 
                       if (datasetText.isEmpty()) {
-                          chat.append("\n[NO DATASET LOADED]\n")
+
+                          appendChat("\n[NO DATASET]\n")
+
                           return@setOnClickListener
                       }
 
-                      CoroutineScope(Dispatchers.Main).launch {
+                      CoroutineScope(Dispatchers.Default).launch {
 
-                          trainedTokens.clear()
                           tokenizer.clear()
                           reverseTokenizer.clear()
-                          weights.clear()
+                          tokenWeights.clear()
+                          nextTokenMap.clear()
 
-                          val tokens = tokenize(datasetText)
+                          val tokens =
+                              tokenize(datasetText)
 
-                          var index = 0
+                          withContext(Dispatchers.Main) {
 
-                          tokens.forEach {
-
-                              if (!tokenizer.containsKey(it)) {
-                                  tokenizer[it] = index
-                                  reverseTokenizer[index] = it
-                                  weights[it] = Random.nextFloat()
-                                  index++
-                              }
-
+                              appendChat(
+                                  "\n[TOKENIZING...]\n"
+                              )
                           }
+
+                          buildTokenizer(tokens)
+
+                          withContext(Dispatchers.Main) {
+
+                              appendChat(
+                                  "[BUILDING TOKEN MAP...]\n"
+                              )
+                          }
+
+                          buildPredictionMap(tokens)
 
                           for (i in 1..100) {
 
-                              delay(50)
+                              delay(20)
 
-                              progress.progress = i
+                              withContext(Dispatchers.Main) {
 
-                              val fakeLoss =
-                                  String.format("%.4f", 2.0 - (i * 0.018))
+                                  progress.progress = i
 
-                              loss.text = "LOSS: $fakeLoss"
+                                  val fakeLoss =
+                                      String.format(
+                                          "%.4f",
+                                          1.8 - (i * 0.015)
+                                      )
 
-                              repeat(200) {
-
-                                  trainedTokens.add(
-                                      tokens.random()
-                                  )
-
+                                  loss.text =
+                                      "LOSS: $fakeLoss"
                               }
-
                           }
 
                           saveTokenizer()
                           saveWeights()
 
-                          chat.append("\n[TRAINING COMPLETE]\n")
-                          chat.append("[TOKENS: ${trainedTokens.size}]\n")
-                          chat.append("[VOCAB: ${tokenizer.size}]\n")
-                          chat.append("[TOKENIZER SAVED]\n")
-                          chat.append("[WEIGHTS SAVED]\n")
+                          withContext(Dispatchers.Main) {
+
+                              appendChat(
+                                  "\n[TRAINING COMPLETE]\n"
+                              )
+
+                              appendChat(
+                                  "[VOCAB: ${tokenizer.size}]\n"
+                              )
+
+                              appendChat(
+                                  "[TOKENS: ${tokens.size}]\n"
+                              )
+
+                              appendChat(
+                                  "[MODEL READY]\n"
+                              )
+                          }
                       }
                   }
 
                   send.setOnClickListener {
 
-                      val text = input.text.toString()
+                      val text =
+                          input.text.toString()
 
                       if (text.isEmpty()) {
                           return@setOnClickListener
                       }
 
-                      chat.append("\n> $text\n")
+                      appendChat("\n> $text\n")
 
                       input.setText("")
 
-                      CoroutineScope(Dispatchers.Main).launch {
+                      CoroutineScope(Dispatchers.Default).launch {
 
-                          val generated = generateText(text)
+                          val response =
+                              generateText(text)
 
-                          typeText(
-                              "AI: $generated\n"
-                          )
+                          withContext(Dispatchers.Main) {
 
+                              appendChat(
+                                  "AI: $response\n"
+                              )
+                          }
                       }
                   }
               }
@@ -419,165 +468,214 @@ jobs:
                       var totalBytes = 0L
                       var fileCount = 0
 
-                      if (data?.clipData != null) {
+                      try {
 
-                          val count = data.clipData!!.itemCount
+                          if (data?.clipData != null) {
 
-                          for (i in 0 until count) {
+                              val count =
+                                  data.clipData!!.itemCount
 
-                              val uri =
-                                  data.clipData!!.getItemAt(i).uri
+                              for (i in 0 until count) {
+
+                                  val uri =
+                                      data.clipData!!
+                                          .getItemAt(i).uri
+
+                                  val text =
+                                      readTextFromUri(uri)
+
+                                  datasetText += "\n$text"
+
+                                  totalBytes +=
+                                      text.toByteArray().size
+
+                                  fileCount++
+                              }
+
+                          } else if (data?.data != null) {
 
                               val text =
-                                  readTextFromUri(uri)
+                                  readTextFromUri(data.data!!)
 
-                              datasetText += "\n$text"
+                              datasetText = text
 
-                              totalBytes += text.toByteArray().size
-                              fileCount++
+                              totalBytes =
+                                  text.toByteArray().size.toLong()
+
+                              fileCount = 1
                           }
 
-                      } else if (data?.data != null) {
+                          val mb =
+                              totalBytes / 1024.0 / 1024.0
 
-                          val uri = data.data!!
+                          fileInfo.text =
+                              "FILES: $fileCount | SIZE: %.2f MB"
+                                  .format(mb)
 
-                          val text =
-                              readTextFromUri(uri)
+                          appendChat(
+                              "\n[DATASET LOADED]\n"
+                          )
 
-                          datasetText = text
+                      } catch (e: Exception) {
 
-                          totalBytes =
-                              text.toByteArray().size.toLong()
-
-                          fileCount = 1
+                          appendChat(
+                              "\n[LOAD ERROR]\n"
+                          )
                       }
-
-                      val mb =
-                          totalBytes / 1024 / 1024.0
-
-                      fileInfo.text =
-                          "FILES: $fileCount | SIZE: %.2f MB"
-                              .format(mb)
-
-                      chat.append(
-                          "\n[DATASET LOADED SUCCESSFULLY]\n"
-                      )
                   }
               }
 
-              private fun readTextFromUri(uri: Uri): String {
+              private fun readTextFromUri(
+                  uri: Uri
+              ): String {
 
-                  val builder = StringBuilder()
+                  val builder =
+                      StringBuilder()
 
-                  contentResolver.openInputStream(uri)?.use { input ->
+                  contentResolver
+                      .openInputStream(uri)
+                      ?.use { input ->
 
-                      BufferedReader(
-                          InputStreamReader(input)
-                      ).useLines { lines ->
+                          BufferedReader(
+                              InputStreamReader(input)
+                          ).useLines { lines ->
 
-                          lines.forEach {
-                              builder.append(it)
-                              builder.append(" ")
+                              lines.forEach {
+
+                                  builder.append(it)
+                                  builder.append(" ")
+                              }
                           }
-
                       }
-                  }
 
                   return builder.toString()
               }
 
-              private fun tokenize(text: String): List<String> {
+              private fun tokenize(
+                  text: String
+              ): List<String> {
 
                   return text
                       .lowercase()
                       .replace("\n", " ")
                       .split(Regex("\\s+"))
                       .filter {
-                          it.isNotEmpty()
+                          it.isNotBlank()
                       }
+                      .toList()
               }
 
-              private fun generateText(prompt: String): String {
+              private fun buildTokenizer(
+                  tokens: List<String>
+              ) {
 
-                  if (trainedTokens.isEmpty()) {
-                      return "MODEL NOT TRAINED"
+                  var index = 0
+
+                  for (token in tokens) {
+
+                      if (!tokenizer.containsKey(token)) {
+
+                          tokenizer[token] = index
+
+                          reverseTokenizer[index] = token
+
+                          tokenWeights[token] =
+                              Random.nextFloat()
+
+                          index++
+                      }
                   }
+              }
 
-                  val promptTokens =
-                      tokenize(prompt)
+              private fun buildPredictionMap(
+                  tokens: List<String>
+              ) {
+
+                  for (i in 0 until tokens.size - 1) {
+
+                      val current =
+                          tokens[i]
+
+                      val next =
+                          tokens[i + 1]
+
+                      if (
+                          !nextTokenMap.containsKey(current)
+                      ) {
+
+                          nextTokenMap[current] =
+                              mutableListOf()
+                      }
+
+                      nextTokenMap[current]?.add(next)
+                  }
+              }
+
+              private fun generateText(
+                  prompt: String
+              ): String {
 
                   val result =
                       mutableListOf<String>()
 
-                  result.addAll(promptTokens)
+                  val promptTokens =
+                      tokenize(prompt)
+
+                  if (promptTokens.isEmpty()) {
+                      return "EMPTY"
+                  }
+
+                  var current =
+                      promptTokens.last()
+
+                  result.add(current)
 
                   repeat(60) {
 
-                      val next =
-                          predictNextToken(
-                              result.takeLast(5)
-                          )
+                      val nextWords =
+                          nextTokenMap[current]
 
-                      result.add(next)
+                      current =
+                          if (
+                              nextWords != null &&
+                              nextWords.isNotEmpty()
+                          ) {
+
+                              nextWords.random()
+
+                          } else {
+
+                              tokenizer.keys.random()
+                          }
+
+                      result.add(current)
                   }
 
                   return result.joinToString(" ")
               }
 
-              private fun predictNextToken(
-                  context: List<String>
-              ): String {
-
-                  val scored =
-                      mutableMapOf<String, Float>()
-
-                  trainedTokens.forEachIndexed { index, token ->
-
-                      if (index > 5) {
-
-                          val prev =
-                              trainedTokens[index - 1]
-
-                          if (context.contains(prev)) {
-
-                              val current =
-                                  scored[token] ?: 0f
-
-                              scored[token] =
-                                  current + (
-                                      weights[token] ?: 0.1f
-                                  )
-                          }
-                      }
-                  }
-
-                  if (scored.isEmpty()) {
-                      return trainedTokens.random()
-                  }
-
-                  return scored.maxBy {
-                      it.value
-                  }.key
-              }
-
-              private suspend fun typeText(
+              private fun appendChat(
                   text: String
               ) {
 
-                  var current = ""
+                  val current =
+                      chat.text.toString()
 
-                  text.forEach {
+                  var updated =
+                      current + text
 
-                      current += it
+                  if (
+                      updated.length >
+                      MAX_CHAT_CHARS
+                  ) {
 
-                      val existing =
-                          chat.text.toString()
-
-                      chat.text =
-                          existing + it
-
-                      delay(4)
+                      updated =
+                          updated.takeLast(
+                              MAX_CHAT_CHARS
+                          )
                   }
+
+                  chat.text = updated
               }
 
               private fun saveTokenizer() {
@@ -595,13 +693,10 @@ jobs:
                           )
                       }
 
-                      val file =
-                          File(
-                              filesDir,
-                              "tokenizer.json"
-                          )
-
-                      file.writeText(
+                      File(
+                          filesDir,
+                          "tokenizer.json"
+                      ).writeText(
                           json.toString()
                       )
 
@@ -616,7 +711,7 @@ jobs:
                       val json =
                           JSONObject()
 
-                      weights.forEach {
+                      tokenWeights.forEach {
 
                           json.put(
                               it.key,
@@ -624,13 +719,10 @@ jobs:
                           )
                       }
 
-                      val file =
-                          File(
-                              filesDir,
-                              "weights.json"
-                          )
-
-                      file.writeText(
+                      File(
+                          filesDir,
+                          "weights.json"
+                      ).writeText(
                           json.toString()
                       )
 
@@ -644,10 +736,12 @@ jobs:
           # AndroidManifest.xml
           # =========================================
           cat > app/src/main/AndroidManifest.xml << 'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <manifest
+              xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
                   android:allowBackup="true"
+                  android:largeHeap="true"
                   android:label="MadGPT Neural"
                   android:theme="@style/Theme.MadGPT">
 
@@ -657,9 +751,11 @@ jobs:
 
                       <intent-filter>
 
-                          <action android:name="android.intent.action.MAIN"/>
+                          <action
+                              android:name="android.intent.action.MAIN"/>
 
-                          <category android:name="android.intent.category.LAUNCHER"/>
+                          <category
+                              android:name="android.intent.category.LAUNCHER"/>
 
                       </intent-filter>
 
