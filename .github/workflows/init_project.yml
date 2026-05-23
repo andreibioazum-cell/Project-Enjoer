@@ -82,7 +82,7 @@ jobs:
                   .add_plugins(DefaultPlugins.set(WindowPlugin {
                       primary_window: Some(Window { title: "Enjoer".into(), mode: WindowMode::BorderlessFullscreen, ..default() }), ..default()
                   }))
-                  .insert_resource(Msaa::Off)
+                  .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
                   .add_plugins(EguiPlugin)
                   .init_state::<GameState>()
                   .init_resource::<Controls>()
@@ -94,59 +94,57 @@ jobs:
           }
 
           fn setup(mut cmd: Commands, mut mesh: ResMut<Assets<Mesh>>, mut mat: ResMut<Assets<StandardMaterial>>) {
-              cmd.insert_resource(AmbientLight { color: Color::WHITE, brightness: 200.0 });
-              cmd.spawn(DirectionalLightBundle { 
-                  directional_light: DirectionalLight { illuminance: 4000., shadows_enabled: false, ..default() }, 
-                  transform: Transform::from_xyz(10., 20., 10.).looking_at(Vec3::ZERO, Vec3::Y), ..default() 
-              });
-
+              // Пол (unlit: true убирает розовый цвет)
               cmd.spawn(PbrBundle { 
                   mesh: mesh.add(Plane3d::default().mesh().size(1000., 1000.)), 
-                  material: mat.add(StandardMaterial { base_color: Color::srgb(0.1, 0.1, 0.1), unlit: true, ..default() }), ..default() 
+                  material: mat.add(StandardMaterial { base_color: Color::srgb(0.2, 0.2, 0.25), unlit: true, ..default() }), 
+                  ..default() 
               });
               
-              let body_mat = mat.add(StandardMaterial { base_color: Color::WHITE, ..default() });
+              let white_mat = mat.add(StandardMaterial { base_color: Color::WHITE, unlit: true, ..default() });
 
-              // Спавн игрока (y=2.6 - ноги 1.6 + половина торса)
-              cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., 2.6, 0.)), Player { walk: 0. }))
+              // Персонаж. Корень на y=2.5
+              cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., 2.5, 0.)), Player { walk: 0. }))
               .with_children(|p| {
                   p.spawn((SpatialBundle::default(), Pivot)).with_children(|piv| {
-                      piv.spawn(Camera3dBundle { transform: Transform::from_xyz(0., 4., 10.).looking_at(Vec3::Y * 1.2, Vec3::Y), ..default() });
+                      piv.spawn(Camera3dBundle { transform: Transform::from_xyz(0., 5., 11.).looking_at(Vec3::Y * 1.5, Vec3::Y), ..default() });
                   });
                   p.spawn((SpatialBundle::default(), Model)).with_children(|m| {
-                      // Тело меньше: 1.4 ширина, 1.6 высота, 0.7 глубина
+                      // Торс: сглаженный куб (чуть меньше)
                       m.spawn(PbrBundle { 
-                          mesh: mesh.add(Cuboid::new(1.4, 1.6, 0.7)), 
-                          material: body_mat.clone(), 
-                          ..default() 
+                          mesh: mesh.add(Cuboid::new(1.3, 1.6, 0.6)), 
+                          material: white_mat.clone(), ..default() 
                       });
                       
-                      // Голова 1.0x1.0x1.0
+                      // Голова: Закругленная (сфера вместо куба)
                       m.spawn(PbrBundle { 
-                          mesh: mesh.add(Cuboid::new(1.0, 1.0, 1.0)), 
-                          material: body_mat.clone(), 
-                          transform: Transform::from_xyz(0., 1.3, 0.),
-                          ..default()
+                          mesh: mesh.add(Sphere::new(0.55).mesh().ico(4).unwrap()), 
+                          material: white_mat.clone(), 
+                          transform: Transform::from_xyz(0., 1.35, 0.), ..default()
                       });
                       
-                      let mut limb = |p: &mut ChildBuilder, a: bool, l: bool, pos: Vec3| {
-                          // Конечности тоньше: 0.4x1.6x0.4
+                      // Руки: Капсулы (закругленные конечности)
+                      let arm_mesh = mesh.add(Capsule3d::new(0.2, 1.1));
+                      let leg_mesh = mesh.add(Capsule3d::new(0.25, 1.2));
+
+                      let mut spawn_limb = |p: &mut ChildBuilder, mesh_h: Handle<Mesh>, a: bool, l: bool, pos: Vec3, rot: f32| {
                           p.spawn((SpatialBundle::from_transform(Transform::from_translation(pos)), if a { Limb::Arm(if l{1.}else{-1.}) } else { Limb::Leg(if l{1.}else{-1.}) }))
                           .with_children(|c| { 
                               c.spawn(PbrBundle { 
-                                  mesh: mesh.add(Cuboid::new(0.4, 1.6, 0.4)), 
-                                  material: body_mat.clone(), 
-                                  transform: Transform::from_xyz(0., -0.8, 0.),
+                                  mesh: mesh_h, 
+                                  material: white_mat.clone(), 
+                                  transform: Transform::from_xyz(0., -0.6, 0.).with_rotation(Quat::from_rotation_z(rot)),
                                   ..default()
                               }); 
                           });
                       };
-                      // Плечи: y=0.7 (верх торса), x=0.9
-                      limb(m, true, true, Vec3::new(-0.9, 0.7, 0.));  
-                      limb(m, true, false, Vec3::new(0.9, 0.7, 0.)); 
-                      // Ноги: y=-0.8, x=0.3
-                      limb(m, false, true, Vec3::new(-0.35, -0.8, 0.));
-                      limb(m, false, false, Vec3::new(0.35, -0.8, 0.));
+
+                      // Плечи (позиция y=0.7)
+                      spawn_limb(m, arm_mesh.clone(), true, true, Vec3::new(-0.85, 0.7, 0.), 0.0);  
+                      spawn_limb(m, arm_mesh, true, false, Vec3::new(0.85, 0.7, 0.), 0.0); 
+                      // Ноги (позиция y=-0.8)
+                      spawn_limb(m, leg_mesh.clone(), false, true, Vec3::new(-0.35, -0.8, 0.), 0.0);
+                      spawn_limb(m, leg_mesh, false, false, Vec3::new(0.35, -0.8, 0.), 0.0);
                   });
               });
           }
@@ -181,22 +179,22 @@ jobs:
                   dir.y = 0.; 
                   if dir.length() > 0.1 { 
                       let d = dir.normalize();
-                      pt.translation += d * 10.0 * dt;
+                      pt.translation += d * 11.0 * dt;
                       for mut m in q_mod.iter_mut() { 
                           m.rotation = m.rotation.slerp(Quat::from_rotation_y(f32::atan2(d.x, d.z)), 15. * dt); 
                       }
-                      pl.walk += dt * 10.0;
+                      pl.walk += dt * 11.0;
                   } else { pl.walk = 0.; }
               }
           }
 
           fn animate(q_pl: Query<&Player>, mut q_l: Query<(&Limb, &mut Transform)>) {
               if let Ok(pl) = q_pl.get_single() {
-                  let w = pl.walk.sin();
+                  let w = (pl.walk * 1.2).sin();
                   for (l, mut t) in q_l.iter_mut() {
                       match l { 
-                          Limb::Arm(s) => t.rotation = Quat::from_rotation_x(w * 0.9 * s), 
-                          Limb::Leg(s) => t.rotation = Quat::from_rotation_x(-w * 0.9 * s) 
+                          Limb::Arm(s) => t.rotation = Quat::from_rotation_x(w * 0.8 * s), 
+                          Limb::Leg(s) => t.rotation = Quat::from_rotation_x(-w * 0.8 * s) 
                       }
                   }
               }
@@ -204,7 +202,7 @@ jobs:
 
           fn style(mut ctx: EguiContexts) {
               let mut v = egui::Visuals::dark();
-              v.window_fill = egui::Color32::from_rgb(10, 10, 10);
+              v.window_fill = egui::Color32::from_rgb(10, 10, 12);
               ctx.ctx_mut().set_visuals(v);
           }
 
@@ -214,22 +212,22 @@ jobs:
                       ui.add_space(100.);
                       ui.heading(egui::RichText::new("ENJOER").size(80.).strong().color(egui::Color32::WHITE));
                       ui.add_space(60.);
-                      if ui.add_sized([250., 80.], egui::Button::new("PLAY")).clicked() { next.set(GameState::Play); }
+                      if ui.add_sized([260., 90.], egui::Button::new(egui::RichText::new("PLAY").size(30.))).clicked() { next.set(GameState::Play); }
                   });
               });
           }
 
           fn hud(mut ctx: EguiContexts, mut next: ResMut<NextState<GameState>>, ctrl: Res<Controls>, q_win: Query<&Window, With<PrimaryWindow>>) {
               let Ok(win) = q_win.get_single() else { return };
-              let _h = win.height();
+              let h = win.height();
               egui::Area::new(egui::Id::new("h")).fixed_pos(egui::pos2(0., 0.)).show(ctx.ctx_mut(), |ui| {
-                  if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(80., 40.)), egui::Button::new("Exit")).clicked() { 
+                  if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(100., 50.)), egui::Button::new("Exit")).clicked() { 
                       next.set(GameState::Menu); 
                   }
                   let p = ui.painter();
                   if let (Some(c), Some(cur)) = (ctrl.joy_c, ctrl.joy_cur) {
-                      p.circle_filled(egui::pos2(c.x, c.y), 60., egui::Color32::from_black_alpha(150));
-                      p.circle_filled(egui::pos2(cur.x, cur.y), 25., egui::Color32::WHITE);
+                      p.circle_filled(egui::pos2(c.x, c.y), 65., egui::Color32::from_black_alpha(160));
+                      p.circle_filled(egui::pos2(cur.x, cur.y), 30., egui::Color32::WHITE);
                   }
               });
           }
