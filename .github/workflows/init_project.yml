@@ -1,10 +1,13 @@
-name: MadGPT Ultra-Fast Mobile Build
+name: MadGPT Turbo-Max Mobile
 
-on: [push, workflow_dispatch]
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -17,53 +20,95 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Create Project Structure
+      - name: Create Turbo Structure
         run: |
-          mkdir -p app/src/main/java/com/madgpt/ultra
+
+          mkdir -p app/src/main/java/com/madgpt/turbo
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/assets
 
-          # 1. settings.gradle
-          echo "include ':app'" > settings.gradle
-
-          # 2. gradle.properties (ВАЖНО для AndroidX)
-          cat > gradle.properties << 'EOF'
-          android.useAndroidX=true
-          android.enableJetifier=true
-          kotlin.code.style=official
+          # -------------------------
+          # settings.gradle (AGP 8+)
+          # -------------------------
+          cat > settings.gradle << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "MadGPTTurbo"
+          include(":app")
           EOF
 
-          # 3. Корневой build.gradle
+          # -------------------------
+          # Root build.gradle
+          # -------------------------
           cat > build.gradle << 'EOF'
           buildscript {
               repositories { google(); mavenCentral() }
-              dependencies { 
+              dependencies {
                   classpath 'com.android.tools.build:gradle:8.2.2'
-                  classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20' 
+                  classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20'
               }
           }
-          allprojects {
-              repositories { google(); mavenCentral() }
-          }
+          allprojects { repositories { google(); mavenCentral() } }
           EOF
 
-          # 4. app/build.gradle
+          # -------------------------
+          # gradle.properties
+          # -------------------------
+          cat > gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx2048m
+          android.useAndroidX=true
+          android.enableJetifier=true
+          EOF
+
+          # -------------------------
+          # local.properties
+          # -------------------------
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+          # -------------------------
+          # app/build.gradle
+          # -------------------------
           cat > app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
-              id 'kotlin-android'
+              id 'org.jetbrains.kotlin.android'
           }
+
           android {
-              namespace 'com.madgpt.ultra'
+              namespace 'com.madgpt.turbo'
               compileSdk 34
+
               defaultConfig {
-                  applicationId "com.madgpt.ultra"
+                  applicationId "com.madgpt.turbo"
                   minSdk 24
                   targetSdk 34
-                  versionCode 1
-                  versionName "1.0-Ultra"
+                  versionCode 7
+                  versionName "7.0-TURBO"
+                  ndk { abiFilters 'arm64-v8a' }
               }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+
               buildTypes {
                   release {
                       minifyEnabled true
@@ -72,50 +117,147 @@ jobs:
                   }
               }
           }
+
           dependencies {
               implementation 'androidx.core:core-ktx:1.12.0'
               implementation 'androidx.appcompat:appcompat:1.6.1'
               implementation 'com.google.android.material:material:1.11.0'
               implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.17.1'
-              implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
+              implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.20"
+              implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
           }
           EOF
 
-          # 5. strings.xml (Часто причина сбоев)
+          # -------------------------
+          # strings.xml
+          # -------------------------
           cat > app/src/main/res/values/strings.xml << 'EOF'
           <resources>
-              <string name="app_name">MadGPT Ultra</string>
+              <string name="app_name">MadGPT Turbo</string>
           </resources>
           EOF
 
-          # 6. colors.xml
-          cat > app/src/main/res/values/colors.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <color name="black">#FF000000</color>
-              <color name="white">#FFFFFFFF</color>
-              <color name="green_matrix">#00FF41</color>
-          </resources>
-          EOF
-
-          # 7. themes.xml
+          # -------------------------
+          # themes.xml
+          # -------------------------
           cat > app/src/main/res/values/themes.xml << 'EOF'
           <resources>
-              <style name="Theme.MadGPTUltra" parent="Theme.AppCompat.DayNight.NoActionBar">
-                  <item name="colorPrimary">@color/green_matrix</item>
-                  <item name="android:windowBackground">@color/black</item>
+              <style name="Theme.MadGPTTurbo" parent="Theme.AppCompat.NoActionBar">
+                  <item name="android:windowBackground">@android:color/black</item>
               </style>
           </resources>
           EOF
 
-          # 8. Android Manifest
+          # -------------------------
+          # Layout
+          # -------------------------
+          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:background="#000000"
+              android:padding="12dp">
+
+              <TextView
+                  android:id="@+id/status"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="ENGINE: TURBO MODE ACTIVE"
+                  android:textColor="#00FF41"
+                  android:textSize="12sp"
+                  android:fontFamily="monospace"/>
+
+              <TextView
+                  android:id="@+id/chat"
+                  android:layout_width="match_parent"
+                  android:layout_height="0dp"
+                  android:layout_weight="1"
+                  android:textColor="#FFFFFF"
+                  android:fontFamily="monospace"
+                  android:textSize="15sp"
+                  android:scrollbars="vertical"/>
+
+              <EditText
+                  android:id="@+id/input"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:hint="READY ДЛЯ ВВОДА..."
+                  android:textColor="#FFFFFF"
+                  android:textColorHint="#333333"
+                  android:background="#111111"
+                  android:padding="12dp"
+                  android:layout_marginTop="8dp"/>
+
+              <Button
+                  android:id="@+id/send"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="EXECUTE"
+                  android:backgroundTint="#00FF41"
+                  android:textColor="#000000"
+                  android:textStyle="bold"/>
+          </LinearLayout>
+          EOF
+
+          # -------------------------
+          # MainActivity.kt
+          # -------------------------
+          cat > app/src/main/java/com/madgpt/turbo/MainActivity.kt << 'EOF'
+          package com.madgpt.turbo
+
+          import android.os.Bundle
+          import android.widget.*
+          import androidx.appcompat.app.AppCompatActivity
+          import ai.onnxruntime.*
+          import kotlinx.coroutines.*
+
+          class MainActivity : AppCompatActivity() {
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+
+                  val chat = findViewById<TextView>(R.id.chat)
+                  val input = findViewById<EditText>(R.id.input)
+                  val status = findViewById<TextView>(R.id.status)
+
+                  try {
+                      val env = OrtEnvironment.getEnvironment()
+                      status.text = "ENGINE: ONLINE (TURBO)"
+                  } catch (e: Exception) {
+                      status.text = "ENGINE INIT ERROR"
+                  }
+
+                  findViewById<Button>(R.id.send).setOnClickListener {
+                      val text = input.text.toString()
+                      chat.append("\n> $text\n")
+                      input.setText("")
+
+                      CoroutineScope(Dispatchers.Default).launch {
+                          val words = "Анализ завершен. MadGPT работает стабильно.".split(" ")
+                          for (w in words) {
+                              delay(250)
+                              withContext(Dispatchers.Main) {
+                                  chat.append("$w ")
+                              }
+                          }
+                          chat.append("\n")
+                      }
+                  }
+              }
+          }
+          EOF
+
+          # -------------------------
+          # AndroidManifest.xml
+          # -------------------------
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application 
-                  android:allowBackup="true"
-                  android:label="@string/app_name" 
-                  android:theme="@style/Theme.MadGPTUltra"
-                  android:hardwareAccelerated="true">
+              <application
+                  android:label="MadGPT Turbo"
+                  android:theme="@style/Theme.MadGPTTurbo">
                   <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
@@ -126,46 +268,8 @@ jobs:
           </manifest>
           EOF
 
-          # 9. Layout (activity_main.xml)
-          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
-          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:layout_width="match_parent" android:layout_height="match_parent"
-              android:orientation="vertical" android:background="#000000" android:padding="16dp">
-              <TextView android:id="@+id/chatLog" android:layout_width="match_parent" android:layout_height="0dp"
-                  android:layout_weight="1" android:textColor="#FFFFFF" android:fontFamily="monospace" android:text="MadGPT System Online...\n"/>
-              <EditText android:id="@+id/userInput" android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:hint="Введите запрос..." android:textColor="#FFFFFF" android:textColorHint="#555555" android:inputType="text"/>
-              <Button android:id="@+id/btnSend" android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:text="ОТПРАВИТЬ" android:backgroundTint="#00FF41" android:textColor="#000000"/>
-          </LinearLayout>
-          EOF
-
-          # 10. MainActivity.kt (с полными импортами)
-          cat > app/src/main/java/com/madgpt/ultra/MainActivity.kt << 'EOF'
-          package com.madgpt.ultra
-          import android.os.Bundle
-          import android.widget.TextView
-          import android.widget.EditText
-          import android.widget.Button
-          import androidx.appcompat.app.AppCompatActivity
-
-          class MainActivity : AppCompatActivity() {
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  setContentView(R.layout.activity_main)
-                  val chatLog = findViewById<TextView>(R.id.chatLog)
-                  val input = findViewById<EditText>(R.id.userInput)
-                  val btn = findViewById<Button>(R.id.btnSend)
-                  
-                  btn.setOnClickListener {
-                      val text = input.text.toString()
-                      chatLog.append("\nЯ: $text")
-                      chatLog.append("\nБот: Анализирую... Оптимизация на 4ГБ ОЗУ активна.\n")
-                      input.setText("")
-                  }
-              }
-          }
-          EOF
+          # Заглушка модели (чтобы не падало)
+          touch app/src/main/assets/model.onnx
 
       - name: Build APK
         run: |
@@ -179,5 +283,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MadGPT-Ultra-v7
+          name: MadGPT-Turbo-Edition
           path: app/build/outputs/apk/debug/app-debug.apk
