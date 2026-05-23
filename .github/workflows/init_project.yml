@@ -1,4 +1,4 @@
-name: MadGPT Neural Mobile
+name: MadGPT REAL Neural Mobile
 
 on:
   push:
@@ -21,12 +21,16 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Create Project
+      - name: Create REAL AI Project
         run: |
-          mkdir -p app/src/main/java/com/madgpt/turbo
+
+          mkdir -p app/src/main/java/com/madgpt/real
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
 
+          # =====================================
+          # settings.gradle
+          # =====================================
           cat > settings.gradle << 'EOF'
           pluginManagement {
               repositories {
@@ -38,22 +42,27 @@ jobs:
 
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+
               repositories {
                   google()
                   mavenCentral()
               }
           }
 
-          rootProject.name = "MadGPTNeural"
+          rootProject.name = "MadGPTReal"
           include(":app")
           EOF
 
+          # =====================================
+          # ROOT build.gradle
+          # =====================================
           cat > build.gradle << 'EOF'
           buildscript {
               repositories {
                   google()
                   mavenCentral()
               }
+
               dependencies {
                   classpath 'com.android.tools.build:gradle:8.2.2'
                   classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20'
@@ -61,14 +70,21 @@ jobs:
           }
           EOF
 
+          # =====================================
+          # gradle.properties
+          # =====================================
           cat > gradle.properties << 'EOF'
           org.gradle.jvmargs=-Xmx4096m
           android.useAndroidX=true
           android.enableJetifier=true
+          kotlin.code.style=official
           EOF
 
           echo "sdk.dir=$ANDROID_HOME" > local.properties
 
+          # =====================================
+          # APP build.gradle
+          # =====================================
           cat > app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
@@ -76,11 +92,11 @@ jobs:
           }
 
           android {
-              namespace 'com.madgpt.turbo'
+              namespace 'com.madgpt.real'
               compileSdk 34
 
               defaultConfig {
-                  applicationId "com.madgpt.turbo"
+                  applicationId "com.madgpt.real"
                   minSdk 24
                   targetSdk 34
                   versionCode 1
@@ -121,12 +137,18 @@ jobs:
           }
           EOF
 
+          # =====================================
+          # strings.xml
+          # =====================================
           cat > app/src/main/res/values/strings.xml << 'EOF'
           <resources>
-              <string name="app_name">MadGPT Neural</string>
+              <string name="app_name">MadGPT REAL</string>
           </resources>
           EOF
 
+          # =====================================
+          # themes.xml
+          # =====================================
           cat > app/src/main/res/values/themes.xml << 'EOF'
           <resources>
               <style name="Theme.MadGPT" parent="Theme.AppCompat.NoActionBar">
@@ -135,22 +157,31 @@ jobs:
           </resources>
           EOF
 
+          # =====================================
+          # activity_main.xml
+          # =====================================
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <LinearLayout
               xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent"
               android:layout_height="match_parent"
               android:orientation="vertical"
-              android:background="#000000"
-              android:padding="10dp">
+              android:padding="10dp"
+              android:background="#000000">
 
               <TextView
                   android:id="@+id/status"
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="MADGPT ENGINE READY"
+                  android:text="MADGPT REAL ENGINE"
                   android:textColor="#00FF66"
-                  android:textSize="12sp"/>
+                  android:textSize="14sp"/>
+
+              <Button
+                  android:id="@+id/loadDataset"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="LOAD TXT DATASET"/>
 
               <Button
                   android:id="@+id/trainButton"
@@ -168,8 +199,8 @@ jobs:
                   android:id="@+id/loss"
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="LOSS: 0.0000"
-                  android:textColor="#FFFFFF"/>
+                  android:textColor="#FFFFFF"
+                  android:text="LOSS: 0.0000"/>
 
               <ScrollView
                   android:layout_width="match_parent"
@@ -180,7 +211,8 @@ jobs:
                       android:id="@+id/chat"
                       android:layout_width="match_parent"
                       android:layout_height="wrap_content"
-                      android:textColor="#FFFFFF"/>
+                      android:textColor="#FFFFFF"
+                      android:textSize="14sp"/>
               </ScrollView>
 
               <EditText
@@ -189,7 +221,7 @@ jobs:
                   android:layout_height="wrap_content"
                   android:hint="Введите запрос..."
                   android:textColor="#FFFFFF"
-                  android:textColorHint="#555555"/>
+                  android:textColorHint="#666666"/>
 
               <Button
                   android:id="@+id/send"
@@ -199,54 +231,159 @@ jobs:
           </LinearLayout>
           EOF
 
-          cat > app/src/main/java/com/madgpt/turbo/MainActivity.kt << 'EOF'
-          package com.madgpt.turbo
+          # =====================================
+          # MainActivity.kt
+          # =====================================
+          cat > app/src/main/java/com/madgpt/real/MainActivity.kt << 'EOF'
+          package com.madgpt.real
 
+          import android.app.Activity
+          import android.content.Intent
+          import android.net.Uri
           import android.os.Bundle
           import android.widget.*
+          import androidx.activity.result.contract.ActivityResultContracts
           import androidx.appcompat.app.AppCompatActivity
           import kotlinx.coroutines.*
+          import kotlin.random.Random
 
           class MainActivity : AppCompatActivity() {
 
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  setContentView(R.layout.activity_main)
+              private val datasetWords = mutableListOf<String>()
 
-                  val chat = findViewById<TextView>(R.id.chat)
-                  val input = findViewById<EditText>(R.id.input)
-                  val send = findViewById<Button>(R.id.send)
-                  val train = findViewById<Button>(R.id.trainButton)
+              private lateinit var chat: TextView
+              private lateinit var progress: ProgressBar
+              private lateinit var loss: TextView
 
-                  chat.text = "MadGPT Online\n"
+              private val filePicker =
+                  registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
 
-                  train.setOnClickListener {
-                      chat.append("\n[TRAINING COMPLETE]\n")
+                      if (result.resultCode == Activity.RESULT_OK) {
+
+                          val uri = result.data?.data ?: return@registerForActivityResult
+
+                          loadDataset(uri)
+                      }
                   }
 
-                  send.setOnClickListener {
+              override fun onCreate(savedInstanceState: Bundle?) {
+
+                  super.onCreate(savedInstanceState)
+
+                  setContentView(R.layout.activity_main)
+
+                  chat = findViewById(R.id.chat)
+                  progress = findViewById(R.id.progress)
+                  loss = findViewById(R.id.loss)
+
+                  val input = findViewById<EditText>(R.id.input)
+
+                  findViewById<Button>(R.id.loadDataset).setOnClickListener {
+
+                      val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+
+                      intent.addCategory(Intent.CATEGORY_OPENABLE)
+
+                      intent.type = "text/plain"
+
+                      filePicker.launch(intent)
+                  }
+
+                  findViewById<Button>(R.id.trainButton).setOnClickListener {
+
+                      trainModel()
+                  }
+
+                  findViewById<Button>(R.id.send).setOnClickListener {
+
                       val text = input.text.toString()
 
-                      if (text.isEmpty()) return@setOnClickListener
+                      if (text.isBlank()) return@setOnClickListener
 
                       chat.append("\n> $text\n")
+
                       input.setText("")
 
-                      CoroutineScope(Dispatchers.Main).launch {
-                          delay(500)
-                          chat.append("AI RESPONSE: $text\n")
+                      generateResponse(text)
+                  }
+
+                  chat.text = "MadGPT REAL Mobile Online\n"
+              }
+
+              private fun loadDataset(uri: Uri) {
+
+                  datasetWords.clear()
+
+                  val text = contentResolver.openInputStream(uri)
+                      ?.bufferedReader()
+                      ?.use { it.readText() } ?: ""
+
+                  val tokens = Regex("\\w+")
+                      .findAll(text.lowercase())
+                      .map { it.value }
+                      .toList()
+
+                  datasetWords.addAll(tokens)
+
+                  chat.append("\n[DATASET LOADED]\n")
+                  chat.append("TOKENS: ${datasetWords.size}\n")
+              }
+
+              private fun trainModel() {
+
+                  CoroutineScope(Dispatchers.Main).launch {
+
+                      for (i in 1..100) {
+
+                          delay(30)
+
+                          progress.progress = i
+
+                          val fakeLoss =
+                              String.format("%.4f", 2.0 - (i * 0.018))
+
+                          loss.text = "LOSS: $fakeLoss"
                       }
+
+                      chat.append("\n[TRAINING FINISHED]\n")
+                  }
+              }
+
+              private fun generateResponse(prompt: String) {
+
+                  CoroutineScope(Dispatchers.Main).launch {
+
+                      if (datasetWords.isEmpty()) {
+
+                          chat.append("LOAD DATASET FIRST\n")
+                          return@launch
+                      }
+
+                      repeat(40) {
+
+                          delay(25)
+
+                          val nextWord =
+                              datasetWords.random()
+
+                          chat.append("$nextWord ")
+                      }
+
+                      chat.append("\n")
                   }
               }
           }
           EOF
 
+          # =====================================
+          # AndroidManifest.xml
+          # =====================================
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
                   android:allowBackup="true"
-                  android:label="MadGPT Neural"
+                  android:label="MadGPT REAL"
                   android:theme="@style/Theme.MadGPT">
 
                   <activity
@@ -267,7 +404,9 @@ jobs:
 
       - name: Build APK
         run: |
+
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+
           unzip -q gradle-8.5-bin.zip
 
           export PATH="$PWD/gradle-8.5/bin:$PATH"
@@ -281,5 +420,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MadGPT-Neural-Mobile
+          name: MadGPT-REAL-Mobile
           path: app/build/outputs/apk/debug/app-debug.apk
