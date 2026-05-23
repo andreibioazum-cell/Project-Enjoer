@@ -287,7 +287,7 @@ jobs:
           EOF
 
           # =========================================
-          # MainActivity.kt (СТАБИЛЬНАЯ ВЕРСИЯ)
+          # MainActivity.kt (ИСПРАВЛЕННАЯ ВЕРСИЯ)
           # =========================================
           cat > app/src/main/java/com/jsai/neural/MainActivity.kt << 'EOF'
           package com.jsai.neural
@@ -311,8 +311,6 @@ jobs:
               private lateinit var fileInfo: TextView
 
               private var datasetText = ""
-              private var trainedTokens = mutableListOf<String>()
-              private var tokenizer = mutableMapOf<String, Int>()
               private var transitionMatrix = mutableMapOf<String, MutableMap<String, Int>>()
               
               private var isTraining = false
@@ -494,10 +492,10 @@ jobs:
                       contentResolver.openInputStream(uri)?.use { inputStream ->
                           BufferedReader(InputStreamReader(inputStream)).use { reader ->
                               var line: String?
-                              var count = 0
-                              while (reader.readLine().also { line = it } != null && count < 10000) {
+                              var lineCount = 0
+                              while (reader.readLine().also { line = it } != null && lineCount < 10000) {
                                   stringBuilder.append(line).append(" ")
-                                  count++
+                                  lineCount++
                               }
                           }
                       }
@@ -512,9 +510,9 @@ jobs:
                   
                   val words = prompt.lowercase().split(Regex("\\s+"))
                   val result = words.toMutableList()
-                  var current = words.lastOrNull() ?: return "No input"
+                  var current = if (words.isNotEmpty()) words.last() else return "No input"
                   
-                  repeat(50) {
+                  for (step in 0..49) {
                       val nextWords = transitionMatrix[current]
                       if (nextWords != null && nextWords.isNotEmpty()) {
                           // Choose next word based on probability
