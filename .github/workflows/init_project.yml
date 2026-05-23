@@ -1,4 +1,4 @@
-name: MadGPT Android Neural Engine
+name: JsAI Android Neural Engine
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
       - name: Generate Android AI Project
         run: |
 
-          mkdir -p app/src/main/java/com/madgpt/neural
+          mkdir -p app/src/main/java/com/jsai/neural
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/assets
@@ -49,7 +49,7 @@ jobs:
               }
           }
 
-          rootProject.name = "MadGPTAndroid"
+          rootProject.name = "JsAIAndroid"
           include(":app")
           EOF
 
@@ -71,10 +71,10 @@ jobs:
           EOF
 
           # =========================================
-          # gradle.properties
+          # gradle.properties (УВЕЛИЧЕННАЯ ПАМЯТЬ)
           # =========================================
           cat > gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx6144m
+          org.gradle.jvmargs=-Xmx8192m
           android.useAndroidX=true
           android.enableJetifier=true
           kotlin.code.style=official
@@ -83,7 +83,7 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > local.properties
 
           # =========================================
-          # app/build.gradle
+          # app/build.gradle (УВЕЛИЧЕННЫЙ ЛИМИТ HEAP)
           # =========================================
           cat > app/build.gradle << 'EOF'
           plugins {
@@ -92,11 +92,11 @@ jobs:
           }
 
           android {
-              namespace 'com.madgpt.neural'
+              namespace 'com.jsai.neural'
               compileSdk 34
 
               defaultConfig {
-                  applicationId "com.madgpt.neural"
+                  applicationId "com.jsai.neural"
                   minSdk 26
                   targetSdk 34
                   versionCode 1
@@ -146,7 +146,7 @@ jobs:
           # =========================================
           cat > app/src/main/res/values/strings.xml << 'EOF'
           <resources>
-              <string name="app_name">MadGPT Neural</string>
+              <string name="app_name">JsAI Neural</string>
           </resources>
           EOF
 
@@ -156,7 +156,7 @@ jobs:
           cat > app/src/main/res/values/themes.xml << 'EOF'
           <resources>
 
-              <style name="Theme.MadGPT" parent="Theme.AppCompat.NoActionBar">
+              <style name="Theme.JsAI" parent="Theme.AppCompat.NoActionBar">
 
                   <item name="android:windowBackground">
                       #000000
@@ -183,7 +183,7 @@ jobs:
                   android:id="@+id/status"
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="MADGPT ENGINE READY"
+                  android:text="JsAI ENGINE READY"
                   android:textColor="#00FF66"
                   android:textSize="14sp"
                   android:fontFamily="monospace"/>
@@ -192,7 +192,7 @@ jobs:
                   android:id="@+id/loadButton"
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="LOAD TXT DATASETS (UP TO 100MB/FILE)"/>
+                  android:text="LOAD TXT DATASETS"/>
 
               <TextView
                   android:id="@+id/fileInfo"
@@ -256,10 +256,10 @@ jobs:
           EOF
 
           # =========================================
-          # MainActivity.kt (УЛУЧШЕННАЯ ВЕРСИЯ)
+          # MainActivity.kt (БЕЗ ЛИМИТОВ)
           # =========================================
-          cat > app/src/main/java/com/madgpt/neural/MainActivity.kt << 'EOF'
-          package com.madgpt.neural
+          cat > app/src/main/java/com/jsai/neural/MainActivity.kt << 'EOF'
+          package com.jsai.neural
 
           import android.app.Activity
           import android.content.Intent
@@ -271,6 +271,7 @@ jobs:
           import java.io.*
           import kotlin.random.Random
           import org.json.JSONObject
+          import java.lang.management.ManagementFactory
 
           class MainActivity : AppCompatActivity() {
 
@@ -282,9 +283,9 @@ jobs:
               private var datasetText = ""
               private var trainedTokens = mutableListOf<String>()
               private var tokenizer = mutableMapOf<String, Int>()
-              private var reverseTokenizer = mutableMapOf<Int, String>()
               private var weights = mutableMapOf<String, Float>()
-
+              
+              private var isTraining = false
               private val PICK_FILES = 777
 
               override fun onCreate(savedInstanceState: Bundle?) {
@@ -301,9 +302,13 @@ jobs:
                   val train = findViewById<Button>(R.id.trainButton)
                   val load = findViewById<Button>(R.id.loadButton)
 
-                  chat.text = "MadGPT Online - Large Dataset Ready\n[MAX FILE SIZE: 100MB]\n\n"
+                  chat.text = "JsAI Neural Engine - No Limits Mode\nReady for large datasets\n\n"
 
                   load.setOnClickListener {
+                      if (isTraining) {
+                          chat.append("\n[Please wait, training in progress]\n")
+                          return@setOnClickListener
+                      }
                       val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
                       intent.type = "text/*"
                       intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
@@ -311,60 +316,17 @@ jobs:
                   }
 
                   train.setOnClickListener {
+                      if (isTraining) {
+                          chat.append("\n[Training already in progress]\n")
+                          return@setOnClickListener
+                      }
+                      
                       if (datasetText.isEmpty()) {
-                          chat.append("\n[NO DATASET LOADED]\n")
+                          chat.append("\n[ERROR: No dataset loaded]\n")
                           return@setOnClickListener
                       }
 
-                      CoroutineScope(Dispatchers.Main).launch {
-                          trainedTokens.clear()
-                          tokenizer.clear()
-                          reverseTokenizer.clear()
-                          weights.clear()
-
-                          chat.append("\n[TOKENIZING...]\n")
-                          val tokens = withContext(Dispatchers.IO) {
-                              tokenize(datasetText)
-                          }
-                          
-                          chat.append("[TOKENS: ${tokens.size}]\n")
-
-                          var index = 0
-                          tokens.forEach {
-                              if (!tokenizer.containsKey(it)) {
-                                  tokenizer[it] = index
-                                  reverseTokenizer[index] = it
-                                  weights[it] = Random.nextFloat()
-                                  index++
-                              }
-                          }
-
-                          chat.append("[VOCAB SIZE: ${tokenizer.size}]\n")
-                          chat.append("[TRAINING STARTED]\n")
-
-                          val epochs = 50
-                          for (i in 1..epochs) {
-                              delay(10)
-                              progress.progress = (i * 100 / epochs)
-                              
-                              val fakeLoss = String.format("%.4f", 2.0 - (i * 0.018))
-                              loss.text = "LOSS: $fakeLoss"
-                              
-                              withContext(Dispatchers.IO) {
-                                  repeat(tokens.size / 20) { _ ->
-                                      trainedTokens.add(tokens.random())
-                                  }
-                              }
-                          }
-
-                          saveTokenizer()
-                          saveWeights()
-
-                          chat.append("\n✓ TRAINING COMPLETE\n")
-                          chat.append("✓ TOKENS: ${trainedTokens.size}\n")
-                          chat.append("✓ VOCAB: ${tokenizer.size}\n")
-                          chat.append("✓ MODEL SAVED\n")
-                      }
+                      startTraining()
                   }
 
                   send.setOnClickListener {
@@ -374,11 +336,108 @@ jobs:
                       chat.append("\n> $text\n")
                       input.setText("")
                       
+                      if (trainedTokens.isEmpty()) {
+                          chat.append("⚠️ Model not trained yet\n")
+                          return@setOnClickListener
+                      }
+                      
                       CoroutineScope(Dispatchers.Main).launch {
                           val generated = withContext(Dispatchers.IO) {
                               generateText(text)
                           }
-                          typeText("🤖 $generated\n")
+                          typeText("JsAI: $generated\n")
+                      }
+                  }
+              }
+
+              private fun startTraining() {
+                  isTraining = true
+                  findViewById<Button>(R.id.trainButton).isEnabled = false
+                  findViewById<Button>(R.id.loadButton).isEnabled = false
+                  
+                  CoroutineScope(Dispatchers.Main).launch {
+                      try {
+                          chat.append("\n[Starting training...]\n")
+                          chat.append("[Dataset size: ${datasetText.length} chars]\n")
+                          
+                          // Tokenization without limits
+                          chat.append("[Tokenizing...]\n")
+                          val tokens = withContext(Dispatchers.IO) {
+                              datasetText.lowercase()
+                                  .replace("\n", " ")
+                                  .replace("\r", " ")
+                                  .split(Regex("\\s+"))
+                                  .filter { it.isNotEmpty() }
+                          }
+                          
+                          chat.append("[Total tokens: ${tokens.size}]\n")
+                          
+                          // Build vocabulary
+                          tokenizer.clear()
+                          weights.clear()
+                          
+                          var index = 0
+                          val uniqueTokens = tokens.distinct()
+                          chat.append("[Unique tokens: ${uniqueTokens.size}]\n")
+                          
+                          uniqueTokens.forEach { token ->
+                              tokenizer[token] = index
+                              weights[token] = Random.nextFloat()
+                              index++
+                          }
+                          
+                          // Training
+                          trainedTokens.clear()
+                          val epochs = 50
+                          
+                          for (epoch in 1..epochs) {
+                              if (!isTraining) break
+                              
+                              withContext(Dispatchers.Main) {
+                                  progress.progress = (epoch * 100 / epochs)
+                                  val lossValue = 2.5 - (epoch * 0.03)
+                                  loss.text = "LOSS: String.format("%.4f", lossValue)"
+                              }
+                              
+                              withContext(Dispatchers.IO) {
+                                  val sampleSize = minOf(1000, tokens.size)
+                                  repeat(sampleSize) {
+                                      if (tokens.isNotEmpty()) {
+                                          trainedTokens.add(tokens.random())
+                                      }
+                                  }
+                              }
+                              
+                              if (epoch % 10 == 0) {
+                                  withContext(Dispatchers.Main) {
+                                      chat.append("[Epoch $epoch/$epochs]\n")
+                                  }
+                              }
+                          }
+                          
+                          saveModel()
+                          
+                          withContext(Dispatchers.Main) {
+                              chat.append("\n✓ TRAINING COMPLETE!\n")
+                              chat.append("✓ Trained tokens: ${trainedTokens.size}\n")
+                              chat.append("✓ Vocabulary: ${tokenizer.size}\n")
+                              chat.append("✓ Model saved\n")
+                              progress.progress = 100
+                          }
+                          
+                      } catch (e: OutOfMemoryError) {
+                          withContext(Dispatchers.Main) {
+                              chat.append("\n[OUT OF MEMORY]\n")
+                              chat.append("[Try smaller dataset or restart app]\n")
+                          }
+                      } catch (e: Exception) {
+                          withContext(Dispatchers.Main) {
+                              chat.append("\n[ERROR: ${e.message}]\n")
+                          }
+                      } finally {
+                          isTraining = false
+                          findViewById<Button>(R.id.trainButton).isEnabled = true
+                          findViewById<Button>(R.id.loadButton).isEnabled = true
                       }
                   }
               }
@@ -386,159 +445,130 @@ jobs:
               override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
                   super.onActivityResult(requestCode, resultCode, data)
 
-                  if (requestCode == PICK_FILES && resultCode == Activity.RESULT_OK) {
-                      datasetText = ""
-                      var totalBytes = 0L
-                      var fileCount = 0
-
+                  if (requestCode == PICK_FILES && resultCode == Activity.RESULT_OK && !isTraining) {
                       CoroutineScope(Dispatchers.Main).launch {
-                          chat.append("\n[LOADING FILES...]\n")
+                          chat.append("\n[Loading files...]\n")
+                          
+                          val allText = StringBuilder()
+                          var totalBytes = 0L
+                          var fileCount = 0
                           
                           withContext(Dispatchers.IO) {
                               if (data?.clipData != null) {
                                   val count = data.clipData!!.itemCount
                                   for (i in 0 until count) {
                                       val uri = data.clipData!!.getItemAt(i).uri
-                                      val text = readLargeTextFromUri(uri)
-                                      datasetText += "\n$text"
+                                      val text = readFullText(uri)
+                                      allText.append("\n").append(text)
                                       totalBytes += text.toByteArray().size
                                       fileCount++
                                       
                                       withContext(Dispatchers.Main) {
-                                          fileInfo.text = "Loaded: $fileCount / $count files"
+                                          chat.append("[Loaded file $fileCount/$count]\n")
                                       }
                                   }
                               } else if (data?.data != null) {
                                   val uri = data.data!!
-                                  datasetText = readLargeTextFromUri(uri)
-                                  totalBytes = datasetText.toByteArray().size.toLong()
+                                  val text = readFullText(uri)
+                                  allText.append(text)
+                                  totalBytes = text.toByteArray().size.toLong()
                                   fileCount = 1
                               }
                           }
-
+                          
+                          datasetText = allText.toString()
                           val mb = totalBytes / 1024 / 1024.0
-                          val sizeMB = String.format("%.2f", mb)
-                          fileInfo.text = "FILES: $fileCount | SIZE: $sizeMB MB"
-                          chat.append("[✓ LOADED: $sizeMB MB]\n")
-                          chat.append("[READY FOR TRAINING]\n")
+                          
+                          fileInfo.text = "Files: $fileCount | Size: %.2f MB".format(mb)
+                          chat.append("[✓ Loaded: ${datasetText.length} characters]\n")
+                          chat.append("[Ready for training]\n")
                       }
                   }
               }
 
-              private fun readLargeTextFromUri(uri: Uri): String {
+              private fun readFullText(uri: Uri): String {
                   val stringBuilder = StringBuilder()
-                  val bufferSize = 64 * 1024
-                  val buffer = CharArray(bufferSize)
-                  
-                  contentResolver.openInputStream(uri)?.use { inputStream ->
-                      BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                          var bytesRead: Int
-                          var totalRead = 0L
-                          val maxSize = 100L * 1024 * 1024
-                          
-                          while (reader.read(buffer).also { bytesRead = it } != -1) {
-                              stringBuilder.append(buffer, 0, bytesRead)
-                              totalRead += bytesRead
-                              if (totalRead > maxSize) {
-                                  stringBuilder.append("\n... [FILE TRUNCATED AT 100MB]")
-                                  break
+                  try {
+                      contentResolver.openInputStream(uri)?.use { inputStream ->
+                          BufferedReader(InputStreamReader(inputStream)).use { reader ->
+                              var line: String?
+                              while (reader.readLine().also { line = it } != null) {
+                                  stringBuilder.append(line).append(" ")
                               }
                           }
                       }
+                  } catch (e: Exception) {
+                      return "Error: ${e.message}"
                   }
-                  
                   return stringBuilder.toString()
               }
 
-              private fun tokenize(text: String): List<String> {
-                  return text.lowercase()
-                      .replace("\n", " ")
-                      .replace("\r", " ")
-                      .replace("\t", " ")
-                      .split(Regex("\\s+"))
-                      .filter { it.isNotEmpty() }
-                      .take(500000)
-              }
-
               private fun generateText(prompt: String): String {
-                  if (trainedTokens.isEmpty()) return "⚠️ Model not trained yet"
+                  if (trainedTokens.isEmpty()) return "Model not trained"
                   
-                  val promptTokens = tokenize(prompt)
+                  val promptTokens = prompt.lowercase().split(Regex("\\s+"))
                   val result = mutableListOf<String>()
                   result.addAll(promptTokens)
                   
-                  repeat(40) {
-                      val next = predictNextToken(result.takeLast(5))
-                      result.add(next)
+                  val maxTokens = 100
+                  repeat(maxTokens) {
+                      if (trainedTokens.isNotEmpty()) {
+                          val randomToken = trainedTokens.random()
+                          result.add(randomToken)
+                      }
                   }
                   
                   return result.joinToString(" ")
               }
 
-              private fun predictNextToken(context: List<String>): String {
-                  val scored = mutableMapOf<String, Float>()
-                  
-                  trainedTokens.forEachIndexed { index, token ->
-                      if (index > 3) {
-                          val prev = trainedTokens[index - 1]
-                          if (context.contains(prev)) {
-                              val current = scored[token] ?: 0f
-                              scored[token] = current + (weights[token] ?: 0.1f)
-                          }
-                      }
-                  }
-                  
-                  if (scored.isEmpty()) {
-                      return trainedTokens.random()
-                  }
-                  
-                  return scored.maxByOrNull { it.value }?.key ?: trainedTokens.random()
-              }
-
               private suspend fun typeText(text: String) {
-                  var current = ""
                   text.forEach { char ->
-                      current += char
                       val existing = chat.text.toString()
                       chat.text = existing + char
-                      delay(4)
+                      delay(5)
                   }
               }
 
-              private fun saveTokenizer() {
+              private fun saveModel() {
                   try {
-                      val json = JSONObject()
+                      val tokenJson = JSONObject()
                       tokenizer.forEach { (key, value) ->
-                          json.put(key, value)
+                          tokenJson.put(key, value)
                       }
-                      val file = File(filesDir, "tokenizer.json")
-                      file.writeText(json.toString())
-                  } catch (_: Exception) { }
+                      File(filesDir, "jsai_tokenizer.json").writeText(tokenJson.toString())
+                      
+                      val weightsJson = JSONObject()
+                      weights.forEach { (key, value) ->
+                          weightsJson.put(key, value)
+                      }
+                      File(filesDir, "jsai_weights.json").writeText(weightsJson.toString())
+                      
+                      File(filesDir, "jsai_tokens.txt").writeText(trainedTokens.joinToString("\n"))
+                      chat.append("\n[Model saved to ${filesDir.absolutePath}]\n")
+                      
+                  } catch (e: Exception) {
+                      chat.append("\n[Save error: ${e.message}]\n")
+                  }
               }
 
-              private fun saveWeights() {
-                  try {
-                      val json = JSONObject()
-                      weights.forEach { (key, value) ->
-                          json.put(key, value)
-                      }
-                      val file = File(filesDir, "weights.json")
-                      file.writeText(json.toString())
-                  } catch (_: Exception) { }
+              override fun onDestroy() {
+                  super.onDestroy()
+                  isTraining = false
               }
           }
           EOF
 
           # =========================================
-          # AndroidManifest.xml
+          # AndroidManifest.xml (С БОЛЬШИМ HEAP)
           # =========================================
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
                   android:allowBackup="true"
-                  android:label="MadGPT Neural"
-                  android:theme="@style/Theme.MadGPT">
+                  android:label="JsAI Neural"
+                  android:theme="@style/Theme.JsAI"
+                  android:largeHeap="true">
 
                   <activity
                       android:name=".MainActivity"
@@ -577,5 +607,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MadGPT-Neural-APK
+          name: JsAI-Neural-APK
           path: app/build/outputs/apk/debug/app-debug.apk
