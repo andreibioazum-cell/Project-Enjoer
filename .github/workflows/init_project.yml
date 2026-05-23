@@ -29,7 +29,7 @@ jobs:
           mkdir -p app/src/main/assets
 
           # -------------------------
-          # settings.gradle (ONLY repo source)
+          # settings.gradle
           # -------------------------
           cat > settings.gradle << 'EOF'
           pluginManagement {
@@ -52,10 +52,14 @@ jobs:
           EOF
 
           # -------------------------
-          # Root build.gradle (NO repositories!)
+          # Root build.gradle (repositories BACK)
           # -------------------------
           cat > build.gradle << 'EOF'
           buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
               dependencies {
                   classpath 'com.android.tools.build:gradle:8.2.2'
                   classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20'
@@ -72,9 +76,6 @@ jobs:
           android.enableJetifier=true
           EOF
 
-          # -------------------------
-          # local.properties
-          # -------------------------
           echo "sdk.dir=$ANDROID_HOME" > local.properties
 
           # -------------------------
@@ -107,14 +108,6 @@ jobs:
               kotlinOptions {
                   jvmTarget = "17"
               }
-
-              buildTypes {
-                  release {
-                      minifyEnabled true
-                      shrinkResources true
-                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
-                  }
-              }
           }
 
           dependencies {
@@ -129,7 +122,7 @@ jobs:
           EOF
 
           # -------------------------
-          # strings.xml
+          # resources
           # -------------------------
           cat > app/src/main/res/values/strings.xml << 'EOF'
           <resources>
@@ -137,9 +130,6 @@ jobs:
           </resources>
           EOF
 
-          # -------------------------
-          # themes.xml
-          # -------------------------
           cat > app/src/main/res/values/themes.xml << 'EOF'
           <resources>
               <style name="Theme.MadGPTTurbo" parent="Theme.AppCompat.NoActionBar">
@@ -148,9 +138,6 @@ jobs:
           </resources>
           EOF
 
-          # -------------------------
-          # Layout
-          # -------------------------
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent"
@@ -163,7 +150,7 @@ jobs:
                   android:id="@+id/status"
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="ENGINE: TURBO MODE ACTIVE"
+                  android:text="ENGINE ONLINE"
                   android:textColor="#00FF41"
                   android:textSize="12sp"
                   android:fontFamily="monospace"/>
@@ -175,19 +162,17 @@ jobs:
                   android:layout_weight="1"
                   android:textColor="#FFFFFF"
                   android:fontFamily="monospace"
-                  android:textSize="15sp"
-                  android:scrollbars="vertical"/>
+                  android:textSize="15sp"/>
 
               <EditText
                   android:id="@+id/input"
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:hint="READY ДЛЯ ВВОДА..."
+                  android:hint="Введите текст..."
                   android:textColor="#FFFFFF"
                   android:textColorHint="#333333"
                   android:background="#111111"
-                  android:padding="12dp"
-                  android:layout_marginTop="8dp"/>
+                  android:padding="12dp"/>
 
               <Button
                   android:id="@+id/send"
@@ -195,21 +180,16 @@ jobs:
                   android:layout_height="wrap_content"
                   android:text="EXECUTE"
                   android:backgroundTint="#00FF41"
-                  android:textColor="#000000"
-                  android:textStyle="bold"/>
+                  android:textColor="#000000"/>
           </LinearLayout>
           EOF
 
-          # -------------------------
-          # MainActivity.kt
-          # -------------------------
           cat > app/src/main/java/com/madgpt/turbo/MainActivity.kt << 'EOF'
           package com.madgpt.turbo
 
           import android.os.Bundle
           import android.widget.*
           import androidx.appcompat.app.AppCompatActivity
-          import ai.onnxruntime.*
           import kotlinx.coroutines.*
 
           class MainActivity : AppCompatActivity() {
@@ -220,14 +200,6 @@ jobs:
 
                   val chat = findViewById<TextView>(R.id.chat)
                   val input = findViewById<EditText>(R.id.input)
-                  val status = findViewById<TextView>(R.id.status)
-
-                  try {
-                      OrtEnvironment.getEnvironment()
-                      status.text = "ENGINE: ONLINE (TURBO)"
-                  } catch (e: Exception) {
-                      status.text = "ENGINE INIT ERROR"
-                  }
 
                   findViewById<Button>(R.id.send).setOnClickListener {
                       val text = input.text.toString()
@@ -235,23 +207,16 @@ jobs:
                       input.setText("")
 
                       CoroutineScope(Dispatchers.Default).launch {
-                          val words = "Анализ завершен. MadGPT работает стабильно.".split(" ")
-                          for (w in words) {
-                              delay(250)
-                              withContext(Dispatchers.Main) {
-                                  chat.append("$w ")
-                              }
+                          delay(400)
+                          withContext(Dispatchers.Main) {
+                              chat.append("Ответ: Система работает стабильно.\n")
                           }
-                          chat.append("\n")
                       }
                   }
               }
           }
           EOF
 
-          # -------------------------
-          # AndroidManifest.xml
-          # -------------------------
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application
@@ -266,8 +231,6 @@ jobs:
               </application>
           </manifest>
           EOF
-
-          touch app/src/main/assets/model.onnx
 
       - name: Build APK
         run: |
