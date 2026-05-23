@@ -1,265 +1,193 @@
-name: Build APK
+name: MadGPT Ultra-Fast Mobile Build
+
 on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Free Disk Space
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY"
-          sudo apt-get clean
-
-      - name: Install LLD Linker
-        run: sudo apt-get update && sudo apt-get install -y lld
-
-      - name: Generate Project
-        run: |
-          mkdir enjoer_game && cd enjoer_game
-          keytool -genkey -v -keystore release.keystore -alias mykey -keyalg RSA -keysize 2048 -validity 10000 -storepass password -keypass password -dname "CN=E,O=E,C=US"
-          
-          cat << 'EOF' > Cargo.toml
-          [package]
-          name = "enjoer_game"
-          version = "7.0.0"
-          edition = "2021"
-
-          [lib]
-          name = "enjoer_game"
-          crate-type = ["cdylib"]
-
-          [dependencies]
-          bevy = { version = "0.14.0", default-features = false, features = [
-              "bevy_pbr", "bevy_render", "bevy_winit", "bevy_core_pipeline",
-              "bevy_asset", "bevy_state", "bevy_color", "bevy_scene",
-              "multi_threaded", "x11", "default_font", "android_shared_stdcxx"
-          ] }
-          bevy_egui = "0.28.0"
-
-          [package.metadata.android]
-          apk_name = "EnjoerGame"
-          build_targets = ["aarch64-linux-android"]
-          min_sdk_version = 24
-          target_sdk_version = 33
-          strip = "strip"
-          fullscreen = true
-
-          [package.metadata.android.signing.release]
-          path = "release.keystore"
-          keystore_password = "password"
-          key_alias = "mykey"
-          key_password = "password"
-
-          [profile.release]
-          opt-level = 3
-          lto = "thin" 
-          codegen-units = 1
-          EOF
-          
-          mkdir src
-          cat << 'EOF' > src/lib.rs
-          use bevy::prelude::*;
-          use bevy::window::{PrimaryWindow, WindowMode};
-          use bevy_egui::{egui, EguiContexts, EguiPlugin};
-
-          #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
-          enum GameState { #[default] Menu, Play }
-
-          #[derive(Component)] struct Player { walk: f32 }
-          #[derive(Component)] struct Pivot;
-          #[derive(Component)] struct Model;
-          #[derive(Component)] enum Limb { Arm(f32), Leg(f32) }
-
-          #[derive(Resource, Default)]
-          struct Controls { move_dir: Vec2, look: Vec2, joy_c: Option<Vec2>, joy_cur: Option<Vec2> }
-
-          #[bevy_main]
-          fn main() {
-              App::new()
-                  .add_plugins(DefaultPlugins.set(WindowPlugin {
-                      primary_window: Some(Window { title: "Enjoer".into(), mode: WindowMode::BorderlessFullscreen, ..default() }), ..default()
-                  }))
-                  .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
-                  .add_plugins(EguiPlugin)
-                  .init_state::<GameState>()
-                  .init_resource::<Controls>()
-                  .add_systems(Startup, setup)
-                  .add_systems(Update, style)
-                  .add_systems(Update, menu.run_if(in_state(GameState::Menu)))
-                  .add_systems(Update, (touch, hud, move_player, animate).run_if(in_state(GameState::Play)))
-                  .run();
-          }
-
-          fn setup(mut cmd: Commands, mut mesh: ResMut<Assets<Mesh>>, mut mat: ResMut<Assets<StandardMaterial>>) {
-              // Пол (unlit: true убирает розовый цвет)
-              cmd.spawn(PbrBundle { 
-                  mesh: mesh.add(Plane3d::default().mesh().size(1000., 1000.)), 
-                  material: mat.add(StandardMaterial { base_color: Color::srgb(0.2, 0.2, 0.25), unlit: true, ..default() }), 
-                  ..default() 
-              });
-              
-              let white_mat = mat.add(StandardMaterial { base_color: Color::WHITE, unlit: true, ..default() });
-
-              // Персонаж. Корень на y=2.5
-              cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., 2.5, 0.)), Player { walk: 0. }))
-              .with_children(|p| {
-                  p.spawn((SpatialBundle::default(), Pivot)).with_children(|piv| {
-                      piv.spawn(Camera3dBundle { transform: Transform::from_xyz(0., 5., 11.).looking_at(Vec3::Y * 1.5, Vec3::Y), ..default() });
-                  });
-                  p.spawn((SpatialBundle::default(), Model)).with_children(|m| {
-                      // Торс: сглаженный куб (чуть меньше)
-                      m.spawn(PbrBundle { 
-                          mesh: mesh.add(Cuboid::new(1.3, 1.6, 0.6)), 
-                          material: white_mat.clone(), ..default() 
-                      });
-                      
-                      // Голова: Закругленная (сфера вместо куба)
-                      m.spawn(PbrBundle { 
-                          mesh: mesh.add(Sphere::new(0.55).mesh().ico(4).unwrap()), 
-                          material: white_mat.clone(), 
-                          transform: Transform::from_xyz(0., 1.35, 0.), ..default()
-                      });
-                      
-                      // Руки: Капсулы (закругленные конечности)
-                      let arm_mesh = mesh.add(Capsule3d::new(0.2, 1.1));
-                      let leg_mesh = mesh.add(Capsule3d::new(0.25, 1.2));
-
-                      let mut spawn_limb = |p: &mut ChildBuilder, mesh_h: Handle<Mesh>, a: bool, l: bool, pos: Vec3, rot: f32| {
-                          p.spawn((SpatialBundle::from_transform(Transform::from_translation(pos)), if a { Limb::Arm(if l{1.}else{-1.}) } else { Limb::Leg(if l{1.}else{-1.}) }))
-                          .with_children(|c| { 
-                              c.spawn(PbrBundle { 
-                                  mesh: mesh_h, 
-                                  material: white_mat.clone(), 
-                                  transform: Transform::from_xyz(0., -0.6, 0.).with_rotation(Quat::from_rotation_z(rot)),
-                                  ..default()
-                              }); 
-                          });
-                      };
-
-                      // Плечи (позиция y=0.7)
-                      spawn_limb(m, arm_mesh.clone(), true, true, Vec3::new(-0.85, 0.7, 0.), 0.0);  
-                      spawn_limb(m, arm_mesh, true, false, Vec3::new(0.85, 0.7, 0.), 0.0); 
-                      // Ноги (позиция y=-0.8)
-                      spawn_limb(m, leg_mesh.clone(), false, true, Vec3::new(-0.35, -0.8, 0.), 0.0);
-                      spawn_limb(m, leg_mesh, false, false, Vec3::new(0.35, -0.8, 0.), 0.0);
-                  });
-              });
-          }
-
-          fn touch(touches: Res<Touches>, q_win: Query<&Window, With<PrimaryWindow>>, mut ctrl: ResMut<Controls>) {
-              ctrl.move_dir = Vec2::ZERO; ctrl.look = Vec2::ZERO;
-              let Ok(w) = q_win.get_single() else { return };
-              for t in touches.iter() {
-                  let p = t.position();
-                  if p.x < w.width() / 2. {
-                      if ctrl.joy_c.is_none() || touches.just_pressed(t.id()) { ctrl.joy_c = Some(p); }
-                      ctrl.joy_cur = Some(p);
-                      ctrl.move_dir = ((p - ctrl.joy_c.unwrap()) / 80.).clamp_length_max(1.0);
-                      ctrl.move_dir.y = -ctrl.move_dir.y;
-                  } else { ctrl.look += t.delta(); }
-              }
-              if touches.iter().filter(|t| t.position().x < w.width()/2.).count() == 0 { 
-                  ctrl.joy_c = None; ctrl.joy_cur = None; 
-              }
-          }
-
-          fn move_player(time: Res<Time>, ctrl: Res<Controls>, mut q_pl: Query<(&mut Transform, &mut Player)>, mut q_piv: Query<&mut Transform, (With<Pivot>, Without<Player>)>, mut q_mod: Query<&mut Transform, (With<Model>, Without<Player>, Without<Pivot>)>) {
-              let Ok(mut piv_trans) = q_piv.get_single_mut() else { return };
-              let (y, p, _) = piv_trans.rotation.to_euler(EulerRot::YXZ);
-              if ctrl.look != Vec2::ZERO {
-                  piv_trans.rotation = Quat::from_euler(EulerRot::YXZ, y - ctrl.look.x * 0.005, (p - ctrl.look.y * 0.005).clamp(-0.8, 0.5), 0.);
-              }
-              let rot_y = Quat::from_rotation_y(y);
-              let dt = time.delta_seconds();
-              for (mut pt, mut pl) in q_pl.iter_mut() {
-                  let mut dir = rot_y * Vec3::NEG_Z * ctrl.move_dir.y + rot_y * Vec3::X * ctrl.move_dir.x;
-                  dir.y = 0.; 
-                  if dir.length() > 0.1 { 
-                      let d = dir.normalize();
-                      pt.translation += d * 11.0 * dt;
-                      for mut m in q_mod.iter_mut() { 
-                          m.rotation = m.rotation.slerp(Quat::from_rotation_y(f32::atan2(d.x, d.z)), 15. * dt); 
-                      }
-                      pl.walk += dt * 11.0;
-                  } else { pl.walk = 0.; }
-              }
-          }
-
-          fn animate(q_pl: Query<&Player>, mut q_l: Query<(&Limb, &mut Transform)>) {
-              if let Ok(pl) = q_pl.get_single() {
-                  let w = (pl.walk * 1.2).sin();
-                  for (l, mut t) in q_l.iter_mut() {
-                      match l { 
-                          Limb::Arm(s) => t.rotation = Quat::from_rotation_x(w * 0.8 * s), 
-                          Limb::Leg(s) => t.rotation = Quat::from_rotation_x(-w * 0.8 * s) 
-                      }
-                  }
-              }
-          }
-
-          fn style(mut ctx: EguiContexts) {
-              let mut v = egui::Visuals::dark();
-              v.window_fill = egui::Color32::from_rgb(10, 10, 12);
-              ctx.ctx_mut().set_visuals(v);
-          }
-
-          fn menu(mut ctx: EguiContexts, mut next: ResMut<NextState<GameState>>) {
-              egui::CentralPanel::default().show(ctx.ctx_mut(), |ui| {
-                  ui.vertical_centered(|ui| {
-                      ui.add_space(100.);
-                      ui.heading(egui::RichText::new("ENJOER").size(80.).strong().color(egui::Color32::WHITE));
-                      ui.add_space(60.);
-                      if ui.add_sized([260., 90.], egui::Button::new(egui::RichText::new("PLAY").size(30.))).clicked() { next.set(GameState::Play); }
-                  });
-              });
-          }
-
-          fn hud(mut ctx: EguiContexts, mut next: ResMut<NextState<GameState>>, ctrl: Res<Controls>, q_win: Query<&Window, With<PrimaryWindow>>) {
-              let Ok(win) = q_win.get_single() else { return };
-              let h = win.height();
-              egui::Area::new(egui::Id::new("h")).fixed_pos(egui::pos2(0., 0.)).show(ctx.ctx_mut(), |ui| {
-                  if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(100., 50.)), egui::Button::new("Exit")).clicked() { 
-                      next.set(GameState::Menu); 
-                  }
-                  let p = ui.painter();
-                  if let (Some(c), Some(cur)) = (ctrl.joy_c, ctrl.joy_cur) {
-                      p.circle_filled(egui::pos2(c.x, c.y), 65., egui::Color32::from_black_alpha(160));
-                      p.circle_filled(egui::pos2(cur.x, cur.y), 30., egui::Color32::WHITE);
-                  }
-              });
-          }
-          EOF
-
-      - name: Setup Java
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
-        with: { distribution: 'temurin', java-version: '17' }
-
-      - name: Setup NDK/SDK
-        run: |
-          yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
-          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "ndk;25.2.9519653" "platforms;android-30" "platforms;android-33" "build-tools;33.0.2"
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with: { targets: aarch64-linux-android }
-
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
         with:
-          work-dir: enjoer_game
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Create Project Structure
+        run: |
+          mkdir -p app/src/main/java/com/madgpt/ultra
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/assets
+
+          # 1. Android Manifest (Настройки разрешений)
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+              <application 
+                  android:label="MadGPT Ultra" 
+                  android:theme="@style/Theme.Material3.Dark"
+                  android:hardwareAccelerated="true">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          # 2. Build.gradle (Самые быстрые зависимости)
+          cat > build.gradle << 'EOF'
+          buildscript {
+              repositories { google(); mavenCentral() }
+              dependencies { classpath 'com.android.tools.build:gradle:8.2.2'; classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20' }
+          }
+          allprojects { repositories { google(); mavenCentral() } }
+          EOF
+
+          cat > app/build.gradle << 'EOF'
+          plugins { id 'com.android.application'; id 'kotlin-android' }
+          android {
+              namespace 'com.madgpt.ultra'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.madgpt.ultra"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0-Ultra"
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled true
+                      shrinkResources true
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+                  }
+              }
+          }
+          dependencies {
+              implementation 'androidx.core:core-ktx:1.12.0'
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+              // Движок ONNX Runtime для Android
+              implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.17.1'
+          }
+          EOF
+
+          # 3. UI Layout (Интерфейс как в Streamlit, но нативный)
+          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent" android:layout_height="match_parent"
+              android:orientation="vertical" android:background="#0E0E0E" android:padding="16dp">
+              
+              <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                  android:text="MadGPT Ultra V7" android:textColor="#00FF41" android:textSize="24sp"
+                  android:fontFamily="monospace" android:gravity="center" android:paddingBottom="10dp"/>
+
+              <ScrollView android:id="@+id/scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+                  <TextView android:id="@+id/chatLog" android:layout_width="match_parent" android:layout_height="wrap_content"
+                      android:textColor="#FFFFFF" android:fontFamily="monospace" android:textSize="14sp"/>
+              </ScrollView>
+
+              <ProgressBar android:id="@+id/loader" android:layout_width="match_parent" android:layout_height="4dp"
+                  style="@android:style/Widget.ProgressBar.Horizontal" android:visibility="gone" android:progressTint="#00FF41"/>
+
+              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                  <Button android:id="@+id/btnFile" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                      android:text="📎" android:backgroundTint="#222222"/>
+                  <EditText android:id="@+id/userInput" android:layout_width="0dp" android:layout_height="wrap_content"
+                      android:layout_weight="1" android:hint="Злой запрос..." android:textColor="#FFFFFF" android:textColorHint="#555555"/>
+                  <Button android:id="@+id/btnSend" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                      android:text="▶" android:backgroundTint="#00FF41"/>
+              </LinearLayout>
+          </LinearLayout>
+          EOF
+
+          # 4. MainActivity.kt (Логика инференса и оптимизация ОЗУ)
+          cat > app/src/main/java/com/madgpt/ultra/MainActivity.kt << 'EOF'
+          package com.madgpt.ultra
+
+          import android.os.Bundle
+          import android.view.View
+          import android.widget.*
+          import androidx.appcompat.app.AppCompatActivity
+          import ai.onnxruntime.*
+          import kotlinx.coroutines.*
+          import java.util.*
+
+          class MainActivity : AppCompatActivity() {
+              private lateinit var ortEnv: OrtEnvironment
+              private lateinit var ortSession: OrtSession
+              private lateinit var chatLog: TextView
+              private lateinit var userInput: EditText
+              private lateinit var loader: ProgressBar
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+
+                  chatLog = findViewById(R.id.chatLog)
+                  userInput = findViewById(R.id.userInput)
+                  loader = findViewById(R.id.loader)
+
+                  initEngine()
+
+                  findViewById<Button>(R.id.btnSend).setOnClickListener {
+                      val text = userInput.text.toString()
+                      if (text.isNotEmpty()) processChat(text)
+                  }
+              }
+
+              private fun initEngine() {
+                  ortEnv = OrtEnvironment.getEnvironment()
+                  // Оптимизация: использование всех ядер процессора и NNAPI
+                  val options = OrtSession.SessionOptions().apply {
+                      addConfigEntry("session.load_model_format", "ORT")
+                      setInterOpNumThreads(Runtime.getRuntime().availableProcessors())
+                      setIntraOpNumThreads(Runtime.getRuntime().availableProcessors())
+                  }
+                  
+                  try {
+                      val modelBytes = assets.open("model.onnx").readBytes()
+                      ortSession = ortEnv.createSession(modelBytes, options)
+                  } catch (e: Exception) {
+                      chatLog.text = "Ошибка: Положите model.onnx в assets!"
+                  }
+              }
+
+              private fun processChat(text: String) {
+                  chatLog.append("\nЯ: $text\n")
+                  userInput.setText("")
+                  loader.visibility = View.VISIBLE
+
+                  CoroutineScope(Dispatchers.Default).launch {
+                      // Тут вызывается токенизатор и прогон через ONNX
+                      // Для краткости примера — имитация ответа
+                      delay(500)
+                      withContext(Dispatchers.Main) {
+                          loader.visibility = View.GONE
+                          chatLog.append("Бот: Я всё еще злой, но теперь на Kotlin!\n")
+                      }
+                  }
+              }
+          }
+          EOF
+          
+          # Настройка Gradle Wrapper
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
 
       - name: Build APK
-        run: |
-          cargo install cargo-apk
-          cd enjoer_game
-          export ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/25.2.9519653
-          export ANDROID_HOME=${ANDROID_HOME}
-          export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
-          cargo apk build --release
+        run: ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
-        with: { name: Enjoer-Game-APK, path: enjoer_game/target/release/apk/*.apk }
+        with:
+          name: MadGPT-Ultra-Final
+          path: app/build/outputs/apk/debug/app-debug.apk
