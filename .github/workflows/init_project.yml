@@ -20,7 +20,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Create Turbo Structure
+      - name: Create Project Structure
         run: |
 
           mkdir -p app/src/main/java/com/madgpt/turbo
@@ -29,7 +29,7 @@ jobs:
           mkdir -p app/src/main/assets
 
           # -------------------------
-          # settings.gradle (AGP 8+)
+          # settings.gradle (ONLY repo source)
           # -------------------------
           cat > settings.gradle << 'EOF'
           pluginManagement {
@@ -39,29 +39,28 @@ jobs:
                   gradlePluginPortal()
               }
           }
+
           dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
                   google()
                   mavenCentral()
               }
           }
+
           rootProject.name = "MadGPTTurbo"
           include(":app")
           EOF
 
           # -------------------------
-          # Root build.gradle
+          # Root build.gradle (NO repositories!)
           # -------------------------
           cat > build.gradle << 'EOF'
           buildscript {
-              repositories { google(); mavenCentral() }
               dependencies {
                   classpath 'com.android.tools.build:gradle:8.2.2'
                   classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20'
               }
           }
-          allprojects { repositories { google(); mavenCentral() } }
           EOF
 
           # -------------------------
@@ -224,7 +223,7 @@ jobs:
                   val status = findViewById<TextView>(R.id.status)
 
                   try {
-                      val env = OrtEnvironment.getEnvironment()
+                      OrtEnvironment.getEnvironment()
                       status.text = "ENGINE: ONLINE (TURBO)"
                   } catch (e: Exception) {
                       status.text = "ENGINE INIT ERROR"
@@ -268,7 +267,6 @@ jobs:
           </manifest>
           EOF
 
-          # Заглушка модели (чтобы не падало)
           touch app/src/main/assets/model.onnx
 
       - name: Build APK
