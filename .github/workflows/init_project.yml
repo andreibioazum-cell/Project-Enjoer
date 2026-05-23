@@ -1,20 +1,21 @@
 name: MadGPT Neural Mobile
 
 on:
-workflow_dispatch:
 push:
+workflow_dispatch:
 
 jobs:
 build:
 runs-on: ubuntu-latest
 
 steps:
-  - uses: actions/checkout@v4
+  - name: Checkout
+    uses: actions/checkout@v4
 
   # ==========================================
   # JAVA
   # ==========================================
-  - name: Setup JDK
+  - name: Setup JDK 17
     uses: actions/setup-java@v4
     with:
       distribution: temurin
@@ -29,7 +30,7 @@ steps:
   # ==========================================
   # CREATE PROJECT
   # ==========================================
-  - name: Generate Android AI Project
+  - name: Create Android AI Project
     run: |
 
       mkdir -p app/src/main/java/com/madgpt/turbo
@@ -60,7 +61,7 @@ steps:
       EOF
 
       # =====================================
-      # build.gradle
+      # ROOT build.gradle
       # =====================================
       cat > build.gradle << 'EOF'
       buildscript {
@@ -88,7 +89,7 @@ steps:
       echo "sdk.dir=$ANDROID_HOME" > local.properties
 
       # =====================================
-      # app/build.gradle
+      # APP build.gradle
       # =====================================
       cat > app/build.gradle << 'EOF'
       plugins {
@@ -134,12 +135,13 @@ steps:
           implementation 'androidx.appcompat:appcompat:1.6.1'
           implementation 'com.google.android.material:material:1.11.0'
 
+          implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.20"
           implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
       }
       EOF
 
       # =====================================
-      # STRINGS
+      # strings.xml
       # =====================================
       cat > app/src/main/res/values/strings.xml << 'EOF'
       <resources>
@@ -148,7 +150,7 @@ steps:
       EOF
 
       # =====================================
-      # THEME
+      # themes.xml
       # =====================================
       cat > app/src/main/res/values/themes.xml << 'EOF'
       <resources>
@@ -180,12 +182,6 @@ steps:
               android:fontFamily="monospace"/>
 
           <Button
-              android:id="@+id/loadDataset"
-              android:layout_width="match_parent"
-              android:layout_height="wrap_content"
-              android:text="LOAD TXT DATASET"/>
-
-          <Button
               android:id="@+id/trainButton"
               android:layout_width="match_parent"
               android:layout_height="wrap_content"
@@ -201,8 +197,8 @@ steps:
               android:id="@+id/loss"
               android:layout_width="match_parent"
               android:layout_height="wrap_content"
-              android:textColor="#FFFFFF"
-              android:text="LOSS: 0.0"/>
+              android:text="LOSS: 0.0000"
+              android:textColor="#FFFFFF"/>
 
           <ScrollView
               android:layout_width="match_parent"
@@ -237,7 +233,7 @@ steps:
       EOF
 
       # =====================================
-      # MAIN ACTIVITY
+      # MainActivity.kt
       # =====================================
       cat > app/src/main/java/com/madgpt/turbo/MainActivity.kt << 'EOF'
       package com.madgpt.turbo
@@ -270,6 +266,21 @@ steps:
 
                   CoroutineScope(Dispatchers.Main).launch {
 
+                      trainedWords.clear()
+
+                      val dataset = listOf(
+                          "нейросеть",
+                          "трансформер",
+                          "android",
+                          "dataset",
+                          "обучение",
+                          "чатбот",
+                          "модель",
+                          "ai",
+                          "token",
+                          "gpt"
+                      )
+
                       for (i in 1..100) {
 
                           delay(40)
@@ -281,16 +292,7 @@ steps:
 
                           loss.text = "LOSS: $fakeLoss"
 
-                          trainedWords.addAll(
-                              listOf(
-                                  "нейросеть",
-                                  "трансформер",
-                                  "чатбот",
-                                  "обучение",
-                                  "android",
-                                  "dataset"
-                              )
-                          )
+                          trainedWords.addAll(dataset)
                       }
 
                       chat.append("\n[MODEL TRAINED SUCCESSFULLY]\n")
@@ -335,7 +337,7 @@ steps:
       EOF
 
       # =====================================
-      # MANIFEST
+      # AndroidManifest.xml
       # =====================================
       cat > app/src/main/AndroidManifest.xml << 'EOF'
       <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -365,7 +367,9 @@ steps:
   # ==========================================
   - name: Build APK
     run: |
+
       wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+
       unzip -q gradle-8.5-bin.zip
 
       export PATH="$PWD/gradle-8.5/bin:$PATH"
