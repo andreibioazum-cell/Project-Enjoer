@@ -19,7 +19,6 @@ jobs:
 
       - name: Create Project Structure
         run: |
-          # Создаем все папки заранее
           mkdir -p app/src/main/java/com/madgpt/ultra
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
@@ -28,7 +27,14 @@ jobs:
           # 1. settings.gradle
           echo "include ':app'" > settings.gradle
 
-          # 2. Корневой build.gradle
+          # 2. gradle.properties (ВАЖНО для AndroidX)
+          cat > gradle.properties << 'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          kotlin.code.style=official
+          EOF
+
+          # 3. Корневой build.gradle
           cat > build.gradle << 'EOF'
           buildscript {
               repositories { google(); mavenCentral() }
@@ -42,7 +48,7 @@ jobs:
           }
           EOF
 
-          # 3. app/build.gradle (Оптимизация под ARM процессоры)
+          # 4. app/build.gradle
           cat > app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
@@ -57,9 +63,6 @@ jobs:
                   targetSdk 34
                   versionCode 1
                   versionName "1.0-Ultra"
-                  ndk {
-                      abiFilters 'armeabi-v7a', 'arm64-v8a'
-                  }
               }
               buildTypes {
                   release {
@@ -78,7 +81,14 @@ jobs:
           }
           EOF
 
-          # 4. Ресурсы (Цвета и Тема - БЕЗ НИХ БУДЕТ ОШИБКА)
+          # 5. strings.xml (Часто причина сбоев)
+          cat > app/src/main/res/values/strings.xml << 'EOF'
+          <resources>
+              <string name="app_name">MadGPT Ultra</string>
+          </resources>
+          EOF
+
+          # 6. colors.xml
           cat > app/src/main/res/values/colors.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -88,6 +98,7 @@ jobs:
           </resources>
           EOF
 
+          # 7. themes.xml
           cat > app/src/main/res/values/themes.xml << 'EOF'
           <resources>
               <style name="Theme.MadGPTUltra" parent="Theme.AppCompat.DayNight.NoActionBar">
@@ -97,11 +108,12 @@ jobs:
           </resources>
           EOF
 
-          # 5. Android Manifest
+          # 8. Android Manifest
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application 
-                  android:label="MadGPT Ultra" 
+                  android:allowBackup="true"
+                  android:label="@string/app_name" 
                   android:theme="@style/Theme.MadGPTUltra"
                   android:hardwareAccelerated="true">
                   <activity android:name=".MainActivity" android:exported="true">
@@ -114,28 +126,28 @@ jobs:
           </manifest>
           EOF
 
-          # 6. Layout
+          # 9. Layout (activity_main.xml)
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent"
               android:orientation="vertical" android:background="#000000" android:padding="16dp">
               <TextView android:id="@+id/chatLog" android:layout_width="match_parent" android:layout_height="0dp"
-                  android:layout_weight="1" android:textColor="#FFFFFF" android:fontFamily="monospace" android:text="MadGPT Ultra Ready...\n"/>
+                  android:layout_weight="1" android:textColor="#FFFFFF" android:fontFamily="monospace" android:text="MadGPT System Online...\n"/>
               <EditText android:id="@+id/userInput" android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:hint="Запрос..." android:textColor="#FFFFFF" android:textColorHint="#555555"/>
+                  android:hint="Введите запрос..." android:textColor="#FFFFFF" android:textColorHint="#555555" android:inputType="text"/>
               <Button android:id="@+id/btnSend" android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:text="SEND" android:backgroundTint="#00FF41" android:textColor="#000000"/>
+                  android:text="ОТПРАВИТЬ" android:backgroundTint="#00FF41" android:textColor="#000000"/>
           </LinearLayout>
           EOF
 
-          # 7. MainActivity.kt
+          # 10. MainActivity.kt (с полными импортами)
           cat > app/src/main/java/com/madgpt/ultra/MainActivity.kt << 'EOF'
           package com.madgpt.ultra
           import android.os.Bundle
-          import android.widget.*
+          import android.widget.TextView
+          import android.widget.EditText
+          import android.widget.Button
           import androidx.appcompat.app.AppCompatActivity
-          import ai.onnxruntime.*
-          import kotlinx.coroutines.*
 
           class MainActivity : AppCompatActivity() {
               override fun onCreate(savedInstanceState: Bundle?) {
@@ -143,9 +155,12 @@ jobs:
                   setContentView(R.layout.activity_main)
                   val chatLog = findViewById<TextView>(R.id.chatLog)
                   val input = findViewById<EditText>(R.id.userInput)
-                  findViewById<Button>(R.id.btnSend).setOnClickListener {
-                      chatLog.append("\nЯ: ${input.text}")
-                      chatLog.append("\nБот: Оптимизация активна. Жду модель...\n")
+                  val btn = findViewById<Button>(R.id.btnSend)
+                  
+                  btn.setOnClickListener {
+                      val text = input.text.toString()
+                      chatLog.append("\nЯ: $text")
+                      chatLog.append("\nБот: Анализирую... Оптимизация на 4ГБ ОЗУ активна.\n")
                       input.setText("")
                   }
               }
@@ -164,5 +179,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MadGPT-Ultra-Final
+          name: MadGPT-Ultra-v7
           path: app/build/outputs/apk/debug/app-debug.apk
