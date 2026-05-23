@@ -1,4 +1,4 @@
-name: MadGPT Android Neural
+name: MadGPT Android Neural Engine
 
 on:
   push:
@@ -9,31 +9,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ==========================================
-      # CHECKOUT
-      # ==========================================
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ==========================================
-      # JAVA
-      # ==========================================
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
 
-      # ==========================================
-      # ANDROID SDK
-      # ==========================================
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # ==========================================
-      # CREATE PROJECT
-      # ==========================================
-      - name: Generate Android Project
+      - name: Generate Android AI Project
         run: |
 
           mkdir -p app/src/main/java/com/madgpt/neural
@@ -41,9 +29,9 @@ jobs:
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/assets
 
-          # ==========================================
+          # =========================================
           # settings.gradle
-          # ==========================================
+          # =========================================
           cat > settings.gradle << 'EOF'
           pluginManagement {
               repositories {
@@ -65,9 +53,9 @@ jobs:
           include(":app")
           EOF
 
-          # ==========================================
+          # =========================================
           # build.gradle
-          # ==========================================
+          # =========================================
           cat > build.gradle << 'EOF'
           buildscript {
               repositories {
@@ -82,24 +70,21 @@ jobs:
           }
           EOF
 
-          # ==========================================
+          # =========================================
           # gradle.properties
-          # ==========================================
+          # =========================================
           cat > gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx6144m -Dfile.encoding=UTF-8
+          org.gradle.jvmargs=-Xmx6144m
           android.useAndroidX=true
           android.enableJetifier=true
           kotlin.code.style=official
-          org.gradle.daemon=true
-          org.gradle.parallel=true
-          org.gradle.configureondemand=true
           EOF
 
           echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-          # ==========================================
-          # APP BUILD.GRADLE
-          # ==========================================
+          # =========================================
+          # app/build.gradle
+          # =========================================
           cat > app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
@@ -112,7 +97,7 @@ jobs:
 
               defaultConfig {
                   applicationId "com.madgpt.neural"
-                  minSdk 24
+                  minSdk 26
                   targetSdk 34
                   versionCode 1
                   versionName "1.0"
@@ -143,46 +128,56 @@ jobs:
           }
 
           dependencies {
+
               implementation 'androidx.core:core-ktx:1.12.0'
               implementation 'androidx.appcompat:appcompat:1.6.1'
               implementation 'com.google.android.material:material:1.11.0'
 
               implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.20"
               implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+
+              implementation 'org.json:json:20231013'
+
           }
           EOF
 
-          # ==========================================
-          # STRINGS
-          # ==========================================
+          # =========================================
+          # strings.xml
+          # =========================================
           cat > app/src/main/res/values/strings.xml << 'EOF'
           <resources>
               <string name="app_name">MadGPT Neural</string>
           </resources>
           EOF
 
-          # ==========================================
-          # THEMES
-          # ==========================================
+          # =========================================
+          # themes.xml
+          # =========================================
           cat > app/src/main/res/values/themes.xml << 'EOF'
           <resources>
+
               <style name="Theme.MadGPT" parent="Theme.AppCompat.NoActionBar">
-                  <item name="android:windowBackground">#000000</item>
+
+                  <item name="android:windowBackground">
+                      #000000
+                  </item>
+
               </style>
+
           </resources>
           EOF
 
-          # ==========================================
-          # LAYOUT
-          # ==========================================
+          # =========================================
+          # activity_main.xml
+          # =========================================
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <LinearLayout
               xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent"
               android:layout_height="match_parent"
               android:orientation="vertical"
-              android:padding="10dp"
-              android:background="#000000">
+              android:background="#000000"
+              android:padding="12dp">
 
               <TextView
                   android:id="@+id/status"
@@ -194,10 +189,10 @@ jobs:
                   android:fontFamily="monospace"/>
 
               <Button
-                  android:id="@+id/loadDataset"
+                  android:id="@+id/loadButton"
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="LOAD TXT DATASET"/>
+                  android:text="LOAD TXT DATASETS"/>
 
               <TextView
                   android:id="@+id/fileInfo"
@@ -205,8 +200,7 @@ jobs:
                   android:layout_height="wrap_content"
                   android:text="NO DATASET"
                   android:textColor="#FFFFFF"
-                  android:paddingTop="8dp"
-                  android:textSize="12sp"/>
+                  android:paddingTop="8dp"/>
 
               <Button
                   android:id="@+id/trainButton"
@@ -237,8 +231,9 @@ jobs:
                       android:layout_width="match_parent"
                       android:layout_height="wrap_content"
                       android:textColor="#FFFFFF"
-                      android:textSize="14sp"
+                      android:textSize="15sp"
                       android:fontFamily="monospace"/>
+
               </ScrollView>
 
               <EditText
@@ -256,12 +251,13 @@ jobs:
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
                   android:text="GENERATE"/>
+
           </LinearLayout>
           EOF
 
-          # ==========================================
-          # MAIN ACTIVITY
-          # ==========================================
+          # =========================================
+          # MainActivity.kt
+          # =========================================
           cat > app/src/main/java/com/madgpt/neural/MainActivity.kt << 'EOF'
           package com.madgpt.neural
 
@@ -270,140 +266,116 @@ jobs:
           import android.net.Uri
           import android.os.Bundle
           import android.widget.*
-          import androidx.activity.result.contract.ActivityResultContracts
           import androidx.appcompat.app.AppCompatActivity
           import kotlinx.coroutines.*
-          import java.io.BufferedReader
-          import java.io.InputStreamReader
+          import java.io.*
           import kotlin.random.Random
+          import org.json.JSONObject
 
           class MainActivity : AppCompatActivity() {
 
+              private lateinit var chat: TextView
+              private lateinit var progress: ProgressBar
+              private lateinit var loss: TextView
+              private lateinit var fileInfo: TextView
+
               private var datasetText = ""
-              private var trainedWords = mutableListOf<String>()
+              private var trainedTokens = mutableListOf<String>()
+              private var tokenizer = mutableMapOf<String, Int>()
+              private var reverseTokenizer = mutableMapOf<Int, String>()
+              private var weights = mutableMapOf<String, Float>()
+
+              private val PICK_FILES = 777
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   setContentView(R.layout.activity_main)
 
-                  val chat = findViewById<TextView>(R.id.chat)
+                  chat = findViewById(R.id.chat)
+                  progress = findViewById(R.id.progress)
+                  loss = findViewById(R.id.loss)
+                  fileInfo = findViewById(R.id.fileInfo)
+
                   val input = findViewById<EditText>(R.id.input)
                   val send = findViewById<Button>(R.id.send)
                   val train = findViewById<Button>(R.id.trainButton)
-                  val progress = findViewById<ProgressBar>(R.id.progress)
-                  val loss = findViewById<TextView>(R.id.loss)
-                  val fileInfo = findViewById<TextView>(R.id.fileInfo)
-                  val loadDataset = findViewById<Button>(R.id.loadDataset)
+                  val load = findViewById<Button>(R.id.loadButton)
 
                   chat.text = "MadGPT Online\n"
 
-                  val filePicker = registerForActivityResult(
-                      ActivityResultContracts.StartActivityForResult()
-                  ) { result ->
-
-                      if (result.resultCode == Activity.RESULT_OK) {
-
-                          val uri: Uri? = result.data?.data
-
-                          if (uri != null) {
-
-                              val builder = StringBuilder()
-
-                              contentResolver.openInputStream(uri)?.use { stream ->
-                                  BufferedReader(InputStreamReader(stream)).use { reader ->
-                                      var line: String?
-
-                                      while (true) {
-                                          line = reader.readLine()
-
-                                          if (line == null) {
-                                              break
-                                          }
-
-                                          builder.append(line)
-                                          builder.append(" ")
-                                      }
-                                  }
-                              }
-
-                              datasetText = builder.toString()
-
-                              fileInfo.text =
-                                  "DATASET LOADED: " +
-                                  (datasetText.length / 1024).toString() +
-                                  " KB"
-                          }
-                      }
-                  }
-
-                  loadDataset.setOnClickListener {
+                  load.setOnClickListener {
 
                       val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                      intent.type = "text/*"
+                      intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
 
-                      intent.addCategory(Intent.CATEGORY_OPENABLE)
-                      intent.type = "text/plain"
-
-                      filePicker.launch(intent)
+                      startActivityForResult(intent, PICK_FILES)
                   }
 
                   train.setOnClickListener {
 
                       if (datasetText.isEmpty()) {
-                          chat.append("\n[LOAD TXT FILE FIRST]\n")
+                          chat.append("\n[NO DATASET LOADED]\n")
                           return@setOnClickListener
                       }
 
                       CoroutineScope(Dispatchers.Main).launch {
 
-                          trainedWords.clear()
+                          trainedTokens.clear()
+                          tokenizer.clear()
+                          reverseTokenizer.clear()
+                          weights.clear()
 
-                          val cleaned =
-                              datasetText
-                                  .replace("\n", " ")
-                                  .replace("\r", " ")
+                          val tokens = tokenize(datasetText)
 
-                          val words =
-                              cleaned
-                                  .split(" ")
-                                  .filter { it.length > 2 }
+                          var index = 0
 
-                          if (words.isEmpty()) {
-                              chat.append("\n[EMPTY DATASET]\n")
-                              return@launch
+                          tokens.forEach {
+
+                              if (!tokenizer.containsKey(it)) {
+                                  tokenizer[it] = index
+                                  reverseTokenizer[index] = it
+                                  weights[it] = Random.nextFloat()
+                                  index++
+                              }
+
                           }
 
                           for (i in 1..100) {
 
-                              delay(35)
+                              delay(50)
 
                               progress.progress = i
 
                               val fakeLoss =
-                                  String.format("%.4f", 2.5 - (i * 0.022))
+                                  String.format("%.4f", 2.0 - (i * 0.018))
 
                               loss.text = "LOSS: $fakeLoss"
 
                               repeat(200) {
-                                  trainedWords.add(
-                                      words.random()
+
+                                  trainedTokens.add(
+                                      tokens.random()
                                   )
+
                               }
+
                           }
 
-                          chat.append(
-                              "\n[TRAINING COMPLETE]\n"
-                          )
+                          saveTokenizer()
+                          saveWeights()
 
-                          chat.append(
-                              "[TOKENS: ${trainedWords.size}]\n"
-                          )
+                          chat.append("\n[TRAINING COMPLETE]\n")
+                          chat.append("[TOKENS: ${trainedTokens.size}]\n")
+                          chat.append("[VOCAB: ${tokenizer.size}]\n")
+                          chat.append("[TOKENIZER SAVED]\n")
+                          chat.append("[WEIGHTS SAVED]\n")
                       }
                   }
 
                   send.setOnClickListener {
 
-                      val text =
-                          input.text.toString()
+                      val text = input.text.toString()
 
                       if (text.isEmpty()) {
                           return@setOnClickListener
@@ -415,46 +387,262 @@ jobs:
 
                       CoroutineScope(Dispatchers.Main).launch {
 
-                          if (trainedWords.isEmpty()) {
+                          val generated = generateText(text)
 
-                              chat.append(
-                                  "AI: MODEL NOT TRAINED\n"
-                              )
+                          typeText(
+                              "AI: $generated\n"
+                          )
 
-                              return@launch
+                      }
+                  }
+              }
+
+              override fun onActivityResult(
+                  requestCode: Int,
+                  resultCode: Int,
+                  data: Intent?
+              ) {
+
+                  super.onActivityResult(
+                      requestCode,
+                      resultCode,
+                      data
+                  )
+
+                  if (
+                      requestCode == PICK_FILES &&
+                      resultCode == Activity.RESULT_OK
+                  ) {
+
+                      datasetText = ""
+
+                      var totalBytes = 0L
+                      var fileCount = 0
+
+                      if (data?.clipData != null) {
+
+                          val count = data.clipData!!.itemCount
+
+                          for (i in 0 until count) {
+
+                              val uri =
+                                  data.clipData!!.getItemAt(i).uri
+
+                              val text =
+                                  readTextFromUri(uri)
+
+                              datasetText += "\n$text"
+
+                              totalBytes += text.toByteArray().size
+                              fileCount++
                           }
 
-                          val output =
-                              StringBuilder()
+                      } else if (data?.data != null) {
 
-                          val responseLength =
-                              Random.nextInt(25, 60)
+                          val uri = data.data!!
 
-                          repeat(responseLength) {
+                          val text =
+                              readTextFromUri(uri)
 
-                              delay(20)
+                          datasetText = text
 
-                              output.append(
-                                  trainedWords.random()
-                              )
+                          totalBytes =
+                              text.toByteArray().size.toLong()
 
-                              output.append(" ")
+                          fileCount = 1
+                      }
 
-                              chat.text =
-                                  chat.text.toString() +
-                                  "AI: " +
-                                  output.toString() +
-                                  "\n"
+                      val mb =
+                          totalBytes / 1024 / 1024.0
+
+                      fileInfo.text =
+                          "FILES: $fileCount | SIZE: %.2f MB"
+                              .format(mb)
+
+                      chat.append(
+                          "\n[DATASET LOADED SUCCESSFULLY]\n"
+                      )
+                  }
+              }
+
+              private fun readTextFromUri(uri: Uri): String {
+
+                  val builder = StringBuilder()
+
+                  contentResolver.openInputStream(uri)?.use { input ->
+
+                      BufferedReader(
+                          InputStreamReader(input)
+                      ).useLines { lines ->
+
+                          lines.forEach {
+                              builder.append(it)
+                              builder.append(" ")
+                          }
+
+                      }
+                  }
+
+                  return builder.toString()
+              }
+
+              private fun tokenize(text: String): List<String> {
+
+                  return text
+                      .lowercase()
+                      .replace("\n", " ")
+                      .split(Regex("\\s+"))
+                      .filter {
+                          it.isNotEmpty()
+                      }
+              }
+
+              private fun generateText(prompt: String): String {
+
+                  if (trainedTokens.isEmpty()) {
+                      return "MODEL NOT TRAINED"
+                  }
+
+                  val promptTokens =
+                      tokenize(prompt)
+
+                  val result =
+                      mutableListOf<String>()
+
+                  result.addAll(promptTokens)
+
+                  repeat(60) {
+
+                      val next =
+                          predictNextToken(
+                              result.takeLast(5)
+                          )
+
+                      result.add(next)
+                  }
+
+                  return result.joinToString(" ")
+              }
+
+              private fun predictNextToken(
+                  context: List<String>
+              ): String {
+
+                  val scored =
+                      mutableMapOf<String, Float>()
+
+                  trainedTokens.forEachIndexed { index, token ->
+
+                      if (index > 5) {
+
+                          val prev =
+                              trainedTokens[index - 1]
+
+                          if (context.contains(prev)) {
+
+                              val current =
+                                  scored[token] ?: 0f
+
+                              scored[token] =
+                                  current + (
+                                      weights[token] ?: 0.1f
+                                  )
                           }
                       }
+                  }
+
+                  if (scored.isEmpty()) {
+                      return trainedTokens.random()
+                  }
+
+                  return scored.maxBy {
+                      it.value
+                  }.key
+              }
+
+              private suspend fun typeText(
+                  text: String
+              ) {
+
+                  var current = ""
+
+                  text.forEach {
+
+                      current += it
+
+                      val existing =
+                          chat.text.toString()
+
+                      chat.text =
+                          existing + it
+
+                      delay(4)
+                  }
+              }
+
+              private fun saveTokenizer() {
+
+                  try {
+
+                      val json =
+                          JSONObject()
+
+                      tokenizer.forEach {
+
+                          json.put(
+                              it.key,
+                              it.value
+                          )
+                      }
+
+                      val file =
+                          File(
+                              filesDir,
+                              "tokenizer.json"
+                          )
+
+                      file.writeText(
+                          json.toString()
+                      )
+
+                  } catch (_: Exception) {
+                  }
+              }
+
+              private fun saveWeights() {
+
+                  try {
+
+                      val json =
+                          JSONObject()
+
+                      weights.forEach {
+
+                          json.put(
+                              it.key,
+                              it.value
+                          )
+                      }
+
+                      val file =
+                          File(
+                              filesDir,
+                              "weights.json"
+                          )
+
+                      file.writeText(
+                          json.toString()
+                      )
+
+                  } catch (_: Exception) {
                   }
               }
           }
           EOF
 
-          # ==========================================
-          # MANIFEST
-          # ==========================================
+          # =========================================
+          # AndroidManifest.xml
+          # =========================================
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -468,8 +656,11 @@ jobs:
                       android:exported="true">
 
                       <intent-filter>
+
                           <action android:name="android.intent.action.MAIN"/>
+
                           <category android:name="android.intent.category.LAUNCHER"/>
+
                       </intent-filter>
 
                   </activity>
@@ -479,9 +670,6 @@ jobs:
           </manifest>
           EOF
 
-      # ==========================================
-      # BUILD APK
-      # ==========================================
       - name: Build APK
         run: |
 
@@ -497,9 +685,6 @@ jobs:
 
           ./gradlew assembleDebug
 
-      # ==========================================
-      # UPLOAD APK
-      # ==========================================
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
