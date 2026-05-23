@@ -19,13 +19,13 @@ jobs:
 
       - name: Create Project Structure
         run: |
-          # Создаем структуру папок
+          # Создаем все папки заранее
           mkdir -p app/src/main/java/com/madgpt/ultra
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/assets
 
-          # 1. settings.gradle (ЭТО ИСПРАВЛЯЕТ ОШИБКУ)
+          # 1. settings.gradle
           echo "include ':app'" > settings.gradle
 
           # 2. Корневой build.gradle
@@ -42,7 +42,7 @@ jobs:
           }
           EOF
 
-          # 3. app/build.gradle
+          # 3. app/build.gradle (Оптимизация под ARM процессоры)
           cat > app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
@@ -57,6 +57,9 @@ jobs:
                   targetSdk 34
                   versionCode 1
                   versionName "1.0-Ultra"
+                  ndk {
+                      abiFilters 'armeabi-v7a', 'arm64-v8a'
+                  }
               }
               buildTypes {
                   release {
@@ -71,16 +74,35 @@ jobs:
               implementation 'androidx.appcompat:appcompat:1.6.1'
               implementation 'com.google.android.material:material:1.11.0'
               implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.17.1'
+              implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
           }
           EOF
 
-          # 4. Android Manifest
+          # 4. Ресурсы (Цвета и Тема - БЕЗ НИХ БУДЕТ ОШИБКА)
+          cat > app/src/main/res/values/colors.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="black">#FF000000</color>
+              <color name="white">#FFFFFFFF</color>
+              <color name="green_matrix">#00FF41</color>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/values/themes.xml << 'EOF'
+          <resources>
+              <style name="Theme.MadGPTUltra" parent="Theme.AppCompat.DayNight.NoActionBar">
+                  <item name="colorPrimary">@color/green_matrix</item>
+                  <item name="android:windowBackground">@color/black</item>
+              </style>
+          </resources>
+          EOF
+
+          # 5. Android Manifest
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
               <application 
                   android:label="MadGPT Ultra" 
-                  android:theme="@style/Theme.Material3.Dark"
+                  android:theme="@style/Theme.MadGPTUltra"
                   android:hardwareAccelerated="true">
                   <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
@@ -92,98 +114,52 @@ jobs:
           </manifest>
           EOF
 
-          # 5. UI Layout (activity_main.xml)
+          # 6. Layout
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent"
-              android:orientation="vertical" android:background="#0E0E0E" android:padding="16dp">
-              <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:text="MadGPT Ultra V7" android:textColor="#00FF41" android:textSize="24sp"
-                  android:fontFamily="monospace" android:gravity="center" android:paddingBottom="10dp"/>
-              <ScrollView android:id="@+id/scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
-                  <TextView android:id="@+id/chatLog" android:layout_width="match_parent" android:layout_height="wrap_content"
-                      android:textColor="#FFFFFF" android:fontFamily="monospace" android:textSize="14sp"/>
-              </ScrollView>
-              <ProgressBar android:id="@+id/loader" android:layout_width="match_parent" android:layout_height="4dp"
-                  style="@android:style/Widget.ProgressBar.Horizontal" android:visibility="gone" android:progressTint="#00FF41"/>
-              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-                  <EditText android:id="@+id/userInput" android:layout_width="0dp" android:layout_height="wrap_content"
-                      android:layout_weight="1" android:hint="Злой запрос..." android:textColor="#FFFFFF" android:textColorHint="#555555"/>
-                  <Button android:id="@+id/btnSend" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                      android:text="▶" android:backgroundTint="#00FF41"/>
-              </LinearLayout>
+              android:orientation="vertical" android:background="#000000" android:padding="16dp">
+              <TextView android:id="@+id/chatLog" android:layout_width="match_parent" android:layout_height="0dp"
+                  android:layout_weight="1" android:textColor="#FFFFFF" android:fontFamily="monospace" android:text="MadGPT Ultra Ready...\n"/>
+              <EditText android:id="@+id/userInput" android:layout_width="match_parent" android:layout_height="wrap_content"
+                  android:hint="Запрос..." android:textColor="#FFFFFF" android:textColorHint="#555555"/>
+              <Button android:id="@+id/btnSend" android:layout_width="match_parent" android:layout_height="wrap_content"
+                  android:text="SEND" android:backgroundTint="#00FF41" android:textColor="#000000"/>
           </LinearLayout>
           EOF
 
-          # 6. MainActivity.kt (Логика)
+          # 7. MainActivity.kt
           cat > app/src/main/java/com/madgpt/ultra/MainActivity.kt << 'EOF'
           package com.madgpt.ultra
           import android.os.Bundle
-          import android.view.View
           import android.widget.*
           import androidx.appcompat.app.AppCompatActivity
           import ai.onnxruntime.*
           import kotlinx.coroutines.*
-          import java.util.*
 
           class MainActivity : AppCompatActivity() {
-              private lateinit var ortEnv: OrtEnvironment
-              private lateinit var ortSession: OrtSession
-              private lateinit var chatLog: TextView
-              private lateinit var userInput: EditText
-              private lateinit var loader: ProgressBar
-
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   setContentView(R.layout.activity_main)
-                  chatLog = findViewById(R.id.chatLog)
-                  userInput = findViewById(R.id.userInput)
-                  loader = findViewById(R.id.loader)
-                  initEngine()
+                  val chatLog = findViewById<TextView>(R.id.chatLog)
+                  val input = findViewById<EditText>(R.id.userInput)
                   findViewById<Button>(R.id.btnSend).setOnClickListener {
-                      val text = userInput.text.toString()
-                      if (text.isNotEmpty()) processChat(text)
-                  }
-              }
-
-              private fun initEngine() {
-                  ortEnv = OrtEnvironment.getEnvironment()
-                  val options = OrtSession.SessionOptions().apply {
-                      setInterOpNumThreads(Runtime.getRuntime().availableProcessors())
-                      setIntraOpNumThreads(Runtime.getRuntime().availableProcessors())
-                  }
-                  try {
-                      val modelBytes = assets.open("model.onnx").readBytes()
-                      ortSession = ortEnv.createSession(modelBytes, options)
-                  } catch (e: Exception) {
-                      chatLog.text = "ОШИБКА: Положите model.onnx в папку assets!"
-                  }
-              }
-
-              private fun processChat(text: String) {
-                  chatLog.append("\nЯ: $text\n")
-                  userInput.setText("")
-                  loader.visibility = View.VISIBLE
-                  CoroutineScope(Dispatchers.Default).launch {
-                      delay(500)
-                      withContext(Dispatchers.Main) {
-                          loader.visibility = View.GONE
-                          chatLog.append("Бот: Машина готова. Но где мой файл модели?\n")
-                      }
+                      chatLog.append("\nЯ: ${input.text}")
+                      chatLog.append("\nБот: Оптимизация активна. Жду модель...\n")
+                      input.setText("")
                   }
               }
           }
           EOF
 
-      - name: Build with Gradle
+      - name: Build APK
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
           export PATH="$PWD/gradle-8.5/bin:$PATH"
-          # Генерируем wrapper
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew :app:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
