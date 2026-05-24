@@ -5,7 +5,7 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 600 # Увеличено до 10 часов
+    timeout-minutes: 600
 
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,6 @@ jobs:
 
       - name: Maximize System Resources
         run: |
-          # Убираем лимиты оперативной памяти для сборщика
           mkdir -p ~/.gradle
           echo "org.gradle.jvmargs=-Xmx8g -XX:MaxMetaspaceSize=2g -XX:+HeapDumpOnOutOfMemoryError" >> ~/.gradle/gradle.properties
           echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
@@ -33,13 +32,12 @@ jobs:
 
       - name: Create JsAI Structure
         run: |
-          # Новая структура под именем JsAI
           mkdir -p app/src/main/java/com/jsai/ultra
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/assets/models # Папка для множества файлов моделей
+          mkdir -p app/src/main/assets/models
 
-          # 1. Настройки проекта
+          # 1. settings.gradle
           echo "include ':app'" > settings.gradle
 
           # 2. Корневой build.gradle
@@ -56,7 +54,7 @@ jobs:
           }
           EOF
 
-          # 3. app/build.gradle (Полная свобода ресурсов)
+          # 3. app/build.gradle (ИСПРАВЛЕНЫ КОММЕНТАРИИ)
           cat > app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
@@ -74,10 +72,10 @@ jobs:
                   multiDexEnabled true
               }
               
-              # СНЯТИЕ ЛИМИТОВ НА ФАЙЛЫ:
-              # Разрешаем загрузку любых файлов без сжатия (для скорости чтения ИИ)
+              // ИСПОЛЬЗУЕМ // ДЛЯ КОММЕНТАРИЕВ
+              // Разрешаем загрузку любых файлов без сжатия
               aaptOptions {
-                  noCompress "" # Пустая строка значит "не сжимать НИЧЕГО" (максимальный размер и скорость)
+                  noCompress "" 
               }
 
               buildTypes {
@@ -103,7 +101,7 @@ jobs:
           }
           EOF
 
-          # 4. Android Manifest (JsAI Config)
+          # 4. Android Manifest
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application 
@@ -139,7 +137,7 @@ jobs:
                   val input = findViewById<EditText>(R.id.userInput)
                   
                   findViewById<Button>(R.id.btnSend).setOnClickListener {
-                      log.append("\n[JsAI]: Файлы загружены. Лимиты сняты.")
+                      log.append("\n[JsAI]: Система готова.")
                       log.append("\nUser: ${input.text}")
                       input.setText("")
                   }
@@ -171,17 +169,17 @@ jobs:
           </LinearLayout>
           EOF
 
-      - name: Build All Variants
+      - name: Build APK
         run: |
+          # Принудительная генерация wrapper для стабильности
+          gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
 
-      - name: Upload All Artifacts (No Limits)
+      - name: Upload JsAI Package
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI-Full-Package
-          path: |
-            app/build/outputs/apk/debug/
-            app/build/outputs/logs/
+          name: JsAI-Unlimited-Package
+          path: app/build/outputs/apk/debug/
           retention-days: 90
-          compression-level: 0 # Без сжатия для сохранения структуры тяжелых файлов
+          compression-level: 0
