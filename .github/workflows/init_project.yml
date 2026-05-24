@@ -24,7 +24,7 @@ jobs:
           cat << 'EOF' > Cargo.toml
           [package]
           name = "enjoer_game"
-          version = "7.5.0"
+          version = "7.8.0"
           edition = "2021"
 
           [lib]
@@ -33,21 +33,14 @@ jobs:
 
           [dependencies]
           bevy = { version = "0.14.0", default-features = false, features = [
-              "bevy_pbr", 
-              "bevy_render", 
-              "bevy_winit", 
-              "bevy_core_pipeline",
-              "bevy_asset", 
-              "bevy_state", 
-              "bevy_color", 
-              "multi_threaded", 
-              "android_shared_stdcxx", 
-              "tonemapping_luts"
+              "bevy_pbr", "bevy_render", "bevy_winit", "bevy_core_pipeline",
+              "bevy_asset", "bevy_state", "bevy_color", "multi_threaded", 
+              "android_shared_stdcxx", "tonemapping_luts"
           ] }
           bevy_egui = "0.28.0"
 
           [package.metadata.android]
-          apk_name = "EnjoerSlim"
+          apk_name = "EnjoerProject"
           build_targets = ["aarch64-linux-android"]
           min_sdk_version = 24
           target_sdk_version = 33
@@ -61,7 +54,7 @@ jobs:
           key_password = "password"
 
           [profile.release]
-          opt-level = "z"
+          opt-level = 3
           lto = "thin" 
           codegen-units = 1
           panic = "abort"
@@ -72,7 +65,7 @@ jobs:
           cat << 'EOF' > src/lib.rs
           use bevy::prelude::*;
           use bevy::window::{PrimaryWindow, WindowMode};
-          use bevy::pbr::DirectionalLightShadowMap;
+          use bevy::pbr::{DirectionalLightShadowMap, ShadowFilteringMethod};
           use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
           #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
@@ -82,6 +75,7 @@ jobs:
           #[derive(Component)] struct Pivot;
           #[derive(Component)] struct Model;
           #[derive(Component)] enum Limb { Arm { left: bool }, Leg { left: bool } }
+          #[derive(Component)] struct PlayerLight;
 
           #[derive(Resource, Default)]
           struct Controls { move_dir: Vec2, look: Vec2, joy_c: Option<Vec2>, joy_cur: Option<Vec2> }
@@ -90,15 +84,14 @@ jobs:
           fn main() {
               App::new()
                   .insert_resource(ClearColor(Color::BLACK))
-                  // 256 - Оптимально для мобилок
-                  .insert_resource(DirectionalLightShadowMap { size: 256 })
+                  .insert_resource(DirectionalLightShadowMap { size: 1024 })
                   .add_plugins(DefaultPlugins.set(WindowPlugin {
                       primary_window: Some(Window { 
                           mode: WindowMode::BorderlessFullscreen, 
                           present_mode: bevy::window::PresentMode::Mailbox,
                           ..default() 
                       }), ..default()
-                  })) // Удалили .disable плагинов, так как они и так не включены в Cargo.toml
+                  }).disable::<bevy::audio::AudioPlugin>())
                   .insert_resource(Msaa::Off)
                   .add_plugins(EguiPlugin)
                   .init_state::<GameState>()
@@ -106,49 +99,67 @@ jobs:
                   .add_systems(Startup, setup)
                   .add_systems(Update, style)
                   .add_systems(Update, menu.run_if(in_state(GameState::Menu)))
-                  .add_systems(Update, (touch, hud, move_player, animate).run_if(in_state(GameState::Play)))
+                  .add_systems(Update, (touch, hud, move_player, animate, sync_light).run_if(in_state(GameState::Play)))
                   .run();
           }
 
           fn setup(mut cmd: Commands, mut mesh: ResMut<Assets<Mesh>>, mut mat: ResMut<Assets<StandardMaterial>>) {
-              // Глубокие тени
-              cmd.insert_resource(AmbientLight { color: Color::WHITE, brightness: 250.0 });
+              cmd.insert_resource(AmbientLight { color: Color::WHITE, brightness: 80.0 });
               
-              cmd.spawn(DirectionalLightBundle { 
-                  directional_light: DirectionalLight { 
-                      illuminance: 7000., 
-                      shadows_enabled: true, 
-                      shadow_depth_bias: 0.5,
-                      shadow_normal_bias: 1.2,
+              // Свет-преследователь
+              cmd.spawn((
+                  DirectionalLightBundle { 
+                      directional_light: DirectionalLight { 
+                          illuminance: 12000., 
+                          shadows_enabled: true, 
+                          shadow_filtering_method: ShadowFilteringMethod::Hardware2x2,
+                          shadow_depth_bias: 0.15,
+                          shadow_normal_bias: 0.5,
+                          ..default() 
+                      }, 
+                      orthographic_projection: OrthographicProjection {
+                          left: -12.0, right: 12.0, bottom: -12.0, top: 12.0,
+                          near: -30.0, far: 30.0, ..default()
+                      },
+                      transform: Transform::from_xyz(10., 20., 10.).looking_at(Vec3::ZERO, Vec3::Y), 
                       ..default() 
-                  }, 
-                  transform: Transform::from_xyz(10., 20., 10.).looking_at(Vec3::ZERO, Vec3::Y), 
-                  ..default() 
-              });
+                  },
+                  PlayerLight,
+              ));
 
+              // Огромный пол
               cmd.spawn(PbrBundle { 
-                  mesh: mesh.add(Plane3d::default().mesh().size(100., 100.)), 
-                  material: mat.add(StandardMaterial { base_color: Color::srgb(0.03, 0.03, 0.03), ..default() }), 
-                  ..default() 
+                  mesh: mesh.add(Plane3d::default().mesh().size(1000., 1000.)), 
+                  material: mat.add(StandardMaterial { 
+                      base_color: Color::srgb(0.02, 0.02, 0.02), 
+                      perceptual_roughness: 1.0, 
+                      reflectance: 0.0,
+                      ..default() 
+                  }), ..default() 
               });
 
-              // Slim Character (Голова -10%)
-              let (t_w, t_h, t_d) = (0.95, 1.2, 0.6);
-              let h_s = 0.72 * 0.9; 
-              let (l_w, l_h, l_d) = (0.42, 1.1, 0.42);
+              // --- ПРОПОРЦИИ Slim Pro ---
+              let (t_w, t_h, t_d) = (0.95, 1.2, 0.6); // Торс
+              let h_s = 0.72 * 0.9; // Голова -10%
+              
+              // Ноги
+              let (l_w, l_h, l_d) = (0.42, 1.1, 0.42); 
+              // Руки (Худее на 10% от ног: 0.42 * 0.9 = 0.38)
+              let (a_w, a_h, a_d) = (0.38, 1.1, 0.38); 
 
-              let skin = mat.add(StandardMaterial { base_color: Color::srgb(1.0, 0.86, 0.67), ..default() });
-              let torso_m = mat.add(StandardMaterial { base_color: Color::srgb(0.13, 0.13, 0.13), ..default() });
-              let leg_m = mat.add(StandardMaterial { base_color: Color::srgb(0.1, 0.1, 0.1), ..default() });
+              let skin = mat.add(StandardMaterial { base_color: Color::srgb(1.0, 0.86, 0.67), reflectance: 0.0, ..default() });
+              let torso_m = mat.add(StandardMaterial { base_color: Color::srgb(0.13, 0.13, 0.13), reflectance: 0.0, ..default() });
+              let leg_m = mat.add(StandardMaterial { base_color: Color::srgb(0.1, 0.1, 0.1), reflectance: 0.0, ..default() });
 
               cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., l_h + t_h/2.0, 0.)), Player { walk: 0. }))
               .with_children(|p| {
                   p.spawn((SpatialBundle::default(), Pivot)).with_children(|piv| {
-                      piv.spawn(Camera3dBundle { transform: Transform::from_xyz(0., 3.5, 9.0).looking_at(Vec3::Y * 1.5, Vec3::Y), ..default() });
+                      piv.spawn(Camera3dBundle { transform: Transform::from_xyz(0., 5.0, 12.0).looking_at(Vec3::Y * 1.5, Vec3::Y), ..default() });
                   });
-
                   p.spawn((SpatialBundle::default(), Model)).with_children(|m| {
+                      // Торс
                       m.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(t_w, t_h, t_d)), material: torso_m, ..default() });
+                      // Голова
                       m.spawn(PbrBundle { 
                           mesh: mesh.add(Cuboid::new(h_s, h_s, h_s)), 
                           material: skin.clone(), 
@@ -158,17 +169,39 @@ jobs:
                       
                       for left in [true, false] {
                           let s = if left { -1. } else { 1. };
-                          m.spawn((SpatialBundle::from_transform(Transform::from_xyz(s * (t_w/2. + l_w/2.), 0.3, 0.)), Limb::Arm { left }))
+                          
+                          // РУКИ (Подняты на 0.45, худее)
+                          m.spawn((SpatialBundle::from_transform(Transform::from_xyz(s * (t_w/2. + a_w/2.), 0.45, 0.)), Limb::Arm { left }))
                           .with_children(|c| {
-                              c.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(l_w, l_h, l_d)), material: skin.clone(), transform: Transform::from_xyz(0., -l_h/2. + 0.2, 0.), ..default() });
+                              c.spawn(PbrBundle { 
+                                  mesh: mesh.add(Cuboid::new(a_w, a_h, a_d)), 
+                                  material: skin.clone(), 
+                                  transform: Transform::from_xyz(0., -a_h/2. + 0.1, 0.), // Чуть выше точка вращения
+                                  ..default() 
+                              });
                           });
+
+                          // НОГИ
                           m.spawn((SpatialBundle::from_transform(Transform::from_xyz(s * (l_w/2. + 0.01), -t_h/2., 0.)), Limb::Leg { left }))
                           .with_children(|c| {
-                              c.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(l_w, l_h, l_d)), material: leg_m.clone(), transform: Transform::from_xyz(0., -l_h/2., 0.), ..default() });
+                              c.spawn(PbrBundle { 
+                                  mesh: mesh.add(Cuboid::new(l_w, l_h, l_d)), 
+                                  material: leg_m.clone(), 
+                                  transform: Transform::from_xyz(0., -l_h/2., 0.), 
+                                  ..default() 
+                              });
                           });
                       }
                   });
               });
+          }
+
+          fn sync_light(q_player: Query<&Transform, With<Player>>, mut q_light: Query<&mut Transform, (With<PlayerLight>, Without<Player>)>) {
+              if let Ok(p_trans) = q_player.get_single() {
+                  if let Ok(mut l_trans) = q_light.get_single_mut() {
+                      l_trans.translation = p_trans.translation + Vec3::new(10.0, 20.0, 10.0);
+                  }
+              }
           }
 
           fn touch(touches: Res<Touches>, q_win: Query<&Window, With<PrimaryWindow>>, mut ctrl: ResMut<Controls>) {
@@ -198,7 +231,7 @@ jobs:
                   dir.y = 0.; 
                   if dir.length() > 0.1 { 
                       let d = dir.normalize();
-                      pt.translation += d * 7.0 * dt;
+                      pt.translation += d * 7.5 * dt;
                       if let Ok(mut mt) = q_mod.get_single_mut() {
                           mt.rotation = mt.rotation.slerp(Quat::from_rotation_y(f32::atan2(d.x, d.z)), 15. * dt); 
                       }
