@@ -1,261 +1,290 @@
-name: JsAI Quantum Engine - Fixed Build
-
-on:
-  push:
-  workflow_dispatch:
+name: Build APK
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 600
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: 'gradle'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Generate Project Structure
+      - name: Free Disk Space
         run: |
-          mkdir -p app/src/main/java/com/jsai/quantum
-          mkdir -p app/src/main/res/layout
-          mkdir -p app/src/main/res/values
+          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
 
-          # 1. settings.gradle (ИСПРАВЛЕННЫЙ: теперь репозитории видны всем)
-          cat > settings.gradle << 'EOF'
-          pluginManagement {
-              repositories { google(); mavenCentral(); gradlePluginPortal() }
+      - name: Install LLD Linker
+        run: sudo apt-get update && sudo apt-get install -y lld
+
+      - name: Generate Project
+        run: |
+          mkdir enjoer_game && cd enjoer_game
+          keytool -genkey -v -keystore release.keystore -alias mykey -keyalg RSA -keysize 2048 -validity 10000 -storepass password -keypass password -dname "CN=E,O=E,C=US"
+          
+          cat << 'EOF' > Cargo.toml
+          [package]
+          name = "enjoer_game"
+          version = "7.1.0"
+          edition = "2021"
+
+          [lib]
+          name = "enjoer_game"
+          crate-type = ["cdylib"]
+
+          [dependencies]
+          bevy = { version = "0.14.0", default-features = false, features = [
+              "bevy_pbr", "bevy_render", "bevy_winit", "bevy_core_pipeline",
+              "bevy_asset", "bevy_state", "bevy_color", "bevy_scene",
+              "multi_threaded", "x11", "default_font", "android_shared_stdcxx",
+              "tonemapping_luts"
+          ] }
+          bevy_egui = "0.28.0"
+
+          [package.metadata.android]
+          apk_name = "EnjoerGame"
+          build_targets = ["aarch64-linux-android"]
+          min_sdk_version = 24
+          target_sdk_version = 33
+          strip = "strip"
+          fullscreen = true
+
+          [package.metadata.android.signing.release]
+          path = "release.keystore"
+          keystore_password = "password"
+          key_alias = "mykey"
+          key_password = "password"
+
+          [profile.release]
+          opt-level = 3
+          lto = "thin" 
+          codegen-units = 1
+          panic = "abort"
+          EOF
+          
+          mkdir src
+          cat << 'EOF' > src/lib.rs
+          use bevy::prelude::*;
+          use bevy::window::{PrimaryWindow, WindowMode};
+          use bevy::pbr::DirectionalLightShadowMap;
+          use bevy_egui::{egui, EguiContexts, EguiPlugin};
+
+          #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
+          enum GameState { #[default] Menu, Play }
+
+          #[derive(Component)] struct Player { walk: f32 }
+          #[derive(Component)] struct Pivot;
+          #[derive(Component)] struct Model;
+          #[derive(Component)] enum Limb { Arm(f32), Leg(f32) }
+
+          #[derive(Resource, Default)]
+          struct Controls { move_dir: Vec2, look: Vec2, joy_c: Option<Vec2>, joy_cur: Option<Vec2> }
+
+          #[bevy_main]
+          fn main() {
+              App::new()
+                  .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
+                  // Оптимизация теней: ставим 1024 для баланса производительности
+                  .insert_resource(DirectionalLightShadowMap { size: 1024 })
+                  .add_plugins(DefaultPlugins.set(WindowPlugin {
+                      primary_window: Some(Window { 
+                          title: "Enjoer".into(), 
+                          mode: WindowMode::BorderlessFullscreen, 
+                          present_mode: bevy::window::PresentMode::Mailbox,
+                          ..default() 
+                      }), ..default()
+                  }))
+                  // Выключаем MSAA (сглаживание), оно сильно тормозит мобилки
+                  .insert_resource(Msaa::Off)
+                  .add_plugins(EguiPlugin)
+                  .init_state::<GameState>()
+                  .init_resource::<Controls>()
+                  .add_systems(Startup, setup)
+                  .add_systems(Update, style)
+                  .add_systems(Update, menu.run_if(in_state(GameState::Menu)))
+                  .add_systems(Update, (touch, hud, move_player, animate).run_if(in_state(GameState::Play)))
+                  .run();
           }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories { google(); mavenCentral() }
-          }
-          rootProject.name = "JsAIQuantum"
-          include ':app'
-          EOF
 
-          # 2. build.gradle (Root)
-          cat > build.gradle << 'EOF'
-          buildscript {
-              repositories { google(); mavenCentral() }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:8.2.2'
-                  classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20'
-              }
-          }
-          EOF
-
-          # 3. app/build.gradle
-          cat > app/build.gradle << 'EOF'
-          plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
-          android {
-              namespace 'com.jsai.quantum'
-              compileSdk 34
-              defaultConfig {
-                  applicationId "com.jsai.quantum"
-                  minSdk 26
-                  targetSdk 34
-                  versionCode 4
-                  versionName "Quantum-1.5"
-                  multiDexEnabled true
-              }
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
-                  }
-              }
-              compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-              kotlinOptions { jvmTarget = "17" }
-          }
-          dependencies {
-              implementation 'androidx.core:core-ktx:1.12.0'
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-              implementation 'com.google.android.material:material:1.11.0'
-              implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
-          }
-          EOF
-
-          # 4. Strings & Themes
-          cat > app/src/main/res/values/strings.xml << 'EOF'
-          <resources><string name="app_name">JsAI Quantum</string></resources>
-          EOF
-          cat > app/src/main/res/values/themes.xml << 'EOF'
-          <resources><style name="Theme.JsAI" parent="Theme.AppCompat.NoActionBar">
-          <item name="android:windowBackground">#050505</item>
-          <item name="android:statusBarColor">#050505</item>
-          </style></resources>
-          EOF
-
-          # 5. activity_main.xml (Quantum Interface)
-          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
-          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:layout_width="match_parent" android:layout_height="match_parent"
-              android:orientation="vertical" android:background="#050505" android:padding="12dp">
-              <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:text="JsAI QUANTUM CORE v1.5" android:textColor="#00E5FF" android:fontFamily="monospace" android:textSize="12sp"/>
-              <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal"
-                  android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#00E5FF" android:layout_marginTop="4dp"/>
-              <TextView android:id="@+id/stats" android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:text="RAM OPTIMIZED | READY" android:textColor="#555555" android:textSize="10sp" android:gravity="right"/>
-              <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="8dp">
-                  <TextView android:id="@+id/console" android:layout_width="match_parent" android:layout_height="wrap_content"
-                      android:textColor="#FFFFFF" android:fontFamily="monospace" android:textSize="14sp"/>
-              </ScrollView>
-              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-                  <Button android:id="@+id/loadBtn" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="LOAD" android:textSize="10sp"/>
-                  <Button android:id="@+id/trainBtn" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="TRAIN (75 EPOCHS)" android:layout_marginHorizontal="4dp" android:textSize="10sp"/>
-              </LinearLayout>
-              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#111111" android:padding="4dp">
-                  <EditText android:id="@+id/input" android:layout_width="0dp" android:layout_height="wrap_content"
-                      android:layout_weight="1" android:hint="Enter prompt..." android:textColor="#FFFFFF" android:background="@null" android:padding="12dp"/>
-                  <ImageButton android:id="@+id/sendBtn" android:layout_width="50dp" android:layout_height="50dp" android:src="@android:drawable/ic_menu_send" android:backgroundTint="#00E5FF"/>
-              </LinearLayout>
-          </LinearLayout>
-          EOF
-
-          # 6. MainActivity.kt (Quantum Logic)
-          cat > app/src/main/java/com/jsai/quantum/MainActivity.kt << 'EOF'
-          package com.jsai.quantum
-          import android.app.Activity
-          import android.content.Intent
-          import android.os.Bundle
-          import android.widget.*
-          import androidx.appcompat.app.AppCompatActivity
-          import kotlinx.coroutines.*
-          import java.util.*
-          import com.jsai.quantum.R
-
-          class MainActivity : AppCompatActivity() {
-              private lateinit var console: TextView
-              private lateinit var bar: ProgressBar
-              private lateinit var stats: TextView
+          fn setup(mut cmd: Commands, mut mesh: ResMut<Assets<Mesh>>, mut mat: ResMut<Assets<StandardMaterial>>) {
+              // Увеличили яркость фонового света, чтобы убрать фиолетовые оттенки в тенях
+              cmd.insert_resource(AmbientLight { color: Color::WHITE, brightness: 1000.0 });
               
-              private var datasetText = ""
-              private val vocab = mutableMapOf<String, Int>()
-              private val revVocab = mutableMapOf<Int, String>()
-              private val connections = mutableMapOf<Int, MutableMap<Int, Float>>()
-              private var isTraining = false
+              // Направленный свет с оптимизированными тенями
+              cmd.spawn(DirectionalLightBundle { 
+                  directional_light: DirectionalLight { 
+                      illuminance: 5000., 
+                      shadows_enabled: true, 
+                      shadow_depth_bias: 0.3,
+                      shadow_normal_bias: 0.8,
+                      ..default() 
+                  }, 
+                  transform: Transform::from_xyz(15., 25., 15.).looking_at(Vec3::ZERO, Vec3::Y), 
+                  ..default() 
+              });
 
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  setContentView(R.layout.activity_main)
-                  
-                  console = findViewById(R.id.console)
-                  bar = findViewById(R.id.progress)
-                  stats = findViewById(R.id.stats)
-                  val input = findViewById<EditText>(R.id.input)
+              // Пол
+              cmd.spawn(PbrBundle { 
+                  mesh: mesh.add(Plane3d::default().mesh().size(100., 100.)), 
+                  material: mat.add(StandardMaterial { 
+                      base_color: Color::srgb(0.2, 0.2, 0.2), 
+                      perceptual_roughness: 0.8,
+                      reflectance: 0.1,
+                      ..default() 
+                  }), ..default() 
+              });
+              
+              let body_mat = mat.add(StandardMaterial { base_color: Color::WHITE, ..default() });
 
-                  console.text = ">>> SYSTEM: QUANTUM INITIALIZED\n>>> MEMORY: 4GB COMPATIBLE\n"
+              // Игрок
+              cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., 2.6, 0.)), Player { walk: 0. }))
+              .with_children(|p| {
+                  p.spawn((SpatialBundle::default(), Pivot)).with_children(|piv| {
+                      piv.spawn(Camera3dBundle { 
+                          transform: Transform::from_xyz(0., 5., 11.).looking_at(Vec3::Y * 1.5, Vec3::Y), 
+                          ..default() 
+                      });
+                  });
+                  p.spawn((SpatialBundle::default(), Model)).with_children(|m| {
+                      m.spawn(PbrBundle { 
+                          mesh: mesh.add(Cuboid::new(1.4, 1.6, 0.7)), 
+                          material: body_mat.clone(), 
+                          ..default() 
+                      });
+                      m.spawn(PbrBundle { 
+                          mesh: mesh.add(Cuboid::new(1.0, 1.0, 1.0)), 
+                          material: body_mat.clone(), 
+                          transform: Transform::from_xyz(0., 1.3, 0.),
+                          ..default()
+                      });
+                      let mut limb = |p: &mut ChildBuilder, a: bool, l: bool, pos: Vec3| {
+                          p.spawn((SpatialBundle::from_transform(Transform::from_translation(pos)), if a { Limb::Arm(if l{1.}else{-1.}) } else { Limb::Leg(if l{1.}else{-1.}) }))
+                          .with_children(|c| { 
+                              c.spawn(PbrBundle { 
+                                  mesh: mesh.add(Cuboid::new(0.4, 1.6, 0.4)), 
+                                  material: body_mat.clone(), 
+                                  transform: Transform::from_xyz(0., -0.8, 0.),
+                                  ..default()
+                              }); 
+                          });
+                      };
+                      limb(m, true, true, Vec3::new(-0.9, 0.7, 0.));  
+                      limb(m, true, false, Vec3::new(0.9, 0.7, 0.)); 
+                      limb(m, false, true, Vec3::new(-0.35, -0.8, 0.));
+                      limb(m, false, false, Vec3::new(0.35, -0.8, 0.));
+                  });
+              });
+          }
 
-                  findViewById<Button>(R.id.loadBtn).setOnClickListener {
-                      val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "text/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true) }
-                      startActivityForResult(intent, 101)
-                  }
+          fn touch(touches: Res<Touches>, q_win: Query<&Window, With<PrimaryWindow>>, mut ctrl: ResMut<Controls>) {
+              ctrl.move_dir = Vec2::ZERO; ctrl.look = Vec2::ZERO;
+              let Ok(w) = q_win.get_single() else { return };
+              for t in touches.iter() {
+                  let p = t.position();
+                  if p.x < w.width() / 2. {
+                      if ctrl.joy_c.is_none() || touches.just_pressed(t.id()) { ctrl.joy_c = Some(p); }
+                      ctrl.joy_cur = Some(p);
+                      ctrl.move_dir = ((p - ctrl.joy_c.unwrap()) / 80.).clamp_length_max(1.0);
+                      ctrl.move_dir.y = -ctrl.move_dir.y;
+                  } else { ctrl.look += t.delta(); }
+              }
+              if touches.iter().filter(|t| t.position().x < w.width()/2.).count() == 0 { 
+                  ctrl.joy_c = None; ctrl.joy_cur = None; 
+              }
+          }
 
-                  findViewById<Button>(R.id.trainBtn).setOnClickListener { if(!isTraining && datasetText.isNotEmpty()) runQuantumTraining() }
+          fn move_player(time: Res<Time>, ctrl: Res<Controls>, mut q_pl: Query<(&mut Transform, &mut Player)>, mut q_piv: Query<&mut Transform, (With<Pivot>, Without<Player>)>, mut q_mod: Query<&mut Transform, (With<Model>, Without<Player>, Without<Pivot>)>) {
+              let Ok(mut piv_trans) = q_piv.get_single_mut() else { return };
+              let (y, p, _) = piv_trans.rotation.to_euler(EulerRot::YXZ);
+              if ctrl.look != Vec2::ZERO {
+                  piv_trans.rotation = Quat::from_euler(EulerRot::YXZ, y - ctrl.look.x * 0.005, (p - ctrl.look.y * 0.005).clamp(-0.8, 0.5), 0.);
+              }
+              let rot_y = Quat::from_rotation_y(y);
+              let dt = time.delta_seconds();
+              for (mut pt, mut pl) in q_pl.iter_mut() {
+                  let mut dir = rot_y * Vec3::NEG_Z * ctrl.move_dir.y + rot_y * Vec3::X * ctrl.move_dir.x;
+                  dir.y = 0.; 
+                  if dir.length() > 0.1 { 
+                      let d = dir.normalize();
+                      pt.translation += d * 10.0 * dt;
+                      for mut m in q_mod.iter_mut() { 
+                          m.rotation = m.rotation.slerp(Quat::from_rotation_y(f32::atan2(d.x, d.z)), 15. * dt); 
+                      }
+                      pl.walk += dt * 10.0;
+                  } else { pl.walk = 0.; }
+              }
+          }
 
-                  findViewById<ImageButton>(R.id.sendBtn).setOnClickListener {
-                      val prompt = input.text.toString()
-                      if (prompt.isNotEmpty()) {
-                          console.append("\nUSER: $prompt")
-                          input.setText("")
-                          val response = generateQuantumResponse(prompt)
-                          console.append("\nJSAI: $response")
+          fn animate(q_pl: Query<&Player>, mut q_l: Query<(&Limb, &mut Transform)>) {
+              if let Ok(pl) = q_pl.get_single() {
+                  let w = pl.walk.sin();
+                  for (l, mut t) in q_l.iter_mut() {
+                      match l { 
+                          Limb::Arm(s) => t.rotation = Quat::from_rotation_x(w * 0.9 * s), 
+                          Limb::Leg(s) => t.rotation = Quat::from_rotation_x(-w * 0.9 * s) 
                       }
                   }
               }
+          }
 
-              private fun runQuantumTraining() {
-                  isTraining = true
-                  CoroutineScope(Dispatchers.Main).launch {
-                      console.append("\n[QUANTUM TRAINING STARTING - 75 EPOCHS]")
-                      val tokens = datasetText.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
-                      
-                      // 1. Build Vocab
-                      tokens.distinct().forEachIndexed { i, s -> vocab[s] = i; revVocab[i] = s }
-                      
-                      val epochs = 75
-                      for (epoch in 1..epochs) {
-                          delay(10)
-                          withContext(Dispatchers.Default) {
-                              for (i in 0 until tokens.size - 1) {
-                                  val t1 = vocab[tokens[i]]!!; val t2 = vocab[tokens[i+1]]!!
-                                  val map = connections.getOrPut(t1) { mutableMapOf() }
-                                  map[t2] = (map[t2] ?: 0f) + 1.0f
-                              }
-                          }
-                          bar.progress = (epoch * 100 / epochs)
-                          stats.text = "EPOCH: $epoch/75 | NODES: ${vocab.size}"
-                      }
-                      console.append("\n[TRAINING COMPLETE: Latent space mapped]")
-                      isTraining = false
+          fn style(mut ctx: EguiContexts) {
+              let mut v = egui::Visuals::dark();
+              v.window_fill = egui::Color32::from_rgb(10, 10, 10);
+              ctx.ctx_mut().set_visuals(v);
+          }
+
+          fn menu(mut ctx: EguiContexts, mut next: ResMut<NextState<GameState>>) {
+              egui::CentralPanel::default().show(ctx.ctx_mut(), |ui| {
+                  ui.vertical_centered(|ui| {
+                      ui.add_space(100.);
+                      ui.heading(egui::RichText::new("ENJOER").size(80.).strong().color(egui::Color32::WHITE));
+                      ui.add_space(60.);
+                      if ui.add_sized([250., 80.], egui::Button::new("PLAY")).clicked() { next.set(GameState::Play); }
+                  });
+              });
+          }
+
+          fn hud(mut ctx: EguiContexts, mut next: ResMut<NextState<GameState>>, ctrl: Res<Controls>, q_win: Query<&Window, With<PrimaryWindow>>) {
+              let Ok(win) = q_win.get_single() else { return };
+              egui::Area::new(egui::Id::new("h")).fixed_pos(egui::pos2(0., 0.)).show(ctx.ctx_mut(), |ui| {
+                  if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(80., 40.)), egui::Button::new("Exit")).clicked() { 
+                      next.set(GameState::Menu); 
                   }
-              }
-
-              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-                  super.onActivityResult(requestCode, resultCode, data)
-                  if (resultCode == Activity.RESULT_OK && data != null) {
-                      val sb = StringBuilder()
-                      data.clipData?.let { for(i in 0 until it.itemCount) sb.append(readUri(it.getItemAt(i).uri)) }
-                      ?: data.data?.let { sb.append(readUri(it)) }
-                      datasetText = sb.toString()
-                      console.append("\n[DATASET LOADED: ${datasetText.length} chars]")
+                  let p = ui.painter();
+                  if let (Some(c), Some(cur)) = (ctrl.joy_c, ctrl.joy_cur) {
+                      p.circle_filled(egui::pos2(c.x, c.y), 60., egui::Color32::from_black_alpha(150));
+                      p.circle_filled(egui::pos2(cur.x, cur.y), 25., egui::Color32::WHITE);
                   }
-              }
-
-              private fun readUri(uri: android.net.Uri) = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
-
-              private fun generateQuantumResponse(prompt: String): String {
-                  if (vocab.isEmpty()) return "Model not trained."
-                  val words = prompt.lowercase().split(" ")
-                  var currentId = vocab[words.last()] ?: vocab.values.random()
-                  val res = mutableListOf<String>()
-                  
-                  repeat(40) {
-                      val nexts = connections[currentId]
-                      if (nexts != null) {
-                          currentId = nexts.maxByOrNull { it.value }?.key ?: vocab.values.random()
-                          res.add(revVocab[currentId] ?: "")
-                      } else {
-                          currentId = vocab.values.random()
-                          res.add(revVocab[currentId] ?: "")
-                      }
-                  }
-                  return res.joinToString(" ")
-              }
+              });
           }
           EOF
 
-          # 7. Android Manifest
-          cat > app/src/main/AndroidManifest.xml << 'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="JsAI Quantum" android:theme="@style/Theme.JsAI" android:largeHeap="true">
-                  <activity android:name=".MainActivity" android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-                  </activity>
-              </application>
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-          </manifest>
-          EOF
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with: { distribution: 'temurin', java-version: '17' }
+
+      - name: Setup NDK/SDK
+        run: |
+          yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
+          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "ndk;25.2.9519653" "platforms;android-30" "platforms;android-33" "build-tools;33.0.2"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with: { targets: aarch64-linux-android }
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          work-dir: enjoer_game
 
       - name: Build APK
         run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          cargo install cargo-apk
+          cd enjoer_game
+          export ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/25.2.9519653
+          export ANDROID_HOME=${ANDROID_HOME}
+          export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
+          cargo apk build --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
-        with:
-          name: JsAI-Quantum-Build
-          path: app/build/outputs/apk/debug/app-debug.apk
+        with: { name: Enjoer-Game-APK, path: enjoer_game/target/release/apk/*.apk }
