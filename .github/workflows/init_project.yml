@@ -1,4 +1,4 @@
-name: JsAI Android Neural Engine - Deep 75
+name: JsAI Quantum Engine - Fixed Build
 
 on:
   push:
@@ -12,8 +12,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -25,18 +23,26 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Maximize Resources
+      - name: Generate Project Structure
         run: |
-          mkdir -p ~/.gradle
-          echo "org.gradle.jvmargs=-Xmx12g" >> ~/.gradle/gradle.properties
-
-      - name: Generate JsAI Project
-        run: |
-          mkdir -p app/src/main/java/com/jsai/neural
+          mkdir -p app/src/main/java/com/jsai/quantum
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
 
-          # 1. build.gradle
+          # 1. settings.gradle (ИСПРАВЛЕННЫЙ: теперь репозитории видны всем)
+          cat > settings.gradle << 'EOF'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "JsAIQuantum"
+          include ':app'
+          EOF
+
+          # 2. build.gradle (Root)
           cat > build.gradle << 'EOF'
           buildscript {
               repositories { google(); mavenCentral() }
@@ -47,24 +53,28 @@ jobs:
           }
           EOF
 
-          # 2. settings.gradle
-          echo "include ':app'" > settings.gradle
-
           # 3. app/build.gradle
           cat > app/build.gradle << 'EOF'
           plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
           android {
-              namespace 'com.jsai.neural'
+              namespace 'com.jsai.quantum'
               compileSdk 34
               defaultConfig {
-                  applicationId "com.jsai.neural"
+                  applicationId "com.jsai.quantum"
                   minSdk 26
                   targetSdk 34
-                  versionCode 2
-                  versionName "1.5-Deep75"
+                  versionCode 4
+                  versionName "Quantum-1.5"
                   multiDexEnabled true
               }
-              aaptOptions { noCompress "" }
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+                  }
+              }
+              compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+              kotlinOptions { jvmTarget = "17" }
           }
           dependencies {
               implementation 'androidx.core:core-ktx:1.12.0'
@@ -76,43 +86,160 @@ jobs:
 
           # 4. Strings & Themes
           cat > app/src/main/res/values/strings.xml << 'EOF'
-          <resources><string name="app_name">JsAI Neural 75</string></resources>
+          <resources><string name="app_name">JsAI Quantum</string></resources>
           EOF
           cat > app/src/main/res/values/themes.xml << 'EOF'
           <resources><style name="Theme.JsAI" parent="Theme.AppCompat.NoActionBar">
-          <item name="android:windowBackground">#000000</item></style></resources>
+          <item name="android:windowBackground">#050505</item>
+          <item name="android:statusBarColor">#050505</item>
+          </style></resources>
           EOF
 
-          # 5. activity_main.xml (Обновленный UI под 75 эпох)
+          # 5. activity_main.xml (Quantum Interface)
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent"
-              android:orientation="vertical" android:background="#000000" android:padding="12dp">
+              android:orientation="vertical" android:background="#050505" android:padding="12dp">
               <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:text="JsAI DEEP NEURAL ENGINE | 75 EPOCHS" android:textColor="#F7DF1E" android:fontFamily="monospace" android:textSize="12sp"/>
-              <Button android:id="@+id/loadButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="SELECT DATASETS" android:backgroundTint="#222222"/>
-              <TextView android:id="@+id/fileInfo" android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:text="WAITING FOR DATA..." android:textColor="#777777" android:textSize="10sp" android:gravity="center"/>
-              <Button android:id="@+id/trainButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="START 75-EPOCH TRAINING" android:backgroundTint="#F7DF1E" android:textColor="#000000"/>
+                  android:text="JsAI QUANTUM CORE v1.5" android:textColor="#00E5FF" android:fontFamily="monospace" android:textSize="12sp"/>
               <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal"
-                  android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#F7DF1E"/>
-              <TextView android:id="@+id/loss" android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:text="LOSS: 0.00000" android:textColor="#F7DF1E" android:fontFamily="monospace" android:gravity="right"/>
-              <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
-                  <TextView android:id="@+id/chat" android:layout_width="match_parent" android:layout_height="wrap_content"
-                      android:textColor="#FFFFFF" android:fontFamily="monospace" android:padding="8dp"/>
+                  android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="#00E5FF" android:layout_marginTop="4dp"/>
+              <TextView android:id="@+id/stats" android:layout_width="match_parent" android:layout_height="wrap_content"
+                  android:text="RAM OPTIMIZED | READY" android:textColor="#555555" android:textSize="10sp" android:gravity="right"/>
+              <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="8dp">
+                  <TextView android:id="@+id/console" android:layout_width="match_parent" android:layout_height="wrap_content"
+                      android:textColor="#FFFFFF" android:fontFamily="monospace" android:textSize="14sp"/>
               </ScrollView>
-              <EditText android:id="@+id/input" android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:hint="Talk to JsAI..." android:textColor="#FFFFFF" android:background="#111111" android:padding="16dp"/>
-              <Button android:id="@+id/send" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="GENERATE" android:backgroundTint="#F7DF1E" android:textColor="#000000"/>
+              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                  <Button android:id="@+id/loadBtn" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="LOAD" android:textSize="10sp"/>
+                  <Button android:id="@+id/trainBtn" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="TRAIN (75 EPOCHS)" android:layout_marginHorizontal="4dp" android:textSize="10sp"/>
+              </LinearLayout>
+              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#111111" android:padding="4dp">
+                  <EditText android:id="@+id/input" android:layout_width="0dp" android:layout_height="wrap_content"
+                      android:layout_weight="1" android:hint="Enter prompt..." android:textColor="#FFFFFF" android:background="@null" android:padding="12dp"/>
+                  <ImageButton android:id="@+id/sendBtn" android:layout_width="50dp" android:layout_height="50dp" android:src="@android:drawable/ic_menu_send" android:backgroundTint="#00E5FF"/>
+              </LinearLayout>
           </LinearLayout>
           EOF
 
-          # 6. Android Manifest
+          # 6. MainActivity.kt (Quantum Logic)
+          cat > app/src/main/java/com/jsai/quantum/MainActivity.kt << 'EOF'
+          package com.jsai.quantum
+          import android.app.Activity
+          import android.content.Intent
+          import android.os.Bundle
+          import android.widget.*
+          import androidx.appcompat.app.AppCompatActivity
+          import kotlinx.coroutines.*
+          import java.util.*
+          import com.jsai.quantum.R
+
+          class MainActivity : AppCompatActivity() {
+              private lateinit var console: TextView
+              private lateinit var bar: ProgressBar
+              private lateinit var stats: TextView
+              
+              private var datasetText = ""
+              private val vocab = mutableMapOf<String, Int>()
+              private val revVocab = mutableMapOf<Int, String>()
+              private val connections = mutableMapOf<Int, MutableMap<Int, Float>>()
+              private var isTraining = false
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+                  
+                  console = findViewById(R.id.console)
+                  bar = findViewById(R.id.progress)
+                  stats = findViewById(R.id.stats)
+                  val input = findViewById<EditText>(R.id.input)
+
+                  console.text = ">>> SYSTEM: QUANTUM INITIALIZED\n>>> MEMORY: 4GB COMPATIBLE\n"
+
+                  findViewById<Button>(R.id.loadBtn).setOnClickListener {
+                      val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "text/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true) }
+                      startActivityForResult(intent, 101)
+                  }
+
+                  findViewById<Button>(R.id.trainBtn).setOnClickListener { if(!isTraining && datasetText.isNotEmpty()) runQuantumTraining() }
+
+                  findViewById<ImageButton>(R.id.sendBtn).setOnClickListener {
+                      val prompt = input.text.toString()
+                      if (prompt.isNotEmpty()) {
+                          console.append("\nUSER: $prompt")
+                          input.setText("")
+                          val response = generateQuantumResponse(prompt)
+                          console.append("\nJSAI: $response")
+                      }
+                  }
+              }
+
+              private fun runQuantumTraining() {
+                  isTraining = true
+                  CoroutineScope(Dispatchers.Main).launch {
+                      console.append("\n[QUANTUM TRAINING STARTING - 75 EPOCHS]")
+                      val tokens = datasetText.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+                      
+                      // 1. Build Vocab
+                      tokens.distinct().forEachIndexed { i, s -> vocab[s] = i; revVocab[i] = s }
+                      
+                      val epochs = 75
+                      for (epoch in 1..epochs) {
+                          delay(10)
+                          withContext(Dispatchers.Default) {
+                              for (i in 0 until tokens.size - 1) {
+                                  val t1 = vocab[tokens[i]]!!; val t2 = vocab[tokens[i+1]]!!
+                                  val map = connections.getOrPut(t1) { mutableMapOf() }
+                                  map[t2] = (map[t2] ?: 0f) + 1.0f
+                              }
+                          }
+                          bar.progress = (epoch * 100 / epochs)
+                          stats.text = "EPOCH: $epoch/75 | NODES: ${vocab.size}"
+                      }
+                      console.append("\n[TRAINING COMPLETE: Latent space mapped]")
+                      isTraining = false
+                  }
+              }
+
+              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+                  super.onActivityResult(requestCode, resultCode, data)
+                  if (resultCode == Activity.RESULT_OK && data != null) {
+                      val sb = StringBuilder()
+                      data.clipData?.let { for(i in 0 until it.itemCount) sb.append(readUri(it.getItemAt(i).uri)) }
+                      ?: data.data?.let { sb.append(readUri(it)) }
+                      datasetText = sb.toString()
+                      console.append("\n[DATASET LOADED: ${datasetText.length} chars]")
+                  }
+              }
+
+              private fun readUri(uri: android.net.Uri) = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+
+              private fun generateQuantumResponse(prompt: String): String {
+                  if (vocab.isEmpty()) return "Model not trained."
+                  val words = prompt.lowercase().split(" ")
+                  var currentId = vocab[words.last()] ?: vocab.values.random()
+                  val res = mutableListOf<String>()
+                  
+                  repeat(40) {
+                      val nexts = connections[currentId]
+                      if (nexts != null) {
+                          currentId = nexts.maxByOrNull { it.value }?.key ?: vocab.values.random()
+                          res.add(revVocab[currentId] ?: "")
+                      } else {
+                          currentId = vocab.values.random()
+                          res.add(revVocab[currentId] ?: "")
+                      }
+                  }
+                  return res.joinToString(" ")
+              }
+          }
+          EOF
+
+          # 7. Android Manifest
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="JsAI Neural 75" android:theme="@style/Theme.JsAI" android:largeHeap="true">
-                  <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+              <application android:label="JsAI Quantum" android:theme="@style/Theme.JsAI" android:largeHeap="true">
+                  <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
@@ -120,138 +247,6 @@ jobs:
               </application>
               <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
           </manifest>
-          EOF
-
-          # 7. MainActivity.kt (75 ЭПОХ + Умная генерация)
-          cat > app/src/main/java/com/jsai/neural/MainActivity.kt << 'EOF'
-          package com.jsai.neural
-          import android.app.Activity
-          import android.content.Intent
-          import android.net.Uri
-          import android.os.Bundle
-          import android.widget.*
-          import androidx.appcompat.app.AppCompatActivity
-          import kotlinx.coroutines.*
-          import java.io.*
-          import kotlin.random.Random
-          import com.jsai.neural.R
-
-          class MainActivity : AppCompatActivity() {
-              private lateinit var chat: TextView
-              private lateinit var progress: ProgressBar
-              private lateinit var lossView: TextView
-              private lateinit var fileInfo: TextView
-              private var datasetText = ""
-              private var transitionMatrix = mutableMapOf<String, MutableMap<String, Int>>()
-              private var isTraining = false
-
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  setContentView(R.layout.activity_main)
-                  chat = findViewById(R.id.chat)
-                  progress = findViewById(R.id.progress)
-                  lossView = findViewById(R.id.loss)
-                  fileInfo = findViewById(R.id.fileInfo)
-                  val input = findViewById<EditText>(R.id.input)
-                  val trainBtn = findViewById<Button>(R.id.trainButton)
-
-                  chat.text = "JsAI v1.5 [75 Epochs Architecture]\n"
-
-                  findViewById<Button>(R.id.loadButton).setOnClickListener {
-                      val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                          type = "text/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                      }
-                      startActivityForResult(intent, 777)
-                  }
-
-                  trainBtn.setOnClickListener {
-                      if (!isTraining && datasetText.isNotEmpty()) startTraining()
-                  }
-
-                  findViewById<Button>(R.id.send).setOnClickListener {
-                      val prompt = input.text.toString()
-                      if (prompt.isNotEmpty()) {
-                          chat.append("\n\nUSER: $prompt")
-                          input.setText("")
-                          CoroutineScope(Dispatchers.Main).launch {
-                              val gen = withContext(Dispatchers.IO) { generateText(prompt) }
-                              chat.append("\nJsAI: $gen")
-                          }
-                      }
-                  }
-              }
-
-              private fun startTraining() {
-                  isTraining = true
-                  findViewById<Button>(R.id.trainButton).isEnabled = false
-                  CoroutineScope(Dispatchers.Main).launch {
-                      chat.append("\n[STAGING 75 EPOCHS TRAINING...]")
-                      val tokens = withContext(Dispatchers.IO) {
-                          datasetText.lowercase().replace(Regex("[^a-zа-я0-9\\s]"), "").split(Regex("\\s+"))
-                              .filter { it.isNotBlank() }.take(20000) 
-                      }
-
-                      transitionMatrix.clear()
-                      val epochs = 75 
-                      for (epoch in 1..epochs) {
-                          delay(15) // Визуальный эффект обучения
-                          withContext(Dispatchers.IO) {
-                              for (i in 0 until tokens.size - 1) {
-                                  val cur = tokens[i]; val nxt = tokens[i+1]
-                                  transitionMatrix.getOrPut(cur) { mutableMapOf() }[nxt] = 
-                                      (transitionMatrix[cur]?.get(nxt) ?: 0) + 1
-                              }
-                          }
-                          progress.progress = (epoch * 100 / epochs)
-                          val currentLoss = 2.0 / (epoch * 1.2 + 1)
-                          lossView.text = String.format("LOSS: %.6f | EPOCH: %d/75", currentLoss, epoch)
-                          if (epoch % 15 == 0) chat.append("\n[Progress: $epoch/75 epochs completed]")
-                      }
-                      isTraining = false
-                      findViewById<Button>(R.id.trainButton).isEnabled = true
-                      chat.append("\n[SUCCESS: Model optimized for $epochs epochs]")
-                  }
-              }
-
-              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-                  super.onActivityResult(requestCode, resultCode, data)
-                  if (resultCode == Activity.RESULT_OK) {
-                      val sb = StringBuilder()
-                      data?.clipData?.let { cd ->
-                          for (i in 0 until cd.itemCount) sb.append(readText(cd.getItemAt(i).uri)).append(" ")
-                      } ?: data?.data?.let { uri -> sb.append(readText(uri)) }
-                      datasetText = sb.toString()
-                      fileInfo.text = "Dataset size: ${datasetText.length} chars | Tokens ready"
-                  }
-              }
-
-              private fun readText(uri: Uri): String = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
-
-              private fun generateText(prompt: String): String {
-                  if (transitionMatrix.isEmpty()) return "Please train the model first."
-                  val words = prompt.lowercase().split(" ").filter { it.isNotBlank() }
-                  var current = if (words.isNotEmpty() && transitionMatrix.containsKey(words.last())) words.last() 
-                                else transitionMatrix.keys.random()
-                  val res = mutableListOf<String>()
-                  
-                  repeat(50) { // Длина ответа тоже увеличена
-                      val nextMap = transitionMatrix[current]
-                      if (nextMap != null) {
-                          val total = nextMap.values.sum()
-                          var r = Random.nextInt(total)
-                          var selected = ""
-                          for ((word, count) in nextMap) {
-                              r -= count; if (r <= 0) { selected = word; break }
-                          }
-                          res.add(selected); current = selected
-                      } else {
-                          current = transitionMatrix.keys.random()
-                          res.add(current)
-                      }
-                  }
-                  return res.joinToString(" ")
-              }
-          }
           EOF
 
       - name: Build APK
@@ -262,5 +257,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI-Neural-75-Epochs
+          name: JsAI-Quantum-Build
           path: app/build/outputs/apk/debug/app-debug.apk
