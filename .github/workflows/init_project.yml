@@ -24,7 +24,7 @@ jobs:
           cat << 'EOF' > Cargo.toml
           [package]
           name = "enjoer_game"
-          version = "7.4.0"
+          version = "7.5.0"
           edition = "2021"
 
           [lib]
@@ -61,7 +61,7 @@ jobs:
           key_password = "password"
 
           [profile.release]
-          opt-level = "z"      # Оптимизация по размеру (APK будет меньше)
+          opt-level = "z"
           lto = "thin" 
           codegen-units = 1
           panic = "abort"
@@ -90,7 +90,7 @@ jobs:
           fn main() {
               App::new()
                   .insert_resource(ClearColor(Color::BLACK))
-                  // 256 - самая быстрая степень двойки для теней
+                  // 256 - Оптимально для мобилок
                   .insert_resource(DirectionalLightShadowMap { size: 256 })
                   .add_plugins(DefaultPlugins.set(WindowPlugin {
                       primary_window: Some(Window { 
@@ -98,10 +98,7 @@ jobs:
                           present_mode: bevy::window::PresentMode::Mailbox,
                           ..default() 
                       }), ..default()
-                  })
-                  .disable::<bevy::audio::AudioPlugin>() 
-                  .disable::<bevy::ui::UiPlugin>() // ОТКЛЮЧАЕМ НЕИСПОЛЬЗУЕМЫЙ UI ДВИЖОК
-                  )
+                  })) // Удалили .disable плагинов, так как они и так не включены в Cargo.toml
                   .insert_resource(Msaa::Off)
                   .add_plugins(EguiPlugin)
                   .init_state::<GameState>()
@@ -114,7 +111,7 @@ jobs:
           }
 
           fn setup(mut cmd: Commands, mut mesh: ResMut<Assets<Mesh>>, mut mat: ResMut<Assets<StandardMaterial>>) {
-              // Темные тени (низкий Ambient)
+              // Глубокие тени
               cmd.insert_resource(AmbientLight { color: Color::WHITE, brightness: 250.0 });
               
               cmd.spawn(DirectionalLightBundle { 
@@ -135,7 +132,7 @@ jobs:
                   ..default() 
               });
 
-              // Slim Character (Размеры точно как в HTML, голова -10%)
+              // Slim Character (Голова -10%)
               let (t_w, t_h, t_d) = (0.95, 1.2, 0.6);
               let h_s = 0.72 * 0.9; 
               let (l_w, l_h, l_d) = (0.42, 1.1, 0.42);
@@ -239,7 +236,7 @@ jobs:
           }
 
           fn hud(mut ctx: EguiContexts, mut next: ResMut<NextState<GameState>>, ctrl: Res<Controls>, q_win: Query<&Window, With<PrimaryWindow>>) {
-              let Ok(win) = q_win.get_single() else { return };
+              let Ok(_win) = q_win.get_single() else { return };
               egui::Area::new(egui::Id::new("h")).fixed_pos(egui::pos2(0., 0.)).show(ctx.ctx_mut(), |ui| {
                   if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(80., 40.)), egui::Button::new("Exit")).clicked() { next.set(GameState::Menu); }
                   let p = ui.painter();
