@@ -24,7 +24,7 @@ jobs:
           cat << 'EOF' > Cargo.toml
           [package]
           name = "enjoer_game"
-          version = "7.8.0"
+          version = "7.9.0"
           edition = "2021"
 
           [lib]
@@ -66,6 +66,7 @@ jobs:
           use bevy::prelude::*;
           use bevy::window::{PrimaryWindow, WindowMode};
           use bevy::pbr::{DirectionalLightShadowMap, ShadowFilteringMethod};
+          use bevy::render::camera::ScalingMode;
           use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
           #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
@@ -106,7 +107,7 @@ jobs:
           fn setup(mut cmd: Commands, mut mesh: ResMut<Assets<Mesh>>, mut mat: ResMut<Assets<StandardMaterial>>) {
               cmd.insert_resource(AmbientLight { color: Color::WHITE, brightness: 80.0 });
               
-              // Свет-преследователь
+              // Свет-преследователь (только под игроком)
               cmd.spawn((
                   DirectionalLightBundle { 
                       directional_light: DirectionalLight { 
@@ -117,9 +118,10 @@ jobs:
                           shadow_normal_bias: 0.5,
                           ..default() 
                       }, 
+                      // Фикс проекции для Bevy 0.14
                       orthographic_projection: OrthographicProjection {
-                          left: -12.0, right: 12.0, bottom: -12.0, top: 12.0,
-                          near: -30.0, far: 30.0, ..default()
+                          scaling_mode: ScalingMode::Fixed { width: 25.0, height: 25.0 },
+                          near: -50.0, far: 50.0, ..default()
                       },
                       transform: Transform::from_xyz(10., 20., 10.).looking_at(Vec3::ZERO, Vec3::Y), 
                       ..default() 
@@ -138,14 +140,11 @@ jobs:
                   }), ..default() 
               });
 
-              // --- ПРОПОРЦИИ Slim Pro ---
-              let (t_w, t_h, t_d) = (0.95, 1.2, 0.6); // Торс
-              let h_s = 0.72 * 0.9; // Голова -10%
-              
-              // Ноги
+              // ПРОПОРЦИИ Slim Edition
+              let (t_w, t_h, t_d) = (0.95, 1.2, 0.6);
+              let h_s = 0.72 * 0.9; 
               let (l_w, l_h, l_d) = (0.42, 1.1, 0.42); 
-              // Руки (Худее на 10% от ног: 0.42 * 0.9 = 0.38)
-              let (a_w, a_h, a_d) = (0.38, 1.1, 0.38); 
+              let (a_w, a_h, a_d) = (0.38, 1.1, 0.38); // Руки худее на 10%
 
               let skin = mat.add(StandardMaterial { base_color: Color::srgb(1.0, 0.86, 0.67), reflectance: 0.0, ..default() });
               let torso_m = mat.add(StandardMaterial { base_color: Color::srgb(0.13, 0.13, 0.13), reflectance: 0.0, ..default() });
@@ -157,39 +156,29 @@ jobs:
                       piv.spawn(Camera3dBundle { transform: Transform::from_xyz(0., 5.0, 12.0).looking_at(Vec3::Y * 1.5, Vec3::Y), ..default() });
                   });
                   p.spawn((SpatialBundle::default(), Model)).with_children(|m| {
-                      // Торс
                       m.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(t_w, t_h, t_d)), material: torso_m, ..default() });
-                      // Голова
                       m.spawn(PbrBundle { 
                           mesh: mesh.add(Cuboid::new(h_s, h_s, h_s)), 
                           material: skin.clone(), 
                           transform: Transform::from_xyz(0., (t_h/2.) + (h_s/2.), 0.),
                           ..default()
                       });
-                      
                       for left in [true, false] {
                           let s = if left { -1. } else { 1. };
-                          
-                          // РУКИ (Подняты на 0.45, худее)
+                          // РУКИ (Худее и Выше)
                           m.spawn((SpatialBundle::from_transform(Transform::from_xyz(s * (t_w/2. + a_w/2.), 0.45, 0.)), Limb::Arm { left }))
                           .with_children(|c| {
                               c.spawn(PbrBundle { 
                                   mesh: mesh.add(Cuboid::new(a_w, a_h, a_d)), 
                                   material: skin.clone(), 
-                                  transform: Transform::from_xyz(0., -a_h/2. + 0.1, 0.), // Чуть выше точка вращения
+                                  transform: Transform::from_xyz(0., -a_h/2. + 0.1, 0.), 
                                   ..default() 
                               });
                           });
-
                           // НОГИ
                           m.spawn((SpatialBundle::from_transform(Transform::from_xyz(s * (l_w/2. + 0.01), -t_h/2., 0.)), Limb::Leg { left }))
                           .with_children(|c| {
-                              c.spawn(PbrBundle { 
-                                  mesh: mesh.add(Cuboid::new(l_w, l_h, l_d)), 
-                                  material: leg_m.clone(), 
-                                  transform: Transform::from_xyz(0., -l_h/2., 0.), 
-                                  ..default() 
-                              });
+                              c.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(l_w, l_h, l_d)), material: leg_m.clone(), transform: Transform::from_xyz(0., -l_h/2., 0.), ..default() });
                           });
                       }
                   });
