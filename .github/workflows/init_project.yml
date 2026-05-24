@@ -24,7 +24,7 @@ jobs:
           cat << 'EOF' > Cargo.toml
           [package]
           name = "enjoer_game"
-          version = "7.1.0"
+          version = "7.4.0"
           edition = "2021"
 
           [lib]
@@ -33,15 +33,21 @@ jobs:
 
           [dependencies]
           bevy = { version = "0.14.0", default-features = false, features = [
-              "bevy_pbr", "bevy_render", "bevy_winit", "bevy_core_pipeline",
-              "bevy_asset", "bevy_state", "bevy_color", "bevy_scene",
-              "multi_threaded", "x11", "default_font", "android_shared_stdcxx",
+              "bevy_pbr", 
+              "bevy_render", 
+              "bevy_winit", 
+              "bevy_core_pipeline",
+              "bevy_asset", 
+              "bevy_state", 
+              "bevy_color", 
+              "multi_threaded", 
+              "android_shared_stdcxx", 
               "tonemapping_luts"
           ] }
           bevy_egui = "0.28.0"
 
           [package.metadata.android]
-          apk_name = "EnjoerGame"
+          apk_name = "EnjoerSlim"
           build_targets = ["aarch64-linux-android"]
           min_sdk_version = 24
           target_sdk_version = 33
@@ -55,10 +61,11 @@ jobs:
           key_password = "password"
 
           [profile.release]
-          opt-level = 3
+          opt-level = "z"      # Оптимизация по размеру (APK будет меньше)
           lto = "thin" 
           codegen-units = 1
           panic = "abort"
+          strip = true
           EOF
           
           mkdir src
@@ -74,7 +81,7 @@ jobs:
           #[derive(Component)] struct Player { walk: f32 }
           #[derive(Component)] struct Pivot;
           #[derive(Component)] struct Model;
-          #[derive(Component)] enum Limb { Arm(f32), Leg(f32) }
+          #[derive(Component)] enum Limb { Arm { left: bool }, Leg { left: bool } }
 
           #[derive(Resource, Default)]
           struct Controls { move_dir: Vec2, look: Vec2, joy_c: Option<Vec2>, joy_cur: Option<Vec2> }
@@ -82,18 +89,19 @@ jobs:
           #[bevy_main]
           fn main() {
               App::new()
-                  .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
-                  // Оптимизация теней: ставим 1024 для баланса производительности
-                  .insert_resource(DirectionalLightShadowMap { size: 1024 })
+                  .insert_resource(ClearColor(Color::BLACK))
+                  // 256 - самая быстрая степень двойки для теней
+                  .insert_resource(DirectionalLightShadowMap { size: 256 })
                   .add_plugins(DefaultPlugins.set(WindowPlugin {
                       primary_window: Some(Window { 
-                          title: "Enjoer".into(), 
                           mode: WindowMode::BorderlessFullscreen, 
                           present_mode: bevy::window::PresentMode::Mailbox,
                           ..default() 
                       }), ..default()
-                  }))
-                  // Выключаем MSAA (сглаживание), оно сильно тормозит мобилки
+                  })
+                  .disable::<bevy::audio::AudioPlugin>() 
+                  .disable::<bevy::ui::UiPlugin>() // ОТКЛЮЧАЕМ НЕИСПОЛЬЗУЕМЫЙ UI ДВИЖОК
+                  )
                   .insert_resource(Msaa::Off)
                   .add_plugins(EguiPlugin)
                   .init_state::<GameState>()
@@ -106,71 +114,62 @@ jobs:
           }
 
           fn setup(mut cmd: Commands, mut mesh: ResMut<Assets<Mesh>>, mut mat: ResMut<Assets<StandardMaterial>>) {
-              // Увеличили яркость фонового света, чтобы убрать фиолетовые оттенки в тенях
-              cmd.insert_resource(AmbientLight { color: Color::WHITE, brightness: 1000.0 });
+              // Темные тени (низкий Ambient)
+              cmd.insert_resource(AmbientLight { color: Color::WHITE, brightness: 250.0 });
               
-              // Направленный свет с оптимизированными тенями
               cmd.spawn(DirectionalLightBundle { 
                   directional_light: DirectionalLight { 
-                      illuminance: 5000., 
+                      illuminance: 7000., 
                       shadows_enabled: true, 
-                      shadow_depth_bias: 0.3,
-                      shadow_normal_bias: 0.8,
+                      shadow_depth_bias: 0.5,
+                      shadow_normal_bias: 1.2,
                       ..default() 
                   }, 
-                  transform: Transform::from_xyz(15., 25., 15.).looking_at(Vec3::ZERO, Vec3::Y), 
+                  transform: Transform::from_xyz(10., 20., 10.).looking_at(Vec3::ZERO, Vec3::Y), 
                   ..default() 
               });
 
-              // Пол
               cmd.spawn(PbrBundle { 
                   mesh: mesh.add(Plane3d::default().mesh().size(100., 100.)), 
-                  material: mat.add(StandardMaterial { 
-                      base_color: Color::srgb(0.2, 0.2, 0.2), 
-                      perceptual_roughness: 0.8,
-                      reflectance: 0.1,
-                      ..default() 
-                  }), ..default() 
+                  material: mat.add(StandardMaterial { base_color: Color::srgb(0.03, 0.03, 0.03), ..default() }), 
+                  ..default() 
               });
-              
-              let body_mat = mat.add(StandardMaterial { base_color: Color::WHITE, ..default() });
 
-              // Игрок
-              cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., 2.6, 0.)), Player { walk: 0. }))
+              // Slim Character (Размеры точно как в HTML, голова -10%)
+              let (t_w, t_h, t_d) = (0.95, 1.2, 0.6);
+              let h_s = 0.72 * 0.9; 
+              let (l_w, l_h, l_d) = (0.42, 1.1, 0.42);
+
+              let skin = mat.add(StandardMaterial { base_color: Color::srgb(1.0, 0.86, 0.67), ..default() });
+              let torso_m = mat.add(StandardMaterial { base_color: Color::srgb(0.13, 0.13, 0.13), ..default() });
+              let leg_m = mat.add(StandardMaterial { base_color: Color::srgb(0.1, 0.1, 0.1), ..default() });
+
+              cmd.spawn((SpatialBundle::from_transform(Transform::from_xyz(0., l_h + t_h/2.0, 0.)), Player { walk: 0. }))
               .with_children(|p| {
                   p.spawn((SpatialBundle::default(), Pivot)).with_children(|piv| {
-                      piv.spawn(Camera3dBundle { 
-                          transform: Transform::from_xyz(0., 5., 11.).looking_at(Vec3::Y * 1.5, Vec3::Y), 
-                          ..default() 
-                      });
+                      piv.spawn(Camera3dBundle { transform: Transform::from_xyz(0., 3.5, 9.0).looking_at(Vec3::Y * 1.5, Vec3::Y), ..default() });
                   });
+
                   p.spawn((SpatialBundle::default(), Model)).with_children(|m| {
+                      m.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(t_w, t_h, t_d)), material: torso_m, ..default() });
                       m.spawn(PbrBundle { 
-                          mesh: mesh.add(Cuboid::new(1.4, 1.6, 0.7)), 
-                          material: body_mat.clone(), 
-                          ..default() 
-                      });
-                      m.spawn(PbrBundle { 
-                          mesh: mesh.add(Cuboid::new(1.0, 1.0, 1.0)), 
-                          material: body_mat.clone(), 
-                          transform: Transform::from_xyz(0., 1.3, 0.),
+                          mesh: mesh.add(Cuboid::new(h_s, h_s, h_s)), 
+                          material: skin.clone(), 
+                          transform: Transform::from_xyz(0., (t_h/2.) + (h_s/2.), 0.),
                           ..default()
                       });
-                      let mut limb = |p: &mut ChildBuilder, a: bool, l: bool, pos: Vec3| {
-                          p.spawn((SpatialBundle::from_transform(Transform::from_translation(pos)), if a { Limb::Arm(if l{1.}else{-1.}) } else { Limb::Leg(if l{1.}else{-1.}) }))
-                          .with_children(|c| { 
-                              c.spawn(PbrBundle { 
-                                  mesh: mesh.add(Cuboid::new(0.4, 1.6, 0.4)), 
-                                  material: body_mat.clone(), 
-                                  transform: Transform::from_xyz(0., -0.8, 0.),
-                                  ..default()
-                              }); 
+                      
+                      for left in [true, false] {
+                          let s = if left { -1. } else { 1. };
+                          m.spawn((SpatialBundle::from_transform(Transform::from_xyz(s * (t_w/2. + l_w/2.), 0.3, 0.)), Limb::Arm { left }))
+                          .with_children(|c| {
+                              c.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(l_w, l_h, l_d)), material: skin.clone(), transform: Transform::from_xyz(0., -l_h/2. + 0.2, 0.), ..default() });
                           });
-                      };
-                      limb(m, true, true, Vec3::new(-0.9, 0.7, 0.));  
-                      limb(m, true, false, Vec3::new(0.9, 0.7, 0.)); 
-                      limb(m, false, true, Vec3::new(-0.35, -0.8, 0.));
-                      limb(m, false, false, Vec3::new(0.35, -0.8, 0.));
+                          m.spawn((SpatialBundle::from_transform(Transform::from_xyz(s * (l_w/2. + 0.01), -t_h/2., 0.)), Limb::Leg { left }))
+                          .with_children(|c| {
+                              c.spawn(PbrBundle { mesh: mesh.add(Cuboid::new(l_w, l_h, l_d)), material: leg_m.clone(), transform: Transform::from_xyz(0., -l_h/2., 0.), ..default() });
+                          });
+                      }
                   });
               });
           }
@@ -179,24 +178,21 @@ jobs:
               ctrl.move_dir = Vec2::ZERO; ctrl.look = Vec2::ZERO;
               let Ok(w) = q_win.get_single() else { return };
               for t in touches.iter() {
-                  let p = t.position();
-                  if p.x < w.width() / 2. {
-                      if ctrl.joy_c.is_none() || touches.just_pressed(t.id()) { ctrl.joy_c = Some(p); }
-                      ctrl.joy_cur = Some(p);
-                      ctrl.move_dir = ((p - ctrl.joy_c.unwrap()) / 80.).clamp_length_max(1.0);
+                  if t.position().x < w.width() / 2. {
+                      if ctrl.joy_c.is_none() || touches.just_pressed(t.id()) { ctrl.joy_c = Some(t.position()); }
+                      ctrl.joy_cur = Some(t.position());
+                      ctrl.move_dir = ((t.position() - ctrl.joy_c.unwrap()) / 80.).clamp_length_max(1.0);
                       ctrl.move_dir.y = -ctrl.move_dir.y;
                   } else { ctrl.look += t.delta(); }
               }
-              if touches.iter().filter(|t| t.position().x < w.width()/2.).count() == 0 { 
-                  ctrl.joy_c = None; ctrl.joy_cur = None; 
-              }
+              if touches.iter().filter(|t| t.position().x < w.width()/2.).count() == 0 { ctrl.joy_c = None; ctrl.joy_cur = None; }
           }
 
           fn move_player(time: Res<Time>, ctrl: Res<Controls>, mut q_pl: Query<(&mut Transform, &mut Player)>, mut q_piv: Query<&mut Transform, (With<Pivot>, Without<Player>)>, mut q_mod: Query<&mut Transform, (With<Model>, Without<Player>, Without<Pivot>)>) {
-              let Ok(mut piv_trans) = q_piv.get_single_mut() else { return };
-              let (y, p, _) = piv_trans.rotation.to_euler(EulerRot::YXZ);
+              let Ok(mut piv) = q_piv.get_single_mut() else { return };
+              let (y, p, _) = piv.rotation.to_euler(EulerRot::YXZ);
               if ctrl.look != Vec2::ZERO {
-                  piv_trans.rotation = Quat::from_euler(EulerRot::YXZ, y - ctrl.look.x * 0.005, (p - ctrl.look.y * 0.005).clamp(-0.8, 0.5), 0.);
+                  piv.rotation = Quat::from_euler(EulerRot::YXZ, y - ctrl.look.x * 0.005, (p - ctrl.look.y * 0.005).clamp(-0.8, 0.5), 0.);
               }
               let rot_y = Quat::from_rotation_y(y);
               let dt = time.delta_seconds();
@@ -205,23 +201,22 @@ jobs:
                   dir.y = 0.; 
                   if dir.length() > 0.1 { 
                       let d = dir.normalize();
-                      pt.translation += d * 10.0 * dt;
-                      for mut m in q_mod.iter_mut() { 
-                          m.rotation = m.rotation.slerp(Quat::from_rotation_y(f32::atan2(d.x, d.z)), 15. * dt); 
+                      pt.translation += d * 7.0 * dt;
+                      if let Ok(mut mt) = q_mod.get_single_mut() {
+                          mt.rotation = mt.rotation.slerp(Quat::from_rotation_y(f32::atan2(d.x, d.z)), 15. * dt); 
                       }
-                      pl.walk += dt * 10.0;
+                      pl.walk += dt * 12.0;
                   } else { pl.walk = 0.; }
               }
           }
 
           fn animate(q_pl: Query<&Player>, mut q_l: Query<(&Limb, &mut Transform)>) {
-              if let Ok(pl) = q_pl.get_single() {
-                  let w = pl.walk.sin();
-                  for (l, mut t) in q_l.iter_mut() {
-                      match l { 
-                          Limb::Arm(s) => t.rotation = Quat::from_rotation_x(w * 0.9 * s), 
-                          Limb::Leg(s) => t.rotation = Quat::from_rotation_x(-w * 0.9 * s) 
-                      }
+              let Ok(pl) = q_pl.get_single() else { return };
+              let w = pl.walk.sin() * 0.8;
+              for (l, mut t) in q_l.iter_mut() {
+                  match l { 
+                      Limb::Arm { left } => t.rotation = Quat::from_rotation_x(if *left { -w } else { w }), 
+                      Limb::Leg { left } => t.rotation = Quat::from_rotation_x(if *left { w } else { -w }) 
                   }
               }
           }
@@ -246,9 +241,7 @@ jobs:
           fn hud(mut ctx: EguiContexts, mut next: ResMut<NextState<GameState>>, ctrl: Res<Controls>, q_win: Query<&Window, With<PrimaryWindow>>) {
               let Ok(win) = q_win.get_single() else { return };
               egui::Area::new(egui::Id::new("h")).fixed_pos(egui::pos2(0., 0.)).show(ctx.ctx_mut(), |ui| {
-                  if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(80., 40.)), egui::Button::new("Exit")).clicked() { 
-                      next.set(GameState::Menu); 
-                  }
+                  if ui.put(egui::Rect::from_min_size(egui::pos2(20., 20.), egui::vec2(80., 40.)), egui::Button::new("Exit")).clicked() { next.set(GameState::Menu); }
                   let p = ui.painter();
                   if let (Some(c), Some(cur)) = (ctrl.joy_c, ctrl.joy_cur) {
                       p.circle_filled(egui::pos2(c.x, c.y), 60., egui::Color32::from_black_alpha(150));
