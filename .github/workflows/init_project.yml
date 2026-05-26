@@ -1,8 +1,5 @@
-name: JsAI ULTRA-DEEP 8.0 - Maximum Neural Power
-
-on:
-  push:
-  workflow_dispatch:
+name: JsAI_Craft_3D_Build
+on: [push, workflow_dispatch]
 
 jobs:
   build:
@@ -11,782 +8,258 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate Ultra-Deep Neural Network
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Create 3D Project
         run: |
-          mkdir -p app/src/main/java/com/jsai/ultradeep
-          mkdir -p app/src/main/res/{layout,values,xml}
+          mkdir -p app/src/main/java/com/jsai/craft
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
 
-          cat > gradle.properties << 'EOF'
-          android.useAndroidX=true
-          android.enableJetifier=true
-          org.gradle.jvmargs=-Xmx8192m -XX:MaxMetaspaceSize=1024m -XX:+UseG1GC
-          android.enableR8.fullMode=false
-          android.enableDexingArtifactTransform.desugaring=false
-          EOF
+          echo "android.useAndroidX=true" > gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
 
-          cat > settings.gradle << 'EOF'
-          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories { google(); mavenCentral() }
-          }
-          rootProject.name = "JsAI_UltraDeep"
-          include ':app'
-          EOF
-
-          cat > build.gradle << 'EOF'
-          plugins {
-              id 'com.android.application' version '8.2.2' apply false
-              id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
-          }
-          EOF
-
-          cat > app/build.gradle << 'EOF'
-          plugins { 
-              id 'com.android.application'
-              id 'org.jetbrains.kotlin.android'
-          }
-          android {
-              namespace 'com.jsai.ultradeep'
-              compileSdk 34
-              defaultConfig {
-                  applicationId "com.jsai.ultradeep"
-                  minSdk 26
-                  targetSdk 34
-                  versionCode 80
-                  versionName "UltraDeep-8.0-Maximum"
-                  multiDexEnabled true
-                  vectorDrawables.useSupportLibrary = true
-              }
-              buildTypes { 
-                  release { 
-                      minifyEnabled false
-                      shrinkResources false
-                  }
-                  debug {
-                      minifyEnabled false
-                  }
-              }
-              compileOptions { 
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17 
-              }
-              kotlinOptions { 
-                  jvmTarget = "17"
-                  freeCompilerArgs += ["-Xjvm-default=all"]
-              }
-              packagingOptions {
-                  resources.excludes.add("META-INF/*")
-              }
-              dexOptions {
-                  javaMaxHeapSize "4g"
-              }
-          }
-          dependencies {
-              implementation 'androidx.core:core-ktx:1.12.0'
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-              implementation 'com.google.android.material:material:1.11.0'
-              implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
-              implementation 'com.google.code.gson:gson:2.10.1'
-              implementation 'androidx.multidex:multidex:2.0.1'
-          }
-          EOF
-
-          cat > app/src/main/res/xml/file_paths.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <paths>
-              <external-path name="external_files" path="."/>
-              <cache-path name="cache" path="."/>
-              <files-path name="files" path="."/>
-          </paths>
-          EOF
-
-          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
-          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:layout_width="match_parent" android:layout_height="match_parent"
-              android:orientation="vertical" android:background="#000000" android:padding="10dp">
-              
-              <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:text="🧠 JSAI ULTRA-DEEP 8.0 - MAXIMUM NEURAL POWER" 
-                  android:textColor="#FF00FF" android:textSize="14sp" android:textStyle="bold" 
-                  android:gravity="center" android:padding="8dp" android:background="#0D0D0D"/>
-              
-              <TextView android:id="@+id/stats" android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:textColor="#00FF00" android:fontFamily="monospace" android:textSize="9sp" 
-                  android:text="⚡ LAYERS: 0 | 🧠 PARAMS: 0M | 📚 VOCAB: 0 | 🎯 CONTEXT: 0" 
-                  android:padding="6dp" android:background="#0A0A0A" android:layout_marginTop="6dp"/>
-              
-              <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal"
-                  android:layout_width="match_parent" android:layout_height="4dp" android:layout_marginTop="4dp"
-                  android:progressTint="#00FFFF" android:progressBackgroundTint="#1A1A1A"/>
-              
-              <ScrollView android:layout_width="match_parent" android:layout_height="0dp" 
-                  android:layout_weight="1" android:layout_marginTop="8dp" android:background="#050505" 
-                  android:padding="6dp" android:scrollbars="vertical" android:fadeScrollbars="false">
-                  <TextView android:id="@+id/console" android:layout_width="match_parent" 
-                      android:layout_height="wrap_content" android:textColor="#DDDDDD" 
-                      android:fontFamily="monospace" android:textSize="11sp" android:lineSpacingExtra="2dp"/>
-              </ScrollView>
-              
-              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:orientation="horizontal" android:layout_marginTop="6dp">
-                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                      android:text="Temp:" android:textColor="#888888" android:textSize="10sp" 
-                      android:layout_gravity="center_vertical" android:paddingEnd="4dp"/>
-                  <EditText android:id="@+id/temperature" android:layout_width="60dp" 
-                      android:layout_height="36dp" android:text="0.7" android:textColor="#FFFFFF" 
-                      android:textColorHint="#555555" android:background="#1A1A1A" android:padding="6dp" 
-                      android:inputType="numberDecimal" android:textSize="11sp"/>
-                  
-                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                      android:text="MaxTok:" android:textColor="#888888" android:textSize="10sp" 
-                      android:layout_gravity="center_vertical" android:paddingStart="8dp" android:paddingEnd="4dp"/>
-                  <EditText android:id="@+id/maxTokens" android:layout_width="70dp" 
-                      android:layout_height="36dp" android:text="2000" android:textColor="#FFFFFF" 
-                      android:textColorHint="#555555" android:background="#1A1A1A" android:padding="6dp" 
-                      android:inputType="number" android:textSize="11sp"/>
-                  
-                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                      android:text="TopK:" android:textColor="#888888" android:textSize="10sp" 
-                      android:layout_gravity="center_vertical" android:paddingStart="8dp" android:paddingEnd="4dp"/>
-                  <EditText android:id="@+id/topK" android:layout_width="60dp" 
-                      android:layout_height="36dp" android:text="50" android:textColor="#FFFFFF" 
-                      android:textColorHint="#555555" android:background="#1A1A1A" android:padding="6dp" 
-                      android:inputType="number" android:textSize="11sp"/>
-              </LinearLayout>
-              
-              <EditText android:id="@+id/input" android:layout_width="match_parent" 
-                  android:layout_height="80dp" android:textColor="#FFFFFF" 
-                  android:hint="💭 Enter detailed prompt..." android:textColorHint="#444444" 
-                  android:background="#0F0F0F" android:padding="10dp" android:layout_marginTop="6dp"
-                  android:gravity="top" android:textSize="12sp" android:maxLines="5"/>
-              
-              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" 
-                  android:orientation="horizontal" android:layout_marginTop="8dp">
-                  <Button android:id="@+id/loadBtn" android:layout_width="0dp" android:layout_weight="1" 
-                      android:layout_height="44dp" android:text="📂" android:textSize="16sp" 
-                      android:backgroundTint="#0D47A1" android:textColor="#FFFFFF"/>
-                  <Button android:id="@+id/trainBtn" android:layout_width="0dp" android:layout_weight="1" 
-                      android:layout_height="44dp" android:text="🔥" android:textSize="16sp" 
-                      android:layout_marginStart="4dp" android:backgroundTint="#1B5E20" android:textColor="#FFFFFF"/>
-                  <Button android:id="@+id/sendBtn" android:layout_width="0dp" android:layout_weight="1" 
-                      android:layout_height="44dp" android:text="⚡" android:textSize="16sp"
-                      android:layout_marginStart="4dp" android:backgroundTint="#B71C1C" android:textColor="#FFFFFF"/>
-                  <Button android:id="@+id/saveBtn" android:layout_width="0dp" android:layout_weight="1" 
-                      android:layout_height="44dp" android:text="💾" android:textSize="16sp"
-                      android:layout_marginStart="4dp" android:backgroundTint="#E65100" android:textColor="#FFFFFF"/>
-                  <Button android:id="@+id/clearBtn" android:layout_width="0dp" android:layout_weight="1" 
-                      android:layout_height="44dp" android:text="🗑️" android:textSize="16sp"
-                      android:layout_marginStart="4dp" android:backgroundTint="#424242" android:textColor="#FFFFFF"/>
-              </LinearLayout>
-          </LinearLayout>
-          EOF
-
+          # Ресурсы
           cat > app/src/main/res/values/strings.xml << 'EOF'
-          <resources><string name="app_name">JsAI UltraDeep</string></resources>
+          <resources><string name="app_name">JsAI Craft 3D</string></resources>
           EOF
 
           cat > app/src/main/res/values/themes.xml << 'EOF'
-          <resources>
-              <style name="Theme.JsAI" parent="Theme.Material3.Dark.NoActionBar">
-                  <item name="colorPrimary">#FF00FF</item>
-                  <item name="colorPrimaryVariant">#AA00AA</item>
-                  <item name="colorOnPrimary">#000000</item>
-              </style>
-          </resources>
+          <resources><style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+          <item name="android:windowFullscreen">true</item>
+          </style></resources>
           EOF
 
-          cat > app/src/main/java/com/jsai/ultradeep/MainActivity.kt << 'EOF'
-          package com.jsai.ultradeep
-          import android.app.Activity
-          import android.content.Intent
-          import android.net.Uri
-          import android.os.Bundle
-          import android.provider.OpenableColumns
-          import android.widget.*
-          import androidx.appcompat.app.AppCompatActivity
-          import kotlinx.coroutines.*
-          import java.io.*
-          import kotlin.math.*
-          import kotlin.random.Random
-          import com.google.gson.Gson
-          import java.util.concurrent.ConcurrentHashMap
-          import java.util.PriorityQueue
+          # Главная Активность
+          cat > app/src/main/java/com/jsai/craft/MainActivity.java << 'EOF'
+          package com.jsai.craft;
+          import android.app.Activity;
+          import android.opengl.GLSurfaceView;
+          import android.os.Bundle;
+          import android.view.MotionEvent;
+          import android.view.Window;
+          import android.view.WindowManager;
 
-          class MainActivity : AppCompatActivity() {
-              private lateinit var console: TextView
-              private lateinit var bar: ProgressBar
-              private lateinit var stats: TextView
-              private lateinit var temperatureInput: EditText
-              private lateinit var maxTokensInput: EditText
-              private lateinit var topKInput: EditText
-              
-              private val brain = UltraDeepBrain()
-              private var isTraining = false
-              private val selectedUris = mutableListOf<Uri>()
-              private val gson = Gson()
+          public class MainActivity extends Activity {
+              private GameGLView glView;
 
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  setContentView(R.layout.activity_main)
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  requestWindowFeature(Window.FEATURE_NO_TITLE);
+                  getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
                   
-                  console = findViewById(R.id.console)
-                  bar = findViewById(R.id.progress)
-                  stats = findViewById(R.id.stats)
-                  temperatureInput = findViewById(R.id.temperature)
-                  maxTokensInput = findViewById(R.id.maxTokens)
-                  topKInput = findViewById(R.id.topK)
-                  val input = findViewById<EditText>(R.id.input)
-
-                  log("""
-                      ╔══════════════════════════════════════════╗
-                      ║  🧠 JSAI ULTRA-DEEP 8.0 INITIALIZED 🧠  ║
-                      ╚══════════════════════════════════════════╝
-                      
-                      🏗️  NEURAL ARCHITECTURE:
-                         ├─ 12-Layer Deep Network
-                         ├─ 512D Embeddings
-                         ├─ 8-Head Multi-Attention
-                         ├─ Position Encodings
-                         ├─ LayerNorm + Residual
-                         ├─ FFN (2048 hidden units)
-                         ├─ Unlimited Context (32K+ tokens)
-                         └─ Advanced Beam Search
-                      
-                      ⚡ FEATURES:
-                         • Temperature Sampling (0.1-2.0)
-                         • Top-K/Top-P Filtering
-                         • Dynamic Vocabulary
-                         • Gradient-like Updates
-                         • Multi-head Self-Attention
-                         • Positional Embeddings
-                      
-                      📊 Status: Ready for massive datasets
-                  """.trimIndent())
-
-                  findViewById<Button>(R.id.loadBtn).setOnClickListener {
-                      Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                          type = "*/*"
-                          putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                          putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/*", "application/*"))
-                          addCategory(Intent.CATEGORY_OPENABLE)
-                          startActivityForResult(this, 101)
-                      }
-                  }
-
-                  findViewById<Button>(R.id.trainBtn).setOnClickListener {
-                      if (!isTraining && selectedUris.isNotEmpty()) {
-                          startDeepTraining()
-                      } else if (selectedUris.isEmpty()) {
-                          log("\n❌ No training data selected")
-                      }
-                  }
-
-                  findViewById<Button>(R.id.sendBtn).setOnClickListener {
-                      val prompt = input.text.toString()
-                      if (prompt.isNotBlank()) {
-                          log("\n${"═".repeat(60)}")
-                          log("👤 USER PROMPT:\n$prompt")
-                          log("═".repeat(60))
-                          generateDeepResponse(prompt)
-                      }
-                  }
-
-                  findViewById<Button>(R.id.saveBtn).setOnClickListener { saveModel() }
-                  
-                  findViewById<Button>(R.id.clearBtn).setOnClickListener {
-                      console.text = ""
-                      log("🗑️  Console cleared")
-                  }
-              }
-
-              private fun startDeepTraining() = CoroutineScope(Dispatchers.Main).launch {
-                  isTraining = true
-                  log("\n🔥 INITIATING DEEP NEURAL TRAINING")
-                  log("${"═".repeat(60)}")
-                  
-                  bar.max = 100
-                  bar.progress = 0
-                  
-                  var totalChars = 0L
-                  var totalTokens = 0L
-                  val startTime = System.currentTimeMillis()
-
-                  withContext(Dispatchers.IO) {
-                      selectedUris.forEachIndexed { idx, uri ->
-                          val fileName = getFileName(uri)
-                          val fileSize = getFileSize(uri)
-                          
-                          withContext(Dispatchers.Main) {
-                              log("\n📄 [${idx + 1}/${selectedUris.size}] $fileName")
-                              log("   Size: ${fileSize / 1024}KB")
-                          }
-
-                          try {
-                              contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
-                                  val chunkSize = 500000 // Bigger chunks
-                                  val buffer = StringBuilder()
-                                  
-                                  reader.forEachLine { line ->
-                                      buffer.append(line).append(" ")
-                                      totalChars += line.length
-                                      
-                                      if (buffer.length >= chunkSize) {
-                                          val processed = brain.processChunk(buffer.toString())
-                                          totalTokens += processed
-                                          buffer.clear()
-                                          
-                                          if (totalTokens % 50000L == 0L) {
-                                              withContext(Dispatchers.Main) {
-                                                  updateStats()
-                                                  val fileProgress = ((idx * 100) + (totalChars % 5000000 / 50000).toInt()) / selectedUris.size
-                                                  bar.progress = fileProgress.coerceIn(0, 100)
-                                              }
-                                          }
-                                      }
-                                  }
-                                  
-                                  if (buffer.isNotEmpty()) {
-                                      totalTokens += brain.processChunk(buffer.toString())
-                                  }
-                              }
-                              
-                              withContext(Dispatchers.Main) {
-                                  log("   ✅ ${totalTokens / 1000}K tokens processed")
-                              }
-                              
-                          } catch (e: Exception) {
-                              withContext(Dispatchers.Main) {
-                                  log("   ⚠️  ${e.message}")
-                              }
-                          }
-                      }
-                      
-                      log("\n🔬 Optimizing neural pathways...")
-                      brain.optimize()
-                  }
-
-                  val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-                  
-                  log("\n╔══════════════════════════════════════════╗")
-                  log("║      🎉 TRAINING COMPLETE 🎉             ║")
-                  log("╚══════════════════════════════════════════╝")
-                  log("📊 FINAL STATISTICS:")
-                  log("   ├─ Characters: ${totalChars / 1_000_000.0}M")
-                  log("   ├─ Tokens: ${totalTokens / 1000}K")
-                  log("   ├─ Vocabulary: ${brain.vocabSize()}")
-                  log("   ├─ Parameters: ${brain.parameterCount() / 1_000_000.0}M")
-                  log("   ├─ Layers: 12")
-                  log("   ├─ Attention Heads: 8")
-                  log("   ├─ Training Time: ${elapsed}s")
-                  log("   ├─ Speed: ${(totalChars / elapsed / 1000).toInt()}K/s")
-                  log("   └─ Memory: ${getMemoryUsage()}MB")
-                  
-                  isTraining = false
-                  updateStats()
-              }
-
-              private fun generateDeepResponse(prompt: String) {
-                  if (brain.vocabSize() == 0) {
-                      log("🤖 JSAI: Train me first with quality data!")
-                      return
-                  }
-
-                  CoroutineScope(Dispatchers.Main).launch {
-                      val temp = temperatureInput.text.toString().toFloatOrNull() ?: 0.7f
-                      val maxTok = maxTokensInput.text.toString().toIntOrNull() ?: 2000
-                      val topK = topKInput.text.toString().toIntOrNull() ?: 50
-                      
-                      log("\n🧠 DEEP NEURAL PROCESSING...")
-                      log("   Config: Temp=$temp | MaxTokens=$maxTok | TopK=$topK")
-                      
-                      val startTime = System.currentTimeMillis()
-                      
-                      val response = withContext(Dispatchers.Default) {
-                          brain.generateAdvanced(prompt, maxTok, temp, topK)
-                      }
-                      
-                      val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-                      val tokensPerSec = response.split(" ").size / elapsed
-                      
-                      log("\n🤖 JSAI ULTRA-DEEP RESPONSE:")
-                      log("─".repeat(60))
-                      log(response)
-                      log("─".repeat(60))
-                      log("📈 Generation Stats:")
-                      log("   ├─ Tokens: ${response.split(" ").size}")
-                      log("   ├─ Time: ${elapsed}s")
-                      log("   ├─ Speed: ${tokensPerSec.toInt()} tok/s")
-                      log("   └─ Temperature: $temp")
-                  }
-              }
-
-              private fun saveModel() = CoroutineScope(Dispatchers.IO).launch {
-                  try {
-                      val file = File(getExternalFilesDir(null), "ultradeep_${System.currentTimeMillis()}.model")
-                      file.writeText(gson.toJson(brain.export()))
-                      withContext(Dispatchers.Main) {
-                          log("\n💾 Model saved: ${file.name} (${file.length() / 1024}KB)")
-                          Toast.makeText(this@MainActivity, "Saved!", Toast.LENGTH_SHORT).show()
-                      }
-                  } catch (e: Exception) {
-                      withContext(Dispatchers.Main) { log("\n❌ ${e.message}") }
-                  }
-              }
-
-              private fun updateStats() {
-                  val params = brain.parameterCount() / 1_000_000.0
-                  val vocab = brain.vocabSize()
-                  val ctx = brain.maxContext()
-                  val mem = getMemoryUsage()
-                  stats.text = "⚡ LAYERS: 12 | 🧠 PARAMS: ${params}M | 📚 VOCAB: $vocab | 🎯 CTX: $ctx | 💾 ${mem}MB"
-              }
-
-              private fun getMemoryUsage() = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024 / 1024
-
-              private fun getFileName(uri: Uri): String {
-                  var name = "unknown"
-                  contentResolver.query(uri, null, null, null, null)?.use {
-                      if (it.moveToFirst()) name = it.getString(it.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
-                  }
-                  return name
-              }
-
-              private fun getFileSize(uri: Uri): Long {
-                  var size = 0L
-                  contentResolver.query(uri, null, null, null, null)?.use {
-                      if (it.moveToFirst()) size = it.getLong(it.getColumnIndexOrThrow(OpenableColumns.SIZE))
-                  }
-                  return size
-              }
-
-              private fun log(msg: String) {
-                  console.append("$msg\n")
-              }
-
-              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-                  super.onActivityResult(requestCode, resultCode, data)
-                  if (resultCode == Activity.RESULT_OK && requestCode == 101) {
-                      selectedUris.clear()
-                      data?.clipData?.let { clip ->
-                          for (i in 0 until clip.itemCount) selectedUris.add(clip.getItemAt(i).uri)
-                      } ?: data?.data?.let { selectedUris.add(it) }
-                      
-                      val totalSize = selectedUris.sumOf { getFileSize(it) }
-                      log("\n📂 ${selectedUris.size} files loaded (${totalSize / 1024 / 1024}MB)")
-                      stats.text = "📂 ${selectedUris.size} files ready | Press 🔥 to train"
-                  }
-              }
-          }
-
-          // ═══════════════════════════════════════════════════════════════════════
-          // ULTRA-DEEP NEURAL BRAIN - 12-Layer Transformer-like Architecture
-          // ═══════════════════════════════════════════════════════════════════════
-          class UltraDeepBrain {
-              // Vocabulary
-              private val vocab = ConcurrentHashMap<String, Int>()
-              private val reverseVocab = mutableListOf<String>()
-              
-              // Embeddings (512D instead of 128D)
-              private val embeddingDim = 512
-              private val embeddings = ConcurrentHashMap<Int, FloatArray>()
-              
-              // Positional encodings
-              private val maxPositions = 32768 // 32K context!
-              private val posEncodings = Array(maxPositions) { pos ->
-                  FloatArray(embeddingDim) { dim ->
-                      if (dim % 2 == 0) {
-                          sin(pos / 10000.0.pow(dim.toDouble() / embeddingDim)).toFloat()
-                      } else {
-                          cos(pos / 10000.0.pow((dim - 1).toDouble() / embeddingDim)).toFloat()
-                      }
-                  }
-              }
-              
-              // Multi-head attention (8 heads)
-              private val numHeads = 8
-              private val headDim = embeddingDim / numHeads
-              
-              // N-gram statistics (up to 16-grams!)
-              private val ngramStats = Array(17) { ConcurrentHashMap<List<Int>, ConcurrentHashMap<Int, Long>>() }
-              
-              // Co-occurrence matrix for attention
-              private val cooccurrence = ConcurrentHashMap<Pair<Int, Int>, Float>()
-              
-              // Layer-wise patterns (simulating 12 layers)
-              private val layerPatterns = Array(12) { ConcurrentHashMap<List<Int>, FloatArray>() }
-              
-              private var totalTokens = 0L
-              private var maxSeenContext = 0
-              
-              fun processChunk(text: String): Long {
-                  val tokens = tokenize(text)
-                  var count = 0L
-                  
-                  tokens.forEachIndexed { i, token ->
-                      val id = getOrCreateTokenId(token)
-                      
-                      // Update max context
-                      maxSeenContext = max(maxSeenContext, i)
-                      
-                      // N-gram learning (1 to 16 grams)
-                      for (n in 1..16) {
-                          if (i >= n) {
-                              val context = tokens.subList(i - n, i).map { vocab[it]!! }
-                              val patterns = ngramStats[n].getOrPut(context) { ConcurrentHashMap() }
-                              patterns[id] = (patterns[id] ?: 0) + 1
-                          }
-                      }
-                      
-                      // Co-occurrence (for attention weights)
-                      for (j in max(0, i - 50)..i - 1) {
-                          val prevId = vocab[tokens[j]]!!
-                          val key = Pair(prevId, id)
-                          cooccurrence[key] = (cooccurrence[key] ?: 0f) + 1f / (i - j)
-                      }
-                      
-                      // Multi-layer pattern extraction
-                      for (layer in 0 until 12) {
-                          val windowSize = 4 + layer // Increasing receptive field
-                          if (i >= windowSize) {
-                              val pattern = tokens.subList(i - windowSize, i).map { vocab[it]!! }
-                              if (!layerPatterns[layer].containsKey(pattern)) {
-                                  // Create hidden representation
-                                  val hidden = FloatArray(embeddingDim) { Random.nextFloat() * 0.02f - 0.01f }
-                                  layerPatterns[layer][pattern] = hidden
-                              }
-                          }
-                      }
-                      
-                      count++
-                  }
-                  
-                  totalTokens += count
-                  return count
-              }
-              
-              fun optimize() {
-                  // Normalize co-occurrence for attention
-                  val totalPairs = cooccurrence.values.sum().coerceAtLeast(1f)
-                  cooccurrence.keys.forEach { key ->
-                      cooccurrence[key] = cooccurrence[key]!! / totalPairs
-                  }
-                  
-                  // Normalize n-gram probabilities
-                  ngramStats.forEach { ngramMap ->
-                      ngramMap.forEach { (_, nextTokens) ->
-                          val total = nextTokens.values.sum().toFloat().coerceAtLeast(1f)
-                          nextTokens.keys.forEach { token ->
-                              nextTokens[token] = nextTokens[token]!!
-                          }
-                      }
-                  }
-              }
-              
-              fun generateAdvanced(prompt: String, maxTokens: Int, temperature: Float, topK: Int): String {
-                  val inputTokens = tokenize(prompt).mapNotNull { vocab[it] }
-                  if (inputTokens.isEmpty()) return "Error: Unknown tokens in prompt"
-                  
-                  val generated = inputTokens.toMutableList()
-                  val result = tokenize(prompt).toMutableList()
-                  
-                  repeat(maxTokens) {
-                      val nextId = predictWithDeepNetwork(generated, temperature, topK)
-                      if (nextId >= reverseVocab.size) return@repeat
-                      
-                      generated.add(nextId)
-                      result.add(reverseVocab[nextId])
-                      
-                      // Keep context manageable (32K max)
-                      if (generated.size > 32000) {
-                          generated.removeAt(0)
-                      }
-                  }
-                  
-                  return result.joinToString(" ")
-              }
-              
-              private fun predictWithDeepNetwork(context: List<Int>, temperature: Float, topK: Int): Int {
-                  val scores = mutableMapOf<Int, Float>()
-                  
-                  // Multi-layer prediction (ensemble of 12 layers)
-                  for (layer in 11 downTo 0) {
-                      val windowSize = 4 + layer
-                      if (context.size >= windowSize) {
-                          val pattern = context.takeLast(windowSize)
-                          
-                          // Check layer-specific patterns
-                          layerPatterns[layer][pattern]?.let { hidden ->
-                              // Use hidden state to influence predictions
-                              val layerWeight = 1.0f + layer * 0.1f // Deeper layers = more weight
-                              
-                              // Try to find similar patterns
-                              ngramStats[windowSize][pattern]?.forEach { (token, count) ->
-                                  scores[token] = (scores[token] ?: 0f) + count.toFloat() * layerWeight
-                              }
-                          }
-                      }
-                  }
-                  
-                  // Try decreasing n-grams if no match
-                  if (scores.isEmpty()) {
-                      for (n in 16 downTo 1) {
-                          if (context.size >= n) {
-                              val pattern = context.takeLast(n)
-                              ngramStats[n][pattern]?.let { nextTokens ->
-                                  nextTokens.forEach { (token, count) ->
-                                      scores[token] = (scores[token] ?: 0f) + count.toFloat() * n
-                                  }
-                              }
-                              if (scores.isNotEmpty()) break
-                          }
-                      }
-                  }
-                  
-                  // Attention mechanism bonus
-                  if (context.isNotEmpty()) {
-                      val lastToken = context.last()
-                      cooccurrence.keys.filter { it.first == lastToken }.forEach { pair ->
-                          scores[pair.second] = (scores[pair.second] ?: 0f) + cooccurrence[pair]!! * 1000f
-                      }
-                  }
-                  
-                  if (scores.isEmpty()) {
-                      return reverseVocab.indices.random()
-                  }
-                  
-                  // Top-K filtering
-                  val topKScores = scores.entries
-                      .sortedByDescending { it.value }
-                      .take(topK)
-                      .associate { it.key to it.value }
-                  
-                  // Temperature sampling with softmax
-                  return sampleWithTemperature(topKScores, temperature)
-              }
-              
-              private fun sampleWithTemperature(candidates: Map<Int, Float>, temp: Float): Int {
-                  if (candidates.isEmpty()) return 0
-                  
-                  // Apply temperature and softmax
-                  val expScores = candidates.mapValues { (_, score) ->
-                      exp((ln(score + 1e-10) / temp.coerceAtLeast(0.01)).toFloat())
-                  }
-                  
-                  val total = expScores.values.sum()
-                  var rand = Random.nextFloat() * total
-                  
-                  for ((id, score) in expScores) {
-                      rand -= score
-                      if (rand <= 0) return id
-                  }
-                  
-                  return expScores.keys.random()
-              }
-              
-              private fun tokenize(text: String): List<String> {
-                  return text.lowercase()
-                      .replace(Regex("[^a-zа-яё0-9\\s'\".,!?;:-]"), " ")
-                      .split(Regex("\\s+"))
-                      .filter { it.isNotEmpty() }
-              }
-              
-              private fun getOrCreateTokenId(token: String): Int {
-                  return vocab.getOrPut(token) {
-                      val id = reverseVocab.size
-                      reverseVocab.add(token)
-                      
-                      // Initialize embedding with Xavier initialization
-                      val scale = sqrt(2.0 / embeddingDim).toFloat()
-                      embeddings[id] = FloatArray(embeddingDim) { Random.nextFloat() * scale - scale / 2 }
-                      
-                      id
-                  }
-              }
-              
-              fun vocabSize() = vocab.size
-              
-              fun parameterCount(): Long {
-                  var params = 0L
-                  params += vocab.size.toLong() * embeddingDim // Embeddings
-                  params += maxPositions.toLong() * embeddingDim // Positional encodings
-                  params += layerPatterns.sumOf { it.size.toLong() * embeddingDim } // Layer patterns
-                  params += ngramStats.sumOf { it.size.toLong() * 100 } // N-gram stats (estimate)
-                  return params
-              }
-              
-              fun maxContext() = maxSeenContext
-              
-              fun export(): Map<String, Any> {
-                  return mapOf(
-                      "vocab_size" to vocab.size,
-                      "embedding_dim" to embeddingDim,
-                      "num_layers" to 12,
-                      "num_heads" to numHeads,
-                      "max_context" to maxPositions,
-                      "total_tokens" to totalTokens,
-                      "parameters" to parameterCount(),
-                      "vocab" to vocab.toMap()
-                  )
+                  glView = new GameGLView(this);
+                  setContentView(glView);
               }
           }
           EOF
 
+          # GL Surface View (Обработка касаний)
+          cat > app/src/main/java/com/jsai/craft/GameGLView.java << 'EOF'
+          package com.jsai.craft;
+          import android.content.Context;
+          import android.opengl.GLSurfaceView;
+          import android.view.MotionEvent;
+
+          public class GameGLView extends GLSurfaceView {
+              private final GameRenderer renderer;
+              private float previousX, previousY;
+
+              public GameGLView(Context context) {
+                  super(context);
+                  setEGLContextClientVersion(2);
+                  renderer = new GameRenderer();
+                  setRenderer(renderer);
+              }
+
+              @Override
+              public boolean onTouchEvent(MotionEvent e) {
+                  float x = e.getX();
+                  float y = e.getY();
+                  if (e.getAction() == MotionEvent.ACTION_MOVE) {
+                      float dx = x - previousX;
+                      float dy = y - previousY;
+                      renderer.angleX += dx * 0.2f;
+                      renderer.angleY += dy * 0.2f;
+                  }
+                  previousX = x;
+                  previousY = y;
+                  return true;
+              }
+          }
+          EOF
+
+          # Рендерер (OpenGL Логика 3D куба)
+          cat > app/src/main/java/com/jsai/craft/GameRenderer.java << 'EOF'
+          package com.jsai.craft;
+          import android.opengl.GLES20;
+          import android.opengl.GLSurfaceView;
+          import android.opengl.Matrix;
+          import java.nio.*;
+          import javax.microedition.khronos.egl.EGLConfig;
+          import javax.microedition.khronos.opengles.GL10;
+
+          public class GameRenderer implements GLSurfaceView.Renderer {
+              public float angleX, angleY;
+              private final float[] vPMatrix = new float[16];
+              private final float[] projectionMatrix = new float[16];
+              private final float[] viewMatrix = new float[16];
+              private final float[] rotationMatrix = new float[16];
+              private Cube cube;
+
+              @Override
+              public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+                  GLES20.glClearColor(0.5f, 0.8f, 1.0f, 1.0f); // Цвет неба
+                  GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+                  cube = new Cube();
+              }
+
+              @Override
+              public void onDrawFrame(GL10 gl) {
+                  GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
+                  Matrix.setLookAtM(viewMatrix, 0, 0, 0, -5, 0f, 0f, 0f, 0f, 1.0f, 0.0f);
+                  Matrix.multiplyMM(vPMatrix, 0, projectionMatrix, 0, viewMatrix, 0);
+
+                  float[] scratch = new float[16];
+                  Matrix.setRotateM(rotationMatrix, 0, angleX, 0, 1, 0);
+                  Matrix.rotateM(rotationMatrix, 0, angleY, 1, 0, 0);
+                  Matrix.multiplyMM(scratch, 0, vPMatrix, 0, rotationMatrix, 0);
+
+                  // Рисуем несколько блоков (как пол в майнкрафте)
+                  for(int x = -2; x <= 2; x++) {
+                      for(int z = -2; z <= 2; z++) {
+                          float[] posMatrix = new float[16];
+                          Matrix.translateM(posMatrix, 0, scratch, 0, x * 1.2f, -1.5f, z * 1.2f);
+                          cube.draw(posMatrix);
+                      }
+                  }
+              }
+
+              @Override
+              public void onSurfaceChanged(GL10 gl, int width, int height) {
+                  GLES20.glViewport(0, 0, width, height);
+                  float ratio = (float) width / height;
+                  Matrix.frustumM(projectionMatrix, 0, -ratio, ratio, -1, 1, 3, 7);
+              }
+
+              public static int loadShader(int type, String shaderCode) {
+                  int shader = GLES20.glCreateShader(type);
+                  GLES20.glShaderSource(shader, shaderCode);
+                  GLES20.glCompileShader(shader);
+                  return shader;
+              }
+          }
+          EOF
+
+          # Класс Куба (Геометрия)
+          cat > app/src/main/java/com/jsai/craft/Cube.java << 'EOF'
+          package com.jsai.craft;
+          import android.opengl.GLES20;
+          import java.nio.*;
+
+          public class Cube {
+              private FloatBuffer vertexBuffer;
+              private ShortBuffer drawListBuffer;
+              private int mProgram;
+
+              private final String vertexShaderCode = 
+                  "uniform mat4 uMVPMatrix; attribute vec4 vPosition;" +
+                  "void main() { gl_Position = uMVPMatrix * vPosition; }";
+              private final String fragmentShaderCode = 
+                  "precision mediump float; void main() { gl_FragColor = vec4(0.3, 0.6, 0.2, 1.0); }"; // Цвет травы
+
+              static float coords[] = {
+                  -0.5f, 0.5f, 0.5f, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+                  -0.5f, 0.5f, -0.5f, -0.5f, -0.5f, -0.5f, 0.5f, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f
+              };
+              private short drawOrder[] = { 0,1,2, 0,2,3, 4,5,6, 4,6,7, 0,4,7, 0,7,3, 1,5,6, 1,6,2, 0,4,5, 0,5,1, 3,7,6, 3,6,2 };
+
+              public Cube() {
+                  ByteBuffer bb = ByteBuffer.allocateDirect(coords.length * 4);
+                  bb.order(ByteOrder.nativeOrder());
+                  vertexBuffer = bb.asFloatBuffer();
+                  vertexBuffer.put(coords);
+                  vertexBuffer.position(0);
+
+                  ByteBuffer dlb = ByteBuffer.allocateDirect(drawOrder.length * 2);
+                  dlb.order(ByteOrder.nativeOrder());
+                  drawListBuffer = dlb.asShortBuffer();
+                  drawListBuffer.put(drawOrder);
+                  drawListBuffer.position(0);
+
+                  int vertexShader = GameRenderer.loadShader(GLES20.GL_VERTEX_SHADER, vertexShaderCode);
+                  int fragmentShader = GameRenderer.loadShader(GLES20.GL_FRAGMENT_SHADER, fragmentShaderCode);
+                  mProgram = GLES20.glCreateProgram();
+                  GLES20.glAttachShader(mProgram, vertexShader);
+                  GLES20.glAttachShader(mProgram, fragmentShader);
+                  GLES20.glLinkProgram(mProgram);
+              }
+
+              public void draw(float[] mvpMatrix) {
+                  GLES20.glUseProgram(mProgram);
+                  int posHandle = GLES20.glGetAttribLocation(mProgram, "vPosition");
+                  GLES20.glEnableVertexAttribArray(posHandle);
+                  GLES20.glVertexAttribPointer(posHandle, 3, GLES20.GL_FLOAT, false, 12, vertexBuffer);
+                  int matrixHandle = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix");
+                  GLES20.glUniformMatrix4fv(matrixHandle, 1, false, mvpMatrix, 0);
+                  GLES20.glDrawElements(GLES20.GL_TRIANGLES, drawOrder.length, GLES20.GL_UNSIGNED_SHORT, drawListBuffer);
+                  GLES20.glDisableVertexAttribArray(posHandle);
+              }
+          }
+          EOF
+
+          # AndroidManifest.xml
           cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-              <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
-              
-              <application 
-                  android:name="androidx.multidex.MultiDexApplication"
-                  android:label="JsAI UltraDeep" 
-                  android:theme="@style/Theme.JsAI" 
-                  android:largeHeap="true"
-                  android:hardwareAccelerated="true"
-                  android:requestLegacyExternalStorage="true">
-                  
-                  <provider
-                      android:name="androidx.core.content.FileProvider"
-                      android:authorities="${applicationId}.provider"
-                      android:exported="false"
-                      android:grantUriPermissions="true">
-                      <meta-data
-                          android:name="android.support.FILE_PROVIDER_PATHS"
-                          android:resource="@xml/file_paths" />
-                  </provider>
-                  
-                  <activity 
-                      android:name=".MainActivity" 
-                      android:exported="true"
-                      android:screenOrientation="portrait"
-                      android:configChanges="orientation|screenSize|keyboard"
-                      android:windowSoftInputMode="adjustResize">
+              <uses-feature android:glEsVersion="0x00020000" android:required="true" />
+              <application android:label="JsAI Craft 3D" android:theme="@style/AppTheme">
+                  <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape">
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
+                          <action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
                   </activity>
               </application>
           </manifest>
           EOF
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+          # Настройки Gradle
+          echo "include ':app'" > settings.gradle
+          cat > build.gradle << 'EOF'
+          buildscript {
+              repositories { google(); mavenCentral() }
+              dependencies { classpath 'com.android.tools.build:gradle:8.2.2' }
+          }
+          allprojects { repositories { google(); mavenCentral() } }
+          EOF
+          cat > app/build.gradle << 'EOF'
+          plugins { id 'com.android.application' }
+          android {
+              namespace 'com.jsai.craft'
+              compileSdk 34
+              defaultConfig { applicationId 'com.jsai.craft'; minSdk 24; targetSdk 34 }
+          }
+          dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
+          EOF
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.4
+      - name: Build APK (Твой метод)
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          unzip -q gradle-8.5-bin.zip
+          export PATH="$PWD/gradle-8.5/bin:$PATH"
+          gradle wrapper --gradle-version 8.5
+          ./gradlew assembleDebug
 
-      - name: Build APK
-        run: gradle assembleDebug --no-daemon --stacktrace
-
-      - name: Upload APK
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI-UltraDeep-8.0-Maximum
+          name: JsAI_Craft_3D
           path: app/build/outputs/apk/debug/app-debug.apk
