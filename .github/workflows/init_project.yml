@@ -1,4 +1,4 @@
-name: JsAI_Craft_V9_Final_Fix
+name: JsAI_Craft_V10_Final
 on: [push, workflow_dispatch]
 
 jobs:
@@ -22,20 +22,20 @@ jobs:
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
 
-          # Стили графики (Круглые)
+          # Стили: Круглый джойстик и точка
           cat > app/src/main/res/drawable/joy_bg.xml << 'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#15FFFFFF"/><stroke android:width="2dp" android:color="#30FFFFFF"/>
+              <solid android:color="#12FFFFFF"/><stroke android:width="2dp" android:color="#25FFFFFF"/>
           </shape>
           EOF
           cat > app/src/main/res/drawable/joy_handle.xml << 'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#60FFFFFF"/>
+              <solid android:color="#70FFFFFF"/>
           </shape>
           EOF
           cat > app/src/main/res/drawable/dot.xml << 'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#222222"/>
+              <solid android:color="#111111"/>
           </shape>
           EOF
 
@@ -58,7 +58,7 @@ jobs:
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
 
-          # --- UI (ЗАПРЕТ ОБРЕЗАНИЯ ДЖОЙСТИКА) ---
+          # --- UI (ФИКС ИСЧЕЗНОВЕНИЯ СТИКА) ---
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent"
@@ -67,16 +67,16 @@ jobs:
               <android.opengl.GLSurfaceView android:id="@+id/glView"
                   android:layout_width="match_parent" android:layout_height="match_parent" />
               
-              <View android:layout_width="4dp" android:layout_height="4dp" 
+              <View android:layout_width="3dp" android:layout_height="3dp" 
                   android:background="@drawable/dot" android:layout_centerInParent="true" />
               
               <FrameLayout android:id="@+id/joyZone"
-                  android:layout_width="100dp" android:layout_height="100dp"
-                  android:layout_alignParentBottom="true" android:layout_margin="30dp"
+                  android:layout_width="90dp" android:layout_height="90dp"
+                  android:layout_alignParentBottom="true" android:layout_margin="35dp"
                   android:background="@drawable/joy_bg" 
                   android:clipChildren="false" android:clipToPadding="false">
                   <View android:id="@+id/joyHandle"
-                      android:layout_width="38dp" android:layout_height="38dp"
+                      android:layout_width="36dp" android:layout_height="36dp"
                       android:layout_gravity="center" android:background="@drawable/joy_handle"/>
               </FrameLayout>
 
@@ -87,7 +87,7 @@ jobs:
                       <Button android:id="@+id/btnBreak" android:layout_width="65dp" android:layout_height="65dp" android:text="BRK" />
                       <Button android:id="@+id/btnPlace" android:layout_width="65dp" android:layout_height="65dp" android:text="PLC" android:layout_marginLeft="5dp" />
                   </LinearLayout>
-                  <Button android:id="@+id/btnJump" android:layout_width="135dp" android:layout_height="70dp" android:text="JUMP" android:layout_marginTop="5dp" />
+                  <Button android:id="@+id/btnJump" android:layout_width="140dp" android:layout_height="75dp" android:text="JUMP" android:layout_marginTop="5dp" />
               </LinearLayout>
           </RelativeLayout>
           EOF
@@ -118,7 +118,6 @@ jobs:
                           float r = v.getWidth()/2f;
                           float dx = e.getX() - r, dy = e.getY() - r;
                           float d = (float)Math.sqrt(dx*dx + dy*dy);
-                          // Ограничиваем движение стика кругом, но НЕ обрезаем его визуально
                           if(d > r) { dx = dx/d*r; dy = dy/d*r; }
                           jH.setTranslationX(dx); jH.setTranslationY(dy);
                           gv.renderer.setMove(dx/r, -dy/r); 
@@ -225,7 +224,6 @@ jobs:
                   for(int x=(int)px-r; x<(int)px+r; x++) for(int z=(int)pz-r; z<(int)pz+r; z++) for(int y=(int)py-r; y<(int)py+r; y++) {
                       byte t = getB(x,y,z);
                       if(t>0) {
-                          // Оптимизация прорисовки (Frustum)
                           float dx = x - px, dz = z - pz;
                           if(dx*lx + dz*lz < -1.0f && (dx*dx+dz*dz) > 9.0f) continue; 
                           if(getB(x+1,y,z)>0 && getB(x-1,y,z)>0 && getB(x,y+1,z)>0 && getB(x,y-1,z)>0 && getB(x,y,z+1)>0 && getB(x,y,z-1)>0) continue;
@@ -240,9 +238,9 @@ jobs:
 
               private void update() {
                   float s=(float)Math.sin(Math.toRadians(yaw)), c=(float)Math.cos(Math.toRadians(yaw));
-                  // ЖЕСТКИЙ ФИКС ИНВЕРСИИ ДВИЖЕНИЯ
-                  float dx = (mvZ * s + mvX * c) * 0.13f;
-                  float dz = (mvZ * c - mvX * s) * 0.13f;
+                  // ФИНАЛЬНЫЙ ФИКС ИНВЕРСИИ ДВИЖЕНИЯ ПО X
+                  float dx = (mvZ * s - mvX * c) * 0.13f;
+                  float dz = (mvZ * c + mvX * s) * 0.13f;
                   
                   if(getB((int)Math.floor(px+dx+(dx>0?0.45f:-0.45f)), (int)py, (int)pz)==0 && 
                      getB((int)Math.floor(px+dx+(dx>0?0.45f:-0.45f)), (int)py+1, (int)pz)==0) px+=dx;
@@ -260,6 +258,7 @@ jobs:
           cat > app/src/main/java/com/jsai/craft/Block.java << 'EOF'
           package com.jsai.craft;
           import android.opengl.GLES20;
+          import android.opengl.Matrix;
           import java.nio.*;
           public class Block {
               private FloatBuffer vb, wb;
@@ -283,11 +282,16 @@ jobs:
                   GLES20.glUniform3f(ch, t==1?0.4f:0.6f, t==1?0.7f:0.5f, t==1?0.3f:0.5f);
                   GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 36);
                   if(s) {
-                      GLES20.glEnable(GLES20.GL_POLYGON_OFFSET_FILL);
-                      GLES20.glPolygonOffset(-1.0f, -1.0f); // Рисуем линии ПОВЕРХ граней
-                      GLES20.glUniform3f(ch, 1, 1, 1); GLES20.glLineWidth(4.0f);
-                      GLES20.glVertexAttribPointer(ph,3,GLES20.GL_FLOAT,false,0,wb); GLES20.glDrawArrays(GLES20.GL_LINES, 0, 24);
-                      GLES20.glDisable(GLES20.GL_POLYGON_OFFSET_FILL);
+                      // ЖИРНАЯ ОБВОДКА С МАСШТАБОМ 1.03x
+                      float[] ms = new float[16];
+                      Matrix.setIdentityM(ms, 0); 
+                      Matrix.translateM(ms, 0, -0.015f, -0.015f, -0.015f); // Центрируем увеличение
+                      Matrix.scaleM(ms, 0, m, 0, 1.03f, 1.03f, 1.03f); 
+                      
+                      GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(prg, "m"), 1, false, ms, 0);
+                      GLES20.glUniform3f(ch, 1, 1, 1); GLES20.glLineWidth(10.0f);
+                      GLES20.glVertexAttribPointer(ph,3,GLES20.GL_FLOAT,false,0,wb); 
+                      GLES20.glDrawArrays(GLES20.GL_LINES, 0, 24);
                   }
               }
           }
@@ -296,7 +300,7 @@ jobs:
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="JsAI Craft V9" android:hardwareAccelerated="true">
+              <application android:label="JsAI Craft V10" android:hardwareAccelerated="true">
                   <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
@@ -304,7 +308,7 @@ jobs:
           </manifest>
           EOF
 
-      - name: Build
+      - name: Turbo Build
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
@@ -315,5 +319,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI_Craft_V9
+          name: JsAI_Craft_V10
           path: app/build/outputs/apk/debug/app-debug.apk
