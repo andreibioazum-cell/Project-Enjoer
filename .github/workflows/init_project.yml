@@ -1,4 +1,4 @@
-name: JsAI_Craft_V11_Ultra
+name: JsAI_Craft_V11_Ultra_MEGA
 on: [push, workflow_dispatch]
 
 jobs:
@@ -33,6 +33,18 @@ jobs:
           cat > app/src/main/res/drawable/dot.xml << 'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><solid android:color="#000000"/></shape>
           EOF
+          cat > app/src/main/res/drawable/btn_grass.xml << 'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#66BB44"/></shape>
+          EOF
+          cat > app/src/main/res/drawable/btn_stone.xml << 'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#999999"/></shape>
+          EOF
+          cat > app/src/main/res/drawable/btn_dirt.xml << 'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#8B4513"/></shape>
+          EOF
+          cat > app/src/main/res/drawable/selected_block.xml << 'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#FFFF00"/><stroke android:width="3dp" android:color="#FF0000"/></shape>
+          EOF
 
           echo "android.useAndroidX=true" > gradle.properties
           echo "include ':app'" > settings.gradle
@@ -53,7 +65,6 @@ jobs:
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
 
-          # --- UI (ФИКС CLIP CHILDREN) ---
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent"
@@ -62,6 +73,30 @@ jobs:
                   android:layout_width="match_parent" android:layout_height="match_parent" />
               <View android:layout_width="3dp" android:layout_height="3dp" 
                   android:background="@drawable/dot" android:layout_centerInParent="true" />
+              
+              <!-- Выбор блоков СВЕРХУ -->
+              <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+                  android:layout_alignParentTop="true" android:layout_centerHorizontal="true"
+                  android:layout_marginTop="10dp" android:orientation="horizontal">
+                  <Button android:id="@+id/btnGrass" android:layout_width="50dp" android:layout_height="50dp" 
+                      android:background="@drawable/btn_grass" android:text="1" android:textColor="#FFF"/>
+                  <Button android:id="@+id/btnStone" android:layout_width="50dp" android:layout_height="50dp" 
+                      android:background="@drawable/btn_stone" android:text="2" android:textColor="#FFF" android:layout_marginLeft="5dp"/>
+                  <Button android:id="@+id/btnDirt" android:layout_width="50dp" android:layout_height="50dp" 
+                      android:background="@drawable/btn_dirt" android:text="3" android:textColor="#FFF" android:layout_marginLeft="5dp"/>
+              </LinearLayout>
+
+              <!-- Индикатор текущего блока -->
+              <TextView android:id="@+id/txtBlock" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                  android:layout_alignParentTop="true" android:layout_alignParentRight="true"
+                  android:layout_margin="10dp" android:text="GRASS" android:textColor="#FFF" android:textSize="18sp" android:textStyle="bold"/>
+
+              <!-- Индикатор прогресса ломания -->
+              <ProgressBar android:id="@+id/breakProgress" android:layout_width="200dp" android:layout_height="20dp"
+                  android:layout_centerHorizontal="true" android:layout_centerVertical="true"
+                  android:layout_marginTop="50dp" android:visibility="gone" style="?android:attr/progressBarStyleHorizontal"
+                  android:max="100" android:progress="0"/>
+
               <FrameLayout android:id="@+id/joyZone"
                   android:layout_width="90dp" android:layout_height="90dp"
                   android:layout_alignParentBottom="true" android:layout_margin="35dp"
@@ -87,18 +122,42 @@ jobs:
           import android.app.Activity;
           import android.os.Bundle;
           import android.view.*;
+          import android.widget.*;
           public class MainActivity extends Activity {
               private GameView gv;
+              private Button btnGrass, btnStone, btnDirt;
+              private TextView txtBlock;
+              private ProgressBar breakProgress;
+              
               @Override
               protected void onCreate(Bundle s) {
                   super.onCreate(s);
                   requestWindowFeature(Window.FEATURE_NO_TITLE);
                   getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
                   setContentView(R.layout.activity_main);
+                  
                   gv = new GameView(this, findViewById(R.id.glView));
+                  breakProgress = findViewById(R.id.breakProgress);
+                  txtBlock = findViewById(R.id.txtBlock);
+                  
                   findViewById(R.id.btnJump).setOnClickListener(v -> gv.renderer.jump());
-                  findViewById(R.id.btnBreak).setOnClickListener(v -> gv.renderer.interact(true));
-                  findViewById(R.id.btnPlace).setOnClickListener(v -> gv.renderer.interact(false));
+                  findViewById(R.id.btnBreak).setOnTouchListener((v, e) -> {
+                      if(e.getAction() == MotionEvent.ACTION_DOWN) gv.renderer.startBreak();
+                      else if(e.getAction() == MotionEvent.ACTION_UP) gv.renderer.stopBreak();
+                      return true;
+                  });
+                  findViewById(R.id.btnPlace).setOnClickListener(v -> gv.renderer.place());
+                  
+                  btnGrass = findViewById(R.id.btnGrass);
+                  btnStone = findViewById(R.id.btnStone);
+                  btnDirt = findViewById(R.id.btnDirt);
+                  
+                  btnGrass.setOnClickListener(v -> selectBlock(1));
+                  btnStone.setOnClickListener(v -> selectBlock(2));
+                  btnDirt.setOnClickListener(v -> selectBlock(3));
+                  
+                  selectBlock(1);
+                  
                   View jZ = findViewById(R.id.joyZone), jH = findViewById(R.id.joyHandle);
                   jZ.setOnTouchListener((v, e) -> {
                       if(e.getAction() == MotionEvent.ACTION_UP) {
@@ -111,6 +170,29 @@ jobs:
                       }
                       return true;
                   });
+                  
+                  new Thread(() -> {
+                      while(true) {
+                          try { Thread.sleep(50); } catch(Exception e) {}
+                          runOnUiThread(() -> {
+                              if(gv.renderer.isBreaking) {
+                                  breakProgress.setVisibility(View.VISIBLE);
+                                  breakProgress.setProgress((int)(gv.renderer.breakProgress * 100));
+                              } else {
+                                  breakProgress.setVisibility(View.GONE);
+                              }
+                          });
+                      }
+                  }).start();
+              }
+              
+              private void selectBlock(int type) {
+                  gv.renderer.selectedBlock = (byte)type;
+                  btnGrass.setAlpha(type==1?1f:0.5f);
+                  btnStone.setAlpha(type==2?1f:0.5f);
+                  btnDirt.setAlpha(type==3?1f:0.5f);
+                  String[] names = {"", "GRASS", "STONE", "DIRT"};
+                  txtBlock.setText(names[type]);
               }
           }
           EOF
@@ -161,6 +243,7 @@ jobs:
           import android.opengl.Matrix;
           import javax.microedition.khronos.egl.EGLConfig;
           import javax.microedition.khronos.opengles.GL10;
+          import java.util.*;
 
           public class CraftRenderer implements GLSurfaceView.Renderer {
               public float yaw = 0, pitch = 0;
@@ -169,6 +252,15 @@ jobs:
               private Block block;
               private byte[] world = new byte[128 * 64 * 128];
               private int[] sel = null, plc = null;
+              public byte selectedBlock = 1;
+              public boolean isBreaking = false;
+              public float breakProgress = 0;
+              private long breakStart = 0;
+              private static final long BREAK_TIME = 1500; // 1.5 сек на блок
+              
+              // УЛЬТРА ОПТИМИЗАЦИЯ: Кэш видимых блоков
+              private List<int[]> visibleBlocks = new ArrayList<>();
+              private int lastUpdateX = -999, lastUpdateZ = -999;
 
               public void onSurfaceCreated(GL10 g, EGLConfig c) {
                   GLES20.glClearColor(0.5f, 0.8f, 1.0f, 1.0f);
@@ -177,25 +269,51 @@ jobs:
                   block = new Block();
                   for(int x=0; x<128; x++) for(int z=0; z<128; z++) {
                       int h = (int)(Math.sin(x*0.12)*Math.cos(z*0.12)*4 + 10);
-                      for(int y=0; y<h; y++) setB(x,y,z,(byte)(y==h-1?1:2));
+                      for(int y=0; y<h; y++) setB(x,y,z,(byte)(y==h-1?1:y<h-3?2:3));
                   }
               }
-              private void setB(int x, int y, int z, byte t) { if(x>=0&&x<128&&y>=0&&y<64&&z>=0&&z<128) world[x+y*128+z*128*64]=t; }
-              private byte getB(int x, int y, int z) { if(x>=0&&x<128&&y>=0&&y<64&&z>=0&&z<128) return world[x+y*128+z*128*64]; return 0; }
+              
+              private void setB(int x, int y, int z, byte t) { 
+                  if(x>=0&&x<128&&y>=0&&y<64&&z>=0&&z<128) {
+                      world[x+y*128+z*128*64]=t;
+                      lastUpdateX = -999; // Сброс кэша
+                  }
+              }
+              
+              private byte getB(int x, int y, int z) { 
+                  if(x>=0&&x<128&&y>=0&&y<64&&z>=0&&z<128) return world[x+y*128+z*128*64]; 
+                  return 0; 
+              }
 
               public void setMove(float x, float z) { mvX = x; mvZ = z; }
               public void jump() { if(Math.abs(vy) < 0.02f) vy = 0.24f; }
 
-              public void interact(boolean brk) {
-                  if(sel != null) {
-                      if(brk) setB(sel[0], sel[1], sel[2], (byte)0);
-                      else if(plc != null) setB(plc[0], plc[1], plc[2], (byte)1);
+              public void startBreak() { 
+                  if(sel != null) { 
+                      isBreaking = true; 
+                      breakStart = System.currentTimeMillis(); 
+                  } 
+              }
+              
+              public void stopBreak() { 
+                  isBreaking = false; 
+                  breakProgress = 0; 
+              }
+              
+              public void place() {
+                  if(plc != null && sel != null) {
+                      int px = plc[0], py = plc[1], pz = plc[2];
+                      if(getB(px,py,pz) == 0 && 
+                         !(Math.abs(this.px-px)<0.8f && Math.abs(this.py-py)<1.8f && Math.abs(this.pz-pz)<0.8f)) {
+                          setB(px, py, pz, selectedBlock);
+                      }
                   }
               }
 
               public void onDrawFrame(GL10 g) {
                   update();
                   GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
+                  
                   float lx=(float)(Math.cos(Math.toRadians(pitch))*Math.sin(Math.toRadians(yaw))), 
                         ly=(float)(-Math.sin(Math.toRadians(pitch))), 
                         lz=(float)(Math.cos(Math.toRadians(pitch))*Math.cos(Math.toRadians(yaw)));
@@ -203,30 +321,72 @@ jobs:
                   Matrix.setLookAtM(view, 0, px, py+1.6f, pz, px+lx, py+1.6f+ly, pz+lz, 0, 1, 0);
                   Matrix.multiplyMM(mvp, 0, proj, 0, view, 0);
 
+                  // Raycast для выбора блока
                   sel=null; plc=null;
-                  for(float d=0; d<5; d+=0.1f) {
+                  for(float d=0; d<6; d+=0.08f) {
                       int tx=(int)Math.floor(px+lx*d), ty=(int)Math.floor(py+1.6f+ly*d), tz=(int)Math.floor(pz+lz*d);
                       if(getB(tx,ty,tz)>0) {
                           sel=new int[]{tx,ty,tz};
-                          float ox=px+lx*(d-0.1f), oy=py+1.6f+ly*(d-0.1f), oz=pz+lz*(d-0.1f);
+                          float ox=px+lx*(d-0.08f), oy=py+1.6f+ly*(d-0.08f), oz=pz+lz*(d-0.08f);
                           plc=new int[]{(int)Math.floor(ox), (int)Math.floor(oy), (int)Math.floor(oz)};
                           break;
                       }
                   }
+                  
+                  // Обработка ломания
+                  if(isBreaking && sel != null) {
+                      long elapsed = System.currentTimeMillis() - breakStart;
+                      breakProgress = Math.min(1.0f, elapsed / (float)BREAK_TIME);
+                      if(breakProgress >= 1.0f) {
+                          setB(sel[0], sel[1], sel[2], (byte)0);
+                          isBreaking = false;
+                          breakProgress = 0;
+                      }
+                  }
 
-                  int r = 32; // 8 чанков (Мега-оптимизация)
-                  for(int x=(int)px-r; x<(int)px+r; x++) for(int z=(int)pz-r; z<(int)pz+r; z++) for(int y=(int)py-r; y<(int)py+r; y++) {
+                  // МЕГА ОПТИМИЗАЦИЯ: Обновление кэша только при движении
+                  int cx = (int)px, cz = (int)pz;
+                  if(Math.abs(cx - lastUpdateX) > 4 || Math.abs(cz - lastUpdateZ) > 4) {
+                      updateVisibleBlocks(lx, lz);
+                      lastUpdateX = cx;
+                      lastUpdateZ = cz;
+                  }
+
+                  // Отрисовка из кэша
+                  for(int[] b : visibleBlocks) {
+                      int x = b[0], y = b[1], z = b[2];
                       byte t = getB(x,y,z);
-                      if(t>0) {
-                          float dx = x - px, dz = z - pz;
-                          float dot = dx * lx + dz * lz;
-                          if(dot < -2.0f && (dx*dx+dz*dz) > 16.0f) continue; 
-                          if(getB(x+1,y,z)>0 && getB(x-1,y,z)>0 && getB(x,y+1,z)>0 && getB(x,y-1,z)>0 && getB(x,y,z+1)>0 && getB(x,y,z-1)>0) continue;
-                          
+                      if(t > 0) {
                           float[] m=new float[16], res=new float[16]; 
                           Matrix.setIdentityM(m,0); Matrix.translateM(m,0,x,y,z); 
                           Matrix.multiplyMM(res,0,mvp,0,m,0);
-                          block.draw(res, (sel!=null && x==sel[0] && y==sel[1] && z==sel[2]), t);
+                          block.draw(res, (sel!=null && x==sel[0] && y==sel[1] && z==sel[2]), t, breakProgress);
+                      }
+                  }
+              }
+              
+              // УЛЬТРА ОПТИМИЗАЦИЯ: Frustum Culling + Occlusion
+              private void updateVisibleBlocks(float lx, float lz) {
+                  visibleBlocks.clear();
+                  int r = 64; // Увеличенная дальность прорисовки
+                  
+                  for(int x=(int)px-r; x<(int)px+r; x++) {
+                      for(int z=(int)pz-r; z<(int)pz+r; z++) {
+                          for(int y=0; y<64; y++) {
+                              if(getB(x,y,z) == 0) continue;
+                              
+                              // Frustum culling
+                              float dx = x - px, dz = z - pz;
+                              float dot = dx * lx + dz * lz;
+                              if(dot < -3.0f && (dx*dx+dz*dz) > 25.0f) continue;
+                              
+                              // Occlusion culling (блок полностью закрыт)
+                              if(getB(x+1,y,z)>0 && getB(x-1,y,z)>0 && 
+                                 getB(x,y+1,z)>0 && getB(x,y-1,z)>0 && 
+                                 getB(x,y,z+1)>0 && getB(x,y,z-1)>0) continue;
+                              
+                              visibleBlocks.add(new int[]{x, y, z});
+                          }
                       }
                   }
               }
@@ -245,39 +405,59 @@ jobs:
                   if(getB((int)px, (int)Math.floor(py), (int)pz)>0) { py=(int)Math.floor(py)+1; vy=0; }
                   if(py < -10) { px=64; py=30; pz=64; vy=0; }
               }
-              public void onSurfaceChanged(GL10 g, int w, int h) { GLES20.glViewport(0,0,w,h); Matrix.perspectiveM(proj, 0, 80, (float)w/h, 0.1f, 150f); }
+              
+              public void onSurfaceChanged(GL10 g, int w, int h) { 
+                  GLES20.glViewport(0,0,w,h); 
+                  Matrix.perspectiveM(proj, 0, 80, (float)w/h, 0.1f, 200f); 
+              }
           }
           EOF
 
           cat > app/src/main/java/com/jsai/craft/Block.java << 'EOF'
           package com.jsai.craft;
           import android.opengl.GLES20;
-          import android.opengl.Matrix;
           import java.nio.*;
+          
           public class Block {
               private FloatBuffer vb, wb;
               private int prg;
               static float[] v = {0,0,0, 0,1,0, 1,1,0, 0,0,0, 1,1,0, 1,0,0, 0,0,1, 1,0,1, 1,1,1, 0,0,1, 1,1,1, 0,1,1, 0,0,0, 0,0,1, 0,1,1, 0,0,0, 0,1,1, 0,1,0, 1,0,0, 1,1,0, 1,1,1, 1,0,0, 1,1,1, 1,0,1, 0,1,0, 0,1,1, 1,1,1, 0,1,0, 1,1,1, 1,1,0, 0,0,0, 1,0,0, 1,0,1, 0,0,0, 1,0,1, 0,0,1};
               static float[] w = {0,0,0, 1,0,0, 1,0,0, 1,1,0, 1,1,0, 0,1,0, 0,1,0, 0,0,0, 0,0,1, 1,0,1, 1,0,1, 1,1,1, 1,1,1, 0,1,1, 0,1,1, 0,0,1, 0,0,0, 0,0,1, 1,0,0, 1,0,1, 1,1,0, 1,1,1, 0,1,0, 0,1,1};
+              
               public Block() {
                   vb = ByteBuffer.allocateDirect(v.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(v); vb.position(0);
                   wb = ByteBuffer.allocateDirect(w.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(w); wb.position(0);
                   String vs="attribute vec4 p; uniform mat4 m; varying vec3 vP; void main(){gl_Position=m*p; vP=p.xyz;}",
-                         fs="precision mediump float; varying vec3 vP; uniform vec3 c; void main(){float l=vP.y*0.3+0.7; gl_FragColor=vec4(c*l,1.0);}";
+                         fs="precision mediump float; varying vec3 vP; uniform vec3 c; uniform float br; void main(){float l=vP.y*0.3+0.7; vec3 col=c*l; if(br>0.0) col=mix(col,vec3(0.0),br*0.5); gl_FragColor=vec4(col,1.0);}";
                   int vsh=GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER); GLES20.glShaderSource(vsh,vs); GLES20.glCompileShader(vsh);
                   int fsh=GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER); GLES20.glShaderSource(fsh,fs); GLES20.glCompileShader(fsh);
                   prg=GLES20.glCreateProgram(); GLES20.glAttachShader(prg,vsh); GLES20.glAttachShader(prg,fsh); GLES20.glLinkProgram(prg);
               }
-              public void draw(float[] m, boolean s, int t) {
+              
+              public void draw(float[] m, boolean selected, int type, float breakProg) {
                   GLES20.glUseProgram(prg);
-                  int ph=GLES20.glGetAttribLocation(prg,"p"), ch=GLES20.glGetUniformLocation(prg,"c");
-                  GLES20.glEnableVertexAttribArray(ph); GLES20.glVertexAttribPointer(ph,3,GLES20.GL_FLOAT,false,0,vb);
+                  int ph=GLES20.glGetAttribLocation(prg,"p"), 
+                      ch=GLES20.glGetUniformLocation(prg,"c"),
+                      bh=GLES20.glGetUniformLocation(prg,"br");
+                  
+                  GLES20.glEnableVertexAttribArray(ph); 
+                  GLES20.glVertexAttribPointer(ph,3,GLES20.GL_FLOAT,false,0,vb);
                   GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(prg,"m"),1,false,m,0);
-                  GLES20.glUniform3f(ch, t==1?0.4f:0.6f, t==1?0.75f:0.6f, t==1?0.25f:0.6f);
+                  
+                  // Цвета блоков
+                  float r=0.5f, g=0.5f, b=0.5f;
+                  if(type==1) { r=0.4f; g=0.75f; b=0.25f; } // Трава
+                  else if(type==2) { r=0.6f; g=0.6f; b=0.6f; } // Камень
+                  else if(type==3) { r=0.55f; g=0.35f; b=0.2f; } // Земля
+                  
+                  GLES20.glUniform3f(ch, r, g, b);
+                  GLES20.glUniform1f(bh, selected ? breakProg : 0.0f);
                   GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 36);
-                  if(s) {
-                      GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT); // ЖЕСТКИЙ ФИКС: Обводка всегда поверх всего
-                      GLES20.glUniform3f(ch, 1, 1, 1); GLES20.glLineWidth(5.0f);
+                  
+                  if(selected) {
+                      GLES20.glLineWidth(4.0f);
+                      GLES20.glUniform3f(ch, 1, 1, 0); // Желтая обводка
+                      GLES20.glUniform1f(bh, 0.0f);
                       GLES20.glVertexAttribPointer(ph,3,GLES20.GL_FLOAT,false,0,wb); 
                       GLES20.glDrawArrays(GLES20.GL_LINES, 0, 24);
                   }
@@ -288,7 +468,7 @@ jobs:
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="JsAI Craft V11" android:hardwareAccelerated="true">
+              <application android:label="JsAI Craft V11 ULTRA" android:hardwareAccelerated="true">
                   <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
@@ -307,5 +487,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI_Craft_V11
+          name: JsAI_Craft_V11_ULTRA
           path: app/build/outputs/apk/debug/app-debug.apk
