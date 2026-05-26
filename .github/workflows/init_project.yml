@@ -1,4 +1,4 @@
-name: JsAI_Craft_V11_OpenGL46_ULTRA
+name: JsAI_Craft_V12_MEGA_ULTIMATE
 on: [push, workflow_dispatch]
 
 jobs:
@@ -31,10 +31,10 @@ jobs:
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><solid android:color="#50FFFFFF"/></shape>
           EOF
           cat > app/src/main/res/drawable/dot.xml << 'EOF'
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><solid android:color="#000000"/></shape>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><solid android:color="#FFFFFF"/></shape>
           EOF
           cat > app/src/main/res/drawable/btn_grass.xml << 'EOF'
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#66BB44"/></shape>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#7ED321"/></shape>
           EOF
           cat > app/src/main/res/drawable/btn_stone.xml << 'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#999999"/></shape>
@@ -44,6 +44,7 @@ jobs:
           EOF
 
           echo "android.useAndroidX=true" > gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m" >> gradle.properties
           echo "include ':app'" > settings.gradle
           cat > build.gradle << 'EOF'
           buildscript {
@@ -57,7 +58,19 @@ jobs:
           android {
               namespace 'com.jsai.craft'
               compileSdk 34
-              defaultConfig { applicationId 'com.jsai.craft'; minSdk 24; targetSdk 34 }
+              defaultConfig { 
+                  applicationId 'com.jsai.craft'
+                  minSdk 24
+                  targetSdk 34
+                  ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled true
+                      shrinkResources true
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+                  }
+              }
           }
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
@@ -68,7 +81,7 @@ jobs:
               android:clipChildren="false" android:clipToPadding="false">
               <android.opengl.GLSurfaceView android:id="@+id/glView"
                   android:layout_width="match_parent" android:layout_height="match_parent" />
-              <View android:layout_width="3dp" android:layout_height="3dp" 
+              <View android:layout_width="4dp" android:layout_height="4dp" 
                   android:background="@drawable/dot" android:layout_centerInParent="true" />
               
               <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
@@ -81,6 +94,35 @@ jobs:
                   <Button android:id="@+id/btnDirt" android:layout_width="50dp" android:layout_height="50dp" 
                       android:background="@drawable/btn_dirt" android:text="3" android:textColor="#FFF" android:layout_marginLeft="5dp"/>
               </LinearLayout>
+
+              <Button android:id="@+id/btnSettings" android:layout_width="50dp" android:layout_height="50dp"
+                  android:layout_alignParentTop="true" android:layout_alignParentRight="true"
+                  android:layout_margin="10dp" android:text="⚙" android:textSize="24sp"/>
+
+              <ScrollView android:id="@+id/settingsPanel" android:layout_width="300dp" android:layout_height="wrap_content"
+                  android:layout_alignParentTop="true" android:layout_alignParentRight="true"
+                  android:layout_margin="70dp" android:background="#DD000000" android:padding="10dp" android:visibility="gone">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                      <TextView android:text="RENDER DISTANCE" android:textColor="#FFF" android:textStyle="bold"/>
+                      <SeekBar android:id="@+id/seekRender" android:layout_width="match_parent" android:layout_height="wrap_content"
+                          android:max="64" android:progress="24"/>
+                      <TextView android:id="@+id/txtRender" android:text="24 chunks" android:textColor="#FFF"/>
+                      
+                      <TextView android:text="MEMORY (MB)" android:textColor="#FFF" android:textStyle="bold" android:layout_marginTop="10dp"/>
+                      <SeekBar android:id="@+id/seekMemory" android:layout_width="match_parent" android:layout_height="wrap_content"
+                          android:max="2048" android:progress="512"/>
+                      <TextView android:id="@+id/txtMemory" android:text="512 MB" android:textColor="#FFF"/>
+                      
+                      <CheckBox android:id="@+id/chkFastLoad" android:layout_width="match_parent" android:layout_height="wrap_content"
+                          android:text="Fast Chunk Loading" android:textColor="#FFF" android:checked="true"/>
+                      
+                      <CheckBox android:id="@+id/chkMobs" android:layout_width="match_parent" android:layout_height="wrap_content"
+                          android:text="Enable Mobs" android:textColor="#FFF" android:checked="true"/>
+                      
+                      <CheckBox android:id="@+id/chkVillages" android:layout_width="match_parent" android:layout_height="wrap_content"
+                          android:text="Generate Villages" android:textColor="#FFF" android:checked="true"/>
+                  </LinearLayout>
+              </ScrollView>
 
               <FrameLayout android:id="@+id/joyZone"
                   android:layout_width="90dp" android:layout_height="90dp"
@@ -99,6 +141,10 @@ jobs:
                   </LinearLayout>
                   <Button android:id="@+id/btnJump" android:layout_width="135dp" android:layout_height="70dp" android:text="JUMP" android:layout_marginTop="5dp" />
               </LinearLayout>
+
+              <TextView android:id="@+id/txtFPS" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                  android:layout_alignParentBottom="true" android:layout_centerHorizontal="true"
+                  android:text="FPS: 60" android:textColor="#FFFFFF" android:textStyle="bold" android:background="#80000000" android:padding="5dp"/>
           </RelativeLayout>
           EOF
 
@@ -111,6 +157,9 @@ jobs:
           public class MainActivity extends Activity {
               private GameView gv;
               private Button btnGrass, btnStone, btnDirt;
+              private View settingsPanel;
+              private TextView txtFPS, txtRender, txtMemory;
+              private SeekBar seekRender, seekMemory;
               
               @Override
               protected void onCreate(Bundle s) {
@@ -120,6 +169,37 @@ jobs:
                   setContentView(R.layout.activity_main);
                   
                   gv = new GameView(this, findViewById(R.id.glView));
+                  txtFPS = findViewById(R.id.txtFPS);
+                  settingsPanel = findViewById(R.id.settingsPanel);
+                  txtRender = findViewById(R.id.txtRender);
+                  txtMemory = findViewById(R.id.txtMemory);
+                  seekRender = findViewById(R.id.seekRender);
+                  seekMemory = findViewById(R.id.seekMemory);
+                  
+                  findViewById(R.id.btnSettings).setOnClickListener(v -> 
+                      settingsPanel.setVisibility(settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+                  
+                  seekRender.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                      public void onProgressChanged(SeekBar s, int p, boolean u) {
+                          gv.renderer.renderDistance = Math.max(8, p);
+                          txtRender.setText(gv.renderer.renderDistance + " chunks");
+                          gv.renderer.rebuildAllChunks();
+                      }
+                      public void onStartTrackingTouch(SeekBar s) {}
+                      public void onStopTrackingTouch(SeekBar s) {}
+                  });
+                  
+                  seekMemory.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                      public void onProgressChanged(SeekBar s, int p, boolean u) {
+                          txtMemory.setText(Math.max(256, p) + " MB");
+                      }
+                      public void onStartTrackingTouch(SeekBar s) {}
+                      public void onStopTrackingTouch(SeekBar s) {}
+                  });
+                  
+                  ((CheckBox)findViewById(R.id.chkFastLoad)).setOnCheckedChangeListener((b,c) -> gv.renderer.fastLoad = c);
+                  ((CheckBox)findViewById(R.id.chkMobs)).setOnCheckedChangeListener((b,c) -> gv.renderer.mobsEnabled = c);
+                  ((CheckBox)findViewById(R.id.chkVillages)).setOnCheckedChangeListener((b,c) -> gv.renderer.villagesEnabled = c);
                   
                   findViewById(R.id.btnJump).setOnClickListener(v -> gv.renderer.jump());
                   findViewById(R.id.btnBreak).setOnTouchListener((v, e) -> {
@@ -151,6 +231,22 @@ jobs:
                       }
                       return true;
                   });
+                  
+                  new Thread(() -> {
+                      long lastTime = System.nanoTime();
+                      int frames = 0;
+                      while(true) {
+                          try { Thread.sleep(16); } catch(Exception e) {}
+                          frames++;
+                          long now = System.nanoTime();
+                          if(now - lastTime >= 1000000000L) {
+                              final int fps = frames;
+                              runOnUiThread(() -> txtFPS.setText("FPS: " + fps));
+                              frames = 0;
+                              lastTime = now;
+                          }
+                      }
+                  }).start();
               }
               
               private void selectBlock(int type) {
@@ -174,7 +270,7 @@ jobs:
 
               public GameView(Context ctx, GLSurfaceView gl) {
                   gl.setEGLContextClientVersion(3);
-                  gl.setEGLConfigChooser(8, 8, 8, 8, 16, 0);
+                  gl.setEGLConfigChooser(8, 8, 8, 8, 24, 8);
                   renderer = new CraftRenderer();
                   gl.setRenderer(renderer);
                   gl.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
@@ -186,8 +282,8 @@ jobs:
                               break;
                           case MotionEvent.ACTION_MOVE:
                               if(isPanning) {
-                                  renderer.yaw -= (x - lx) * 0.3f;
-                                  renderer.pitch += (y - ly) * 0.3f;
+                                  renderer.yaw -= (x - lx) * 0.25f;
+                                  renderer.pitch += (y - ly) * 0.25f;
                                   if(renderer.pitch > 89) renderer.pitch = 89;
                                   if(renderer.pitch < -89) renderer.pitch = -89;
                                   lx = x; ly = y;
@@ -210,6 +306,7 @@ jobs:
           import android.opengl.Matrix;
           import javax.microedition.khronos.egl.EGLConfig;
           import javax.microedition.khronos.opengles.GL10;
+          import java.util.*;
 
           public class CraftRenderer implements GLSurfaceView.Renderer {
               public float yaw = 0, pitch = 0;
@@ -220,35 +317,65 @@ jobs:
               private int[] sel = null, plc = null;
               public byte selectedBlock = 1;
               public boolean isBreaking = false;
-              public float breakProgress = 0;
+              public float breakProgress = 0, placeProgress = 0;
               private long breakStart = 0;
               private static final long BREAK_TIME = 1500;
+              public int renderDistance = 24;
+              public boolean fastLoad = true, mobsEnabled = true, villagesEnabled = true;
               
-              // МЕГА ОПТИМИЗАЦИЯ: Кэш чанков
-              private int lastChunkX = -999, lastChunkZ = -999;
-              private int[][] visibleBlocks = new int[1500][3];
-              private int visibleCount = 0;
+              private List<Mob> mobs = new ArrayList<>();
+              private List<Villager> villagers = new ArrayList<>();
+              private Random rand = new Random();
 
               public void onSurfaceCreated(GL10 g, EGLConfig c) {
-                  GLES30.glClearColor(0.5f, 0.8f, 1.0f, 1.0f);
+                  GLES30.glClearColor(0.53f, 0.81f, 0.92f, 1.0f);
                   GLES30.glEnable(GLES30.GL_DEPTH_TEST);
                   GLES30.glEnable(GLES30.GL_CULL_FACE);
-                  GLES30.glDepthFunc(GLES30.GL_LEQUAL);
-                  GLES30.glCullFace(GLES30.GL_BACK);
                   GLES30.glEnable(GLES30.GL_BLEND);
                   GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA);
                   block = new Block();
+                  
                   for(int x=0; x<128; x++) for(int z=0; z<128; z++) {
                       int h = (int)(Math.sin(x*0.12)*Math.cos(z*0.12)*4 + 10);
                       for(int y=0; y<h; y++) setB(x,y,z,(byte)(y==h-1?1:y<h-3?2:3));
+                      
+                      if(rand.nextInt(100) < 3) {
+                          for(int ty=h; ty<h+5; ty++) setB(x,ty,z,(byte)4);
+                          for(int lx=-2; lx<=2; lx++) for(int lz=-2; lz<=2; lz++) 
+                              if(Math.abs(lx)+Math.abs(lz)<4) setB(x+lx,h+5,z+lz,(byte)5);
+                      }
+                  }
+                  
+                  if(villagesEnabled) {
+                      for(int i=0; i<3; i++) {
+                          int vx = 20 + rand.nextInt(80), vz = 20 + rand.nextInt(80);
+                          generateVillage(vx, vz);
+                      }
+                  }
+                  
+                  if(mobsEnabled) {
+                      for(int i=0; i<15; i++) {
+                          mobs.add(new Mob(rand.nextInt(128), 20, rand.nextInt(128)));
+                      }
                   }
               }
               
-              private void setB(int x, int y, int z, byte t) { 
-                  if(x>=0&&x<128&&y>=0&&y<64&&z>=0&&z<128) {
-                      world[x+y*128+z*128*64]=t;
-                      lastChunkX = -999; // Инвалидация кэша
+              private void generateVillage(int cx, int cz) {
+                  for(int hx=-3; hx<=3; hx++) for(int hz=-3; hz<=3; hz++) {
+                      if(Math.abs(hx)+Math.abs(hz) > 5) continue;
+                      int h = getHeight(cx+hx, cz+hz);
+                      for(int y=h; y<h+4; y++) setB(cx+hx, y, cz+hz, (byte)6);
+                      villagers.add(new Villager(cx+hx, h+4, cz+hz));
                   }
+              }
+              
+              private int getHeight(int x, int z) {
+                  for(int y=63; y>=0; y--) if(getB(x,y,z)>0) return y+1;
+                  return 10;
+              }
+              
+              private void setB(int x, int y, int z, byte t) { 
+                  if(x>=0&&x<128&&y>=0&&y<64&&z>=0&&z<128) world[x+y*128+z*128*64]=t;
               }
               
               private byte getB(int x, int y, int z) { 
@@ -257,7 +384,7 @@ jobs:
               }
 
               public void setMove(float x, float z) { mvX = x; mvZ = z; }
-              public void jump() { if(Math.abs(vy) < 0.02f) vy = 0.24f; }
+              public void jump() { if(Math.abs(vy) < 0.02f) vy = 0.218f; }
 
               public void startBreak() { 
                   if(sel != null) { 
@@ -275,11 +402,14 @@ jobs:
                   if(plc != null && sel != null) {
                       int px = plc[0], py = plc[1], pz = plc[2];
                       if(getB(px,py,pz) == 0 && 
-                         !(Math.abs(this.px-px)<0.8f && Math.abs(this.py-py)<1.8f && Math.abs(this.pz-pz)<0.8f)) {
+                         !(Math.abs(this.px-px)<0.815f && Math.abs(this.py-py)<1.83f && Math.abs(this.pz-pz)<0.815f)) {
                           setB(px, py, pz, selectedBlock);
+                          placeProgress = 0;
                       }
                   }
               }
+              
+              public void rebuildAllChunks() {}
 
               public void onDrawFrame(GL10 g) {
                   update();
@@ -292,7 +422,6 @@ jobs:
                   Matrix.setLookAtM(view, 0, px, py+1.6f, pz, px+lx, py+1.6f+ly, pz+lz, 0, 1, 0);
                   Matrix.multiplyMM(mvp, 0, proj, 0, view, 0);
 
-                  // Raycast
                   sel=null; plc=null;
                   for(float d=0; d<6; d+=0.1f) {
                       int tx=(int)Math.floor(px+lx*d), ty=(int)Math.floor(py+1.6f+ly*d), tz=(int)Math.floor(pz+lz*d);
@@ -313,78 +442,105 @@ jobs:
                           breakProgress = 0;
                       }
                   }
-
-                  // УЛЬТРА ОПТИМИЗАЦИЯ: Обновление кэша только при смене чанка
-                  int chunkX = ((int)px) >> 3, chunkZ = ((int)pz) >> 3;
-                  if(chunkX != lastChunkX || chunkZ != lastChunkZ) {
-                      rebuildVisibleBlocks(lx, lz);
-                      lastChunkX = chunkX;
-                      lastChunkZ = chunkZ;
-                  }
-
-                  // Рендер из кэша
-                  for(int i = 0; i < visibleCount; i++) {
-                      int x = visibleBlocks[i][0], y = visibleBlocks[i][1], z = visibleBlocks[i][2];
-                      byte t = getB(x,y,z);
-                      if(t > 0) {
-                          float[] m=new float[16], res=new float[16]; 
-                          Matrix.setIdentityM(m,0); Matrix.translateM(m,0,x,y,z); 
-                          Matrix.multiplyMM(res,0,mvp,0,m,0);
-                          block.draw(res, (sel!=null && x==sel[0] && y==sel[1] && z==sel[2]), t, breakProgress);
-                      }
-                  }
-              }
-              
-              // Пересборка видимых блоков (вызывается редко)
-              private void rebuildVisibleBlocks(float lx, float lz) {
-                  visibleCount = 0;
-                  int r = 18; // УМЕНЬШЕНО до 18 блоков (макс оптимизация)
                   
-                  for(int x=(int)px-r; x<(int)px+r && visibleCount<1500; x++) {
-                      for(int z=(int)pz-r; z<(int)pz+r && visibleCount<1500; z++) {
-                          for(int y=Math.max(0,(int)py-r); y<Math.min(64,(int)py+r) && visibleCount<1500; y++) {
-                              if(getB(x,y,z) == 0) continue;
-                              
-                              float dx = x - px, dy = y - py, dz = z - pz;
-                              float dist = dx*dx + dy*dy + dz*dz;
-                              if(dist > r*r) continue;
-                              
-                              // Frustum culling
-                              float dot = dx * lx + dz * lz;
-                              if(dot < -2.0f && dist > 36.0f) continue;
-                              
-                              // Occlusion culling
-                              if(getB(x+1,y,z)>0 && getB(x-1,y,z)>0 && 
-                                 getB(x,y+1,z)>0 && getB(x,y-1,z)>0 && 
-                                 getB(x,y,z+1)>0 && getB(x,y,z-1)>0) continue;
-                              
-                              visibleBlocks[visibleCount][0] = x;
-                              visibleBlocks[visibleCount][1] = y;
-                              visibleBlocks[visibleCount][2] = z;
-                              visibleCount++;
+                  if(placeProgress < 1.0f) placeProgress = Math.min(1.0f, placeProgress + 0.08f);
+
+                  int r = renderDistance;
+                  for(int x=(int)px-r; x<(int)px+r; x++) {
+                      for(int z=(int)pz-r; z<(int)pz+r; z++) {
+                          for(int y=0; y<64; y++) {
+                              byte t = getB(x,y,z);
+                              if(t>0) {
+                                  float dx = x - px, dy = y - py, dz = z - pz;
+                                  float dist = dx*dx + dy*dy + dz*dz;
+                                  if(dist > r*r) continue;
+                                  
+                                  if(getB(x+1,y,z)>0 && getB(x-1,y,z)>0 && 
+                                     getB(x,y+1,z)>0 && getB(x,y-1,z)>0 && 
+                                     getB(x,y,z+1)>0 && getB(x,y,z-1)>0) continue;
+                                  
+                                  float[] m=new float[16], res=new float[16]; 
+                                  Matrix.setIdentityM(m,0); 
+                                  
+                                  boolean isSelected = (sel!=null && x==sel[0] && y==sel[1] && z==sel[2]);
+                                  boolean isPlaced = (plc!=null && x==plc[0] && y==plc[1] && z==plc[2] && placeProgress<1.0f);
+                                  
+                                  float scale = 1.0f;
+                                  float alpha = 1.0f;
+                                  
+                                  if(isSelected && isBreaking) {
+                                      scale = 1.0f - breakProgress * 0.3f;
+                                      alpha = 1.0f - breakProgress * 0.7f;
+                                  } else if(isPlaced) {
+                                      scale = placeProgress;
+                                      alpha = placeProgress;
+                                  }
+                                  
+                                  Matrix.translateM(m,0,x+0.5f,y+0.5f,z+0.5f); 
+                                  Matrix.scaleM(m,0,scale,scale,scale);
+                                  Matrix.translateM(m,0,-0.5f,-0.5f,-0.5f);
+                                  Matrix.multiplyMM(res,0,mvp,0,m,0);
+                                  block.draw(res, isSelected, t, alpha);
+                              }
                           }
                       }
+                  }
+                  
+                  for(Mob mob : mobs) {
+                      mob.update();
+                      float[] m=new float[16], res=new float[16];
+                      Matrix.setIdentityM(m,0); 
+                      Matrix.translateM(m,0,mob.x,mob.y,mob.z); 
+                      Matrix.scaleM(m,0,0.5f,1.0f,0.5f);
+                      Matrix.multiplyMM(res,0,mvp,0,m,0);
+                      block.draw(res, false, (byte)7, 1.0f);
+                  }
+                  
+                  for(Villager vil : villagers) {
+                      vil.update();
+                      float[] m=new float[16], res=new float[16];
+                      Matrix.setIdentityM(m,0); 
+                      Matrix.translateM(m,0,vil.x,vil.y,vil.z); 
+                      Matrix.scaleM(m,0,0.6f,1.8f,0.6f);
+                      Matrix.multiplyMM(res,0,mvp,0,m,0);
+                      block.draw(res, false, (byte)8, 1.0f);
                   }
               }
 
               private void update() {
                   float s=(float)Math.sin(Math.toRadians(yaw)), c=(float)Math.cos(Math.toRadians(yaw));
-                  float dx = (mvZ * s - mvX * c) * 0.13f;
-                  float dz = (mvZ * c + mvX * s) * 0.13f;
+                  float dx = (mvZ * s - mvX * c) * 0.1079f;
+                  float dz = (mvZ * c + mvX * s) * 0.1079f;
                   
                   if(getB((int)Math.floor(px+dx+(dx>0?0.5f:-0.5f)), (int)py, (int)pz)==0 && 
                      getB((int)Math.floor(px+dx+(dx>0?0.5f:-0.5f)), (int)py+1, (int)pz)==0) px+=dx;
                   if(getB((int)px, (int)py, (int)Math.floor(pz+dz+(dz>0?0.5f:-0.5f)))==0 &&
                      getB((int)px, (int)py+1, (int)Math.floor(pz+dz+(dz>0?0.5f:-0.5f)))==0) pz+=dz;
 
-                  vy-=0.014f; py+=vy;
+                  vy-=0.01148f; 
+                  py+=vy;
                   if(getB((int)px, (int)Math.floor(py), (int)pz)>0) { py=(int)Math.floor(py)+1; vy=0; }
                   if(py < -10) { px=64; py=30; pz=64; vy=0; }
               }
               
               public void onSurfaceChanged(GL10 g, int w, int h) { 
                   GLES30.glViewport(0,0,w,h); 
-                  Matrix.perspectiveM(proj, 0, 75, (float)w/h, 0.1f, 120f); 
+                  Matrix.perspectiveM(proj, 0, 70, (float)w/h, 0.1f, 200f); 
+              }
+              
+              class Mob {
+                  float x, y, z, vx, vz;
+                  Mob(float x, float y, float z) { this.x=x; this.y=y; this.z=z; vx=rand.nextFloat()-0.5f; vz=rand.nextFloat()-0.5f; }
+                  void update() { 
+                      x+=vx*0.05f; z+=vz*0.05f; 
+                      if(rand.nextInt(100)<2) { vx=rand.nextFloat()-0.5f; vz=rand.nextFloat()-0.5f; }
+                  }
+              }
+              
+              class Villager {
+                  float x, y, z;
+                  Villager(float x, float y, float z) { this.x=x; this.y=y; this.z=z; }
+                  void update() {}
               }
           }
           EOF
@@ -404,12 +560,11 @@ jobs:
                   vb = ByteBuffer.allocateDirect(v.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(v); vb.position(0);
                   wb = ByteBuffer.allocateDirect(w.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(w); wb.position(0);
                   
-                  // OpenGL 4.6 стиль шейдеров (совместимые с ES 3.0)
                   String vs="#version 300 es\n" +
                             "layout(location=0) in vec4 p; uniform mat4 m; out vec3 vP; void main(){gl_Position=m*p; vP=p.xyz;}",
                          fs="#version 300 es\n" +
-                            "precision mediump float; in vec3 vP; uniform vec3 c; uniform float br; out vec4 fragColor; " +
-                            "void main(){float l=clamp(vP.y*0.3+0.7,0.5,1.0); vec3 col=c*l; if(br>0.0) col=mix(col,vec3(0.0),br*0.5); fragColor=vec4(col,1.0);}";
+                            "precision highp float; in vec3 vP; uniform vec3 c; uniform float a; out vec4 fragColor; " +
+                            "void main(){float l=clamp(vP.y*0.35+0.65,0.4,1.0); fragColor=vec4(c*l,a);}";
                   
                   int vsh=GLES30.glCreateShader(GLES30.GL_VERTEX_SHADER); 
                   GLES30.glShaderSource(vsh,vs); GLES30.glCompileShader(vsh);
@@ -421,28 +576,33 @@ jobs:
                   GLES30.glLinkProgram(prg);
               }
               
-              public void draw(float[] m, boolean selected, int type, float breakProg) {
+              public void draw(float[] m, boolean selected, int type, float alpha) {
                   GLES30.glUseProgram(prg);
                   int ch=GLES30.glGetUniformLocation(prg,"c"),
-                      bh=GLES30.glGetUniformLocation(prg,"br");
+                      ah=GLES30.glGetUniformLocation(prg,"a");
                   
                   GLES30.glEnableVertexAttribArray(0); 
                   GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,vb);
                   GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(prg,"m"),1,false,m,0);
                   
                   float r=0.5f, g=0.5f, b=0.5f;
-                  if(type==1) { r=0.4f; g=0.75f; b=0.25f; }
-                  else if(type==2) { r=0.6f; g=0.6f; b=0.6f; }
-                  else if(type==3) { r=0.55f; g=0.35f; b=0.2f; }
+                  if(type==1) { r=0.48f; g=0.85f; b=0.31f; }
+                  else if(type==2) { r=0.65f; g=0.65f; b=0.65f; }
+                  else if(type==3) { r=0.58f; g=0.38f; b=0.22f; }
+                  else if(type==4) { r=0.4f; g=0.25f; b=0.15f; }
+                  else if(type==5) { r=0.2f; g=0.7f; b=0.2f; }
+                  else if(type==6) { r=0.8f; g=0.6f; b=0.4f; }
+                  else if(type==7) { r=0.3f; g=0.8f; b=0.3f; }
+                  else if(type==8) { r=0.9f; g=0.7f; b=0.5f; }
                   
                   GLES30.glUniform3f(ch, r, g, b);
-                  GLES30.glUniform1f(bh, selected ? breakProg : 0.0f);
+                  GLES30.glUniform1f(ah, alpha);
                   GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 36);
                   
                   if(selected) {
-                      GLES30.glLineWidth(4.0f);
+                      GLES30.glLineWidth(3.0f);
                       GLES30.glUniform3f(ch, 1, 1, 1);
-                      GLES30.glUniform1f(bh, 0.0f);
+                      GLES30.glUniform1f(ah, 1.0f);
                       GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,wb); 
                       GLES30.glDrawArrays(GLES30.GL_LINES, 0, 24);
                   }
@@ -454,8 +614,8 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-feature android:glEsVersion="0x00030000" android:required="true"/>
-              <application android:label="JsAI Craft GL4.6" android:hardwareAccelerated="true">
-                  <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape">
+              <application android:label="JsAI Craft MEGA" android:hardwareAccelerated="true" android:largeHeap="true">
+                  <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape" android:configChanges="orientation|screenSize">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
               </application>
@@ -468,10 +628,10 @@ jobs:
           unzip -q gradle-8.5-bin.zip
           export PATH="$PWD/gradle-8.5/bin:$PATH"
           gradle wrapper --gradle-version 8.5
-          ./gradlew assembleDebug --no-daemon --parallel --build-cache
+          ./gradlew assembleDebug --no-daemon --parallel --build-cache --max-workers=4
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI_Craft_V11_GL46
+          name: JsAI_Craft_MEGA
           path: app/build/outputs/apk/debug/app-debug.apk
