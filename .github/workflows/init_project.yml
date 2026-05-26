@@ -1,4 +1,4 @@
-name: JsAI_Craft_V8_Pro
+name: JsAI_Craft_V9_Final_Fix
 on: [push, workflow_dispatch]
 
 jobs:
@@ -22,20 +22,20 @@ jobs:
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
 
-          # Стили графики
+          # Стили графики (Круглые)
           cat > app/src/main/res/drawable/joy_bg.xml << 'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#12FFFFFF"/><stroke android:width="1.5dp" android:color="#25FFFFFF"/>
+              <solid android:color="#15FFFFFF"/><stroke android:width="2dp" android:color="#30FFFFFF"/>
           </shape>
           EOF
           cat > app/src/main/res/drawable/joy_handle.xml << 'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#45FFFFFF"/>
+              <solid android:color="#60FFFFFF"/>
           </shape>
           EOF
           cat > app/src/main/res/drawable/dot.xml << 'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#333333"/>
+              <solid android:color="#222222"/>
           </shape>
           EOF
 
@@ -58,9 +58,12 @@ jobs:
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
 
+          # --- UI (ЗАПРЕТ ОБРЕЗАНИЯ ДЖОЙСТИКА) ---
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:layout_width="match_parent" android:layout_height="match_parent">
+              android:layout_width="match_parent" android:layout_height="match_parent"
+              android:clipChildren="false" android:clipToPadding="false">
+              
               <android.opengl.GLSurfaceView android:id="@+id/glView"
                   android:layout_width="match_parent" android:layout_height="match_parent" />
               
@@ -68,21 +71,24 @@ jobs:
                   android:background="@drawable/dot" android:layout_centerInParent="true" />
               
               <FrameLayout android:id="@+id/joyZone"
-                  android:layout_width="110dp" android:layout_height="110dp"
-                  android:layout_alignParentBottom="true" android:layout_margin="25dp"
-                  android:background="@drawable/joy_bg" android:clipChildren="false">
+                  android:layout_width="100dp" android:layout_height="100dp"
+                  android:layout_alignParentBottom="true" android:layout_margin="30dp"
+                  android:background="@drawable/joy_bg" 
+                  android:clipChildren="false" android:clipToPadding="false">
                   <View android:id="@+id/joyHandle"
-                      android:layout_width="35dp" android:layout_height="35dp"
+                      android:layout_width="38dp" android:layout_height="38dp"
                       android:layout_gravity="center" android:background="@drawable/joy_handle"/>
               </FrameLayout>
 
-              <RelativeLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+              <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
                   android:layout_alignParentBottom="true" android:layout_alignParentRight="true"
-                  android:layout_margin="10dp">
-                  <Button android:id="@+id/btnBreak" android:layout_width="60dp" android:layout_height="60dp" android:text="BRK" />
-                  <Button android:id="@+id/btnPlace" android:layout_width="60dp" android:layout_height="60dp" android:text="PLC" android:layout_toRightOf="@id/btnBreak" android:layout_marginLeft="5dp" />
-                  <Button android:id="@+id/btnJump" android:layout_width="125dp" android:layout_height="65dp" android:text="JUMP" android:layout_below="@id/btnBreak" android:layout_marginTop="5dp" />
-              </RelativeLayout>
+                  android:layout_margin="10dp" android:orientation="vertical" android:gravity="center">
+                  <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content">
+                      <Button android:id="@+id/btnBreak" android:layout_width="65dp" android:layout_height="65dp" android:text="BRK" />
+                      <Button android:id="@+id/btnPlace" android:layout_width="65dp" android:layout_height="65dp" android:text="PLC" android:layout_marginLeft="5dp" />
+                  </LinearLayout>
+                  <Button android:id="@+id/btnJump" android:layout_width="135dp" android:layout_height="70dp" android:text="JUMP" android:layout_marginTop="5dp" />
+              </LinearLayout>
           </RelativeLayout>
           EOF
 
@@ -103,15 +109,19 @@ jobs:
                   findViewById(R.id.btnJump).setOnClickListener(v -> gv.renderer.jump());
                   findViewById(R.id.btnBreak).setOnClickListener(v -> gv.renderer.interact(true));
                   findViewById(R.id.btnPlace).setOnClickListener(v -> gv.renderer.interact(false));
+                  
                   View jZ = findViewById(R.id.joyZone), jH = findViewById(R.id.joyHandle);
                   jZ.setOnTouchListener((v, e) -> {
                       if(e.getAction() == MotionEvent.ACTION_UP) {
                           jH.setTranslationX(0); jH.setTranslationY(0); gv.renderer.setMove(0, 0);
                       } else {
-                          float r = v.getWidth()/2f, dx = e.getX()-r, dy = e.getY()-r, d = (float)Math.sqrt(dx*dx+dy*dy);
-                          if(d>r) { dx=dx/d*r; dy=dy/d*r; }
+                          float r = v.getWidth()/2f;
+                          float dx = e.getX() - r, dy = e.getY() - r;
+                          float d = (float)Math.sqrt(dx*dx + dy*dy);
+                          // Ограничиваем движение стика кругом, но НЕ обрезаем его визуально
+                          if(d > r) { dx = dx/d*r; dy = dy/d*r; }
                           jH.setTranslationX(dx); jH.setTranslationY(dy);
-                          gv.renderer.setMove(dx/r, -dy/r); // Инверсия X исправлена здесь
+                          gv.renderer.setMove(dx/r, -dy/r); 
                       }
                       return true;
                   });
@@ -158,7 +168,7 @@ jobs:
 
           public class CraftRenderer implements GLSurfaceView.Renderer {
               public float yaw = 0, pitch = 0;
-              private float px = 64, py = 20, pz = 64, vy = 0, mvX = 0, mvZ = 0;
+              private float px = 64, py = 25, pz = 64, vy = 0, mvX = 0, mvZ = 0;
               private final float[] proj = new float[16], view = new float[16], mvp = new float[16];
               private Block block;
               private byte[] world = new byte[128 * 64 * 128];
@@ -181,7 +191,7 @@ jobs:
               private byte getB(int x, int y, int z) { if(x>=0&&x<128&&y>=0&&y<64&&z>=0&&z<128) return world[x+y*128+z*128*64]; return 0; }
 
               public void setMove(float x, float z) { mvX = x; mvZ = z; }
-              public void jump() { if(Math.abs(vy) < 0.01f) vy = 0.18f; }
+              public void jump() { if(Math.abs(vy) < 0.02f) vy = 0.17f; }
 
               public void interact(boolean brk) {
                   if(sel != null) {
@@ -211,18 +221,18 @@ jobs:
                       }
                   }
 
-                  int r = 18; // Прорисовка 4.5 чанка
+                  int r = 18; 
                   for(int x=(int)px-r; x<(int)px+r; x++) for(int z=(int)pz-r; z<(int)pz+r; z++) for(int y=(int)py-r; y<(int)py+r; y++) {
                       byte t = getB(x,y,z);
                       if(t>0) {
-                          // FRUSTUM CULLING (Упрощенный): Рисуем только то, что перед камерой
+                          // Оптимизация прорисовки (Frustum)
                           float dx = x - px, dz = z - pz;
-                          float dot = dx * lx + dz * lz;
-                          if(dot < -1.0f && (dx*dx+dz*dz) > 4.0f) continue; 
-
+                          if(dx*lx + dz*lz < -1.0f && (dx*dx+dz*dz) > 9.0f) continue; 
                           if(getB(x+1,y,z)>0 && getB(x-1,y,z)>0 && getB(x,y+1,z)>0 && getB(x,y-1,z)>0 && getB(x,y,z+1)>0 && getB(x,y,z-1)>0) continue;
                           
-                          float[] m=new float[16], res=new float[16]; Matrix.setIdentityM(m,0); Matrix.translateM(m,0,x,y,z); Matrix.multiplyMM(res,0,mvp,0,m,0);
+                          float[] m=new float[16], res=new float[16]; 
+                          Matrix.setIdentityM(m,0); Matrix.translateM(m,0,x,y,z); 
+                          Matrix.multiplyMM(res,0,mvp,0,m,0);
                           block.draw(res, (sel!=null && x==sel[0] && y==sel[1] && z==sel[2]), t);
                       }
                   }
@@ -230,17 +240,18 @@ jobs:
 
               private void update() {
                   float s=(float)Math.sin(Math.toRadians(yaw)), c=(float)Math.cos(Math.toRadians(yaw));
-                  float dx=(mvX*c+mvZ*s)*0.13f, dz=(mvZ*c-mvX*s)*0.13f; // Исправлено направление
+                  // ЖЕСТКИЙ ФИКС ИНВЕРСИИ ДВИЖЕНИЯ
+                  float dx = (mvZ * s + mvX * c) * 0.13f;
+                  float dz = (mvZ * c - mvX * s) * 0.13f;
                   
-                  // Коллизии хитбокса (0.4f от центра)
-                  if(getB((int)Math.floor(px+dx+(dx>0?0.4f:-0.4f)), (int)py, (int)pz)==0 && 
-                     getB((int)Math.floor(px+dx+(dx>0?0.4f:-0.4f)), (int)py+1, (int)pz)==0) px+=dx;
-                  if(getB((int)px, (int)py, (int)Math.floor(pz+dz+(dz>0?0.4f:-0.4f)))==0 &&
-                     getB((int)px, (int)py+1, (int)Math.floor(pz+dz+(dz>0?0.4f:-0.4f)))==0) pz+=dz;
+                  if(getB((int)Math.floor(px+dx+(dx>0?0.45f:-0.45f)), (int)py, (int)pz)==0 && 
+                     getB((int)Math.floor(px+dx+(dx>0?0.45f:-0.45f)), (int)py+1, (int)pz)==0) px+=dx;
+                  if(getB((int)px, (int)py, (int)Math.floor(pz+dz+(dz>0?0.45f:-0.45f)))==0 &&
+                     getB((int)px, (int)py+1, (int)Math.floor(pz+dz+(dz>0?0.45f:-0.45f)))==0) pz+=dz;
 
-                  vy-=0.014f; py+=vy;
+                  vy-=0.013f; py+=vy;
                   if(getB((int)px, (int)Math.floor(py), (int)pz)>0) { py=(int)Math.floor(py)+1; vy=0; }
-                  if(py < -10) { px=64; py=25; pz=64; vy=0; }
+                  if(py < -10) { px=64; py=30; pz=64; vy=0; }
               }
               public void onSurfaceChanged(GL10 g, int w, int h) { GLES20.glViewport(0,0,w,h); Matrix.perspectiveM(proj, 0, 80, (float)w/h, 0.1f, 100f); }
           }
@@ -249,7 +260,6 @@ jobs:
           cat > app/src/main/java/com/jsai/craft/Block.java << 'EOF'
           package com.jsai.craft;
           import android.opengl.GLES20;
-          import android.opengl.Matrix;
           import java.nio.*;
           public class Block {
               private FloatBuffer vb, wb;
@@ -273,11 +283,11 @@ jobs:
                   GLES20.glUniform3f(ch, t==1?0.4f:0.6f, t==1?0.7f:0.5f, t==1?0.3f:0.5f);
                   GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 36);
                   if(s) {
-                      float[] ms = new float[16];
-                      Matrix.setIdentityM(ms, 0); Matrix.scaleM(ms, 0, m, 0, 1.01f, 1.01f, 1.01f); // Микро-масштаб для обводки
-                      GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(prg, "m"), 1, false, ms, 0);
-                      GLES20.glUniform3f(ch, 1, 1, 1); GLES20.glLineWidth(3.0f);
+                      GLES20.glEnable(GLES20.GL_POLYGON_OFFSET_FILL);
+                      GLES20.glPolygonOffset(-1.0f, -1.0f); // Рисуем линии ПОВЕРХ граней
+                      GLES20.glUniform3f(ch, 1, 1, 1); GLES20.glLineWidth(4.0f);
                       GLES20.glVertexAttribPointer(ph,3,GLES20.GL_FLOAT,false,0,wb); GLES20.glDrawArrays(GLES20.GL_LINES, 0, 24);
+                      GLES20.glDisable(GLES20.GL_POLYGON_OFFSET_FILL);
                   }
               }
           }
@@ -286,7 +296,7 @@ jobs:
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="JsAI Craft V8" android:hardwareAccelerated="true">
+              <application android:label="JsAI Craft V9" android:hardwareAccelerated="true">
                   <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
@@ -294,7 +304,7 @@ jobs:
           </manifest>
           EOF
 
-      - name: Industrial Build
+      - name: Build
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
@@ -302,8 +312,8 @@ jobs:
           gradle wrapper --gradle-version 8.5
           ./gradlew assembleDebug --no-daemon --parallel --build-cache
 
-      - name: Upload APK
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI_Craft_V8
+          name: JsAI_Craft_V9
           path: app/build/outputs/apk/debug/app-debug.apk
