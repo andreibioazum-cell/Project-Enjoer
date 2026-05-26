@@ -1,4 +1,4 @@
-name: JsAI_Craft_3D_Build
+name: JsAI_Craft_3D_Mastered
 on: [push, workflow_dispatch]
 
 jobs:
@@ -14,175 +14,15 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Мы убрали setup-android, так как SDK уже есть в ubuntu-latest
-      
-      - name: Create 3D Project
+      - name: Create Project Files
         run: |
           mkdir -p app/src/main/java/com/jsai/craft
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/drawable
 
+          # Configs
           echo "android.useAndroidX=true" > gradle.properties
-          echo "android.enableJetifier=true" >> gradle.properties
-
-          cat > app/src/main/res/values/strings.xml << 'EOF'
-          <resources><string name="app_name">JsAI Craft 3D</string></resources>
-          EOF
-
-          cat > app/src/main/res/values/themes.xml << 'EOF'
-          <resources><style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
-          <item name="android:windowFullscreen">true</item>
-          </style></resources>
-          EOF
-
-          cat > app/src/main/java/com/jsai/craft/MainActivity.java << 'EOF'
-          package com.jsai.craft;
-          import android.app.Activity;
-          import android.opengl.GLSurfaceView;
-          import android.os.Bundle;
-          import android.view.Window;
-          import android.view.WindowManager;
-
-          public class MainActivity extends Activity {
-              private GameGLView glView;
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  requestWindowFeature(Window.FEATURE_NO_TITLE);
-                  getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                  glView = new GameGLView(this);
-                  setContentView(glView);
-              }
-          }
-          EOF
-
-          cat > app/src/main/java/com/jsai/craft/GameGLView.java << 'EOF'
-          package com.jsai.craft;
-          import android.content.Context;
-          import android.opengl.GLSurfaceView;
-          import android.view.MotionEvent;
-
-          public class GameGLView extends GLSurfaceView {
-              private final GameRenderer renderer;
-              private float prevX, prevY;
-              public GameGLView(Context context) {
-                  super(context);
-                  setEGLContextClientVersion(2);
-                  renderer = new GameRenderer();
-                  setRenderer(renderer);
-              }
-              @Override
-              public boolean onTouchEvent(MotionEvent e) {
-                  if (e.getAction() == MotionEvent.ACTION_MOVE) {
-                      renderer.angleX += (e.getX() - prevX) * 0.3f;
-                      renderer.angleY += (e.getY() - prevY) * 0.3f;
-                  }
-                  prevX = e.getX(); prevY = e.getY();
-                  return true;
-              }
-          }
-          EOF
-
-          cat > app/src/main/java/com/jsai/craft/GameRenderer.java << 'EOF'
-          package com.jsai.craft;
-          import android.opengl.GLES20;
-          import android.opengl.GLSurfaceView;
-          import android.opengl.Matrix;
-          import javax.microedition.khronos.egl.EGLConfig;
-          import javax.microedition.khronos.opengles.GL10;
-
-          public class GameRenderer implements GLSurfaceView.Renderer {
-              public float angleX, angleY;
-              private final float[] vPMatrix = new float[16];
-              private final float[] projectionMatrix = new float[16];
-              private final float[] viewMatrix = new float[16];
-              private final float[] rotationMatrix = new float[16];
-              private Cube cube;
-
-              @Override
-              public void onSurfaceCreated(GL10 gl, EGLConfig config) {
-                  GLES20.glClearColor(0.5f, 0.7f, 1.0f, 1.0f);
-                  GLES20.glEnable(GLES20.GL_DEPTH_TEST);
-                  cube = new Cube();
-              }
-              @Override
-              public void onDrawFrame(GL10 gl) {
-                  GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
-                  Matrix.setLookAtM(viewMatrix, 0, 0, 0, -6, 0f, 0f, 0f, 0f, 1.0f, 0.0f);
-                  Matrix.multiplyMM(vPMatrix, 0, projectionMatrix, 0, viewMatrix, 0);
-                  
-                  Matrix.setRotateM(rotationMatrix, 0, angleX, 0, 1, 0);
-                  Matrix.rotateM(rotationMatrix, 0, angleY, 1, 0, 0);
-                  
-                  float[] mvp = new float[16];
-                  Matrix.multiplyMM(mvp, 0, vPMatrix, 0, rotationMatrix, 0);
-                  
-                  for(int x = -2; x <= 2; x++) {
-                      for(int z = -2; z <= 2; z++) {
-                          float[] pos = new float[16];
-                          Matrix.translateM(pos, 0, mvp, 0, x * 1.1f, -1.0f, z * 1.1f);
-                          cube.draw(pos);
-                      }
-                  }
-              }
-              @Override
-              public void onSurfaceChanged(GL10 gl, int w, int h) {
-                  GLES20.glViewport(0, 0, w, h);
-                  float ratio = (float) w / h;
-                  Matrix.frustumM(projectionMatrix, 0, -ratio, ratio, -1, 1, 3, 10);
-              }
-          }
-          EOF
-
-          cat > app/src/main/java/com/jsai/craft/Cube.java << 'EOF'
-          package com.jsai.craft;
-          import android.opengl.GLES20;
-          import java.nio.*;
-
-          public class Cube {
-              private FloatBuffer vertexBuffer;
-              private ShortBuffer drawListBuffer;
-              private int mProgram;
-              private final String vs = "uniform mat4 uMVPMatrix; attribute vec4 vPosition; void main() { gl_Position = uMVPMatrix * vPosition; }";
-              private final String fs = "precision mediump float; void main() { gl_FragColor = vec4(0.2, 0.7, 0.2, 1.0); }";
-              static float coords[] = {-0.5f,0.5f,0.5f, -0.5f,-0.5f,0.5f, 0.5f,-0.5f,0.5f, 0.5f,0.5f,0.5f, -0.5f,0.5f,-0.5f, -0.5f,-0.5f,-0.5f, 0.5f,-0.5f,-0.5f, 0.5f,0.5f,-0.5f};
-              private short drawOrder[] = {0,1,2, 0,2,3, 4,5,6, 4,6,7, 0,4,7, 0,7,3, 1,5,6, 1,6,2, 0,4,5, 0,5,1, 3,7,6, 3,6,2};
-              public Cube() {
-                  vertexBuffer = ByteBuffer.allocateDirect(coords.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(coords);
-                  vertexBuffer.position(0);
-                  drawListBuffer = ByteBuffer.allocateDirect(drawOrder.length*2).order(ByteOrder.nativeOrder()).asShortBuffer().put(drawOrder);
-                  drawListBuffer.position(0);
-                  int vsh = GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER);
-                  GLES20.glShaderSource(vsh, vs); GLES20.glCompileShader(vsh);
-                  int fsh = GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER);
-                  GLES20.glShaderSource(fsh, fs); GLES20.glCompileShader(fsh);
-                  mProgram = GLES20.glCreateProgram();
-                  GLES20.glAttachShader(mProgram, vsh); GLES20.glAttachShader(mProgram, fsh);
-                  GLES20.glLinkProgram(mProgram);
-              }
-              public void draw(float[] mvp) {
-                  GLES20.glUseProgram(mProgram);
-                  int posH = GLES20.glGetAttribLocation(mProgram, "vPosition");
-                  GLES20.glEnableVertexAttribArray(posH);
-                  GLES20.glVertexAttribPointer(posH, 3, GLES20.GL_FLOAT, false, 12, vertexBuffer);
-                  GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(mProgram, "uMVPMatrix"), 1, false, mvp, 0);
-                  GLES20.glDrawElements(GLES20.GL_TRIANGLES, drawOrder.length, GLES20.GL_UNSIGNED_SHORT, drawListBuffer);
-              }
-          }
-          EOF
-
-          cat > app/src/main/AndroidManifest.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="JsAI Craft 3D" android:theme="@style/AppTheme">
-                  <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape">
-                      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
-
           echo "include ':app'" > settings.gradle
+          
           cat > build.gradle << 'EOF'
           buildscript {
               repositories { google(); mavenCentral() }
@@ -190,6 +30,7 @@ jobs:
           }
           allprojects { repositories { google(); mavenCentral() } }
           EOF
+          
           cat > app/build.gradle << 'EOF'
           plugins { id 'com.android.application' }
           android {
@@ -200,16 +41,203 @@ jobs:
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
 
+          # --- MAIN ACTIVITY ---
+          cat > app/src/main/java/com/jsai/craft/MainActivity.java << 'EOF'
+          package com.jsai.craft;
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.view.Window;
+          import android.view.WindowManager;
+          public class MainActivity extends Activity {
+              private GameView view;
+              @Override
+              protected void onCreate(Bundle s) {
+                  super.onCreate(s);
+                  requestWindowFeature(Window.FEATURE_NO_TITLE);
+                  getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                  view = new GameView(this);
+                  setContentView(view);
+              }
+          }
+          EOF
+
+          # --- GAME VIEW (Управление) ---
+          cat > app/src/main/java/com/jsai/craft/GameView.java << 'EOF'
+          package com.jsai.craft;
+          import android.content.Context;
+          import android.opengl.GLSurfaceView;
+          import android.view.MotionEvent;
+
+          public class GameView extends GLSurfaceView {
+              private final Renderer renderer;
+              private float lastX, lastY;
+
+              public GameView(Context context) {
+                  super(context);
+                  setEGLContextClientVersion(2);
+                  renderer = new Renderer();
+                  setRenderer(renderer);
+                  setRenderMode(RENDERMODE_CONTINUOUSLY);
+              }
+
+              public boolean onTouchEvent(MotionEvent e) {
+                  float x = e.getX(), y = e.getY();
+                  if(e.getAction() == MotionEvent.ACTION_MOVE) {
+                      // Вращение камеры (только yaw/pitch)
+                      renderer.yaw   += (x - lastX) * 0.25f;
+                      renderer.pitch += (y - lastY) * 0.25f;
+                      if(renderer.pitch > 89f) renderer.pitch = 89f;
+                      if(renderer.pitch < -89f) renderer.pitch = -89f;
+                  }
+                  lastX = x; lastY = y;
+                  return true;
+              }
+          }
+          EOF
+
+          # --- RENDERER (Камера FPS) ---
+          cat > app/src/main/java/com/jsai/craft/Renderer.java << 'EOF'
+          package com.jsai.craft;
+          import android.opengl.GLES20;
+          import android.opengl.GLSurfaceView;
+          import android.opengl.Matrix;
+          import javax.microedition.khronos.egl.EGLConfig;
+          import javax.microedition.khronos.opengles.GL10;
+
+          public class Renderer implements GLSurfaceView.Renderer {
+              public float yaw=20f, pitch=10f;
+              private final float[] proj = new float[16], mv = new float[16], mvp = new float[16];
+              private Block block;
+              
+              public void onSurfaceCreated(GL10 g, EGLConfig c) {
+                  GLES20.glClearColor(0.52f, 0.80f, 0.92f, 1.0f);
+                  GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+                  GLES20.glEnable(GLES20.GL_CULL_FACE); 
+                  block = new Block();
+              }
+
+              public void onDrawFrame(GL10 g) {
+                  GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
+
+                  // Расчет вектора взгляда FPS камеры
+                  float lx = (float)(Math.cos(Math.toRadians(pitch))*Math.sin(Math.toRadians(yaw)));
+                  float ly = (float)(-Math.sin(Math.toRadians(pitch)));
+                  float lz = (float)(Math.cos(Math.toRadians(pitch))*Math.cos(Math.toRadians(yaw)));
+
+                  Matrix.setLookAtM(mv, 0, 0, 1.5f, 5, 0+lx, 1.5f+ly, 5+lz, 0, 1, 0);
+                  Matrix.multiplyMM(mvp, 0, proj, 0, mv, 0);
+
+                  // Генерация пола из блоков БЕЗ ПРОМЕЖУТКОВ
+                  for(int x=-6; x<6; x++) {
+                      for(int z=-6; z<6; z++) {
+                          float[] model = new float[16];
+                          Matrix.setIdentityM(model, 0);
+                          Matrix.translateM(model, 0, x, -1.5f, z);
+                          
+                          float[] finalMat = new float[16];
+                          Matrix.multiplyMM(finalMat, 0, mvp, 0, model, 0);
+                          block.draw(finalMat);
+                      }
+                  }
+              }
+
+              public void onSurfaceChanged(GL10 g, int w, int h) {
+                  GLES20.glViewport(0,0,w,h);
+                  Matrix.perspectiveM(proj, 0, 75, (float)w/h, 0.1f, 100f);
+              }
+          }
+          EOF
+
+          # --- BLOCK WITH NOISE SHADER (3D Текстура) ---
+          cat > app/src/main/java/com/jsai/craft/Block.java << 'EOF'
+          package com.jsai.craft;
+          import android.opengl.GLES20;
+          import java.nio.*;
+
+          public class Block {
+              private FloatBuffer vb;
+              private int program;
+              
+              // Вершины куба размером ровно 1.0
+              static float[] v = new float[]{
+                 -0.5f, 0.5f,-0.5f,  -0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f,  0.5f, 0.5f,-0.5f,
+                 -0.5f, 0.5f, 0.5f,  0.5f, 0.5f, 0.5f,  0.5f,-0.5f, 0.5f, -0.5f,-0.5f, 0.5f,
+                 -0.5f, 0.5f, 0.5f, -0.5f, 0.5f,-0.5f,  0.5f, 0.5f,-0.5f,  0.5f, 0.5f, 0.5f,
+                 -0.5f,-0.5f, 0.5f,  0.5f,-0.5f, 0.5f,  0.5f,-0.5f,-0.5f, -0.5f,-0.5f,-0.5f,
+                 -0.5f, 0.5f, 0.5f,  0.5f, 0.5f, 0.5f,  0.5f, 0.5f,-0.5f, -0.5f, 0.5f,-0.5f,
+                 -0.5f,-0.5f, 0.5f, -0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f,  0.5f,-0.5f, 0.5f
+              };
+              static short[] idx = {0,1,2,0,2,3,4,5,6,4,6,7,8,9,10,8,10,11,12,13,14,12,14,15,16,17,18,16,18,19,20,21,22,20,22,23};
+
+              public Block(){
+                  ByteBuffer bb = ByteBuffer.allocateDirect(v.length*4).order(ByteOrder.nativeOrder());
+                  vb = bb.asFloatBuffer(); vb.put(v); vb.position(0);
+                  
+                  // ШЕЙДЕР С ШУМОМ (Генерация текстуры на лету)
+                  String vs="attribute vec4 p; uniform mat4 mvp; varying vec3 pos;" +
+                           "void main(){gl_Position=mvp*p;pos=p.xyz;}";
+                  String fs="precision mediump float;varying vec3 pos;" +
+                           "float hash(vec3 p){p=fract(p*0.3183099+0.1);" +
+                           "p*=17.0;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}" +
+                           "void main(){" +
+                           "vec3 col=mix(vec3(0.5,0.45,0.35),vec3(0.7,0.65,0.55),hash(pos*8.0));" +
+                           "col*=0.9+0.1*hash(pos*50.0);" + // Микро-зернистость
+                           "gl_FragColor=vec4(col,1.0);}";
+
+                  int vsID=GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER);
+                  GLES20.glShaderSource(vsID,vs);GLES20.glCompileShader(vsID);
+                  int fsID=GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER);
+                  GLES20.glShaderSource(fsID,fs);GLES20.glCompileShader(fsID);
+                  program=GLES20.glCreateProgram();
+                  GLES20.glAttachShader(program,vsID);GLES20.glAttachShader(program,fsID);
+                  GLES20.glLinkProgram(program);
+              }
+
+              public void draw(float[] mat){
+                  GLES20.glUseProgram(program);
+                  int h=GLES20.glGetAttribLocation(program,"p");
+                  GLES20.glEnableVertexAttribArray(h);
+                  GLES20.glVertexAttribPointer(h,3,GLES20.GL_FLOAT,false,0,vb);
+                  GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program,"mvp"),1,false,mat,0);
+                  
+                  ShortBuffer ib=ByteBuffer.allocateDirect(idx.length*2).order(ByteOrder.nativeOrder()).asShortBuffer().put(idx);ib.position(0);
+                  GLES20.glDrawElements(GLES20.GL_TRIANGLES,idx.length,GLES20.GL_UNSIGNED_SHORT,ib);
+              }
+          }
+          EOF
+
+          # Manifest & Resources
+          cat > app/src/main/res/values/strings.xml << 'EOF'
+          <resources><string name="app_name">Craft Master</string></resources>
+          EOF
+          cat > app/src/main/res/values/themes.xml << 'EOF'
+          <resources><style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar"><item name="android:windowFullscreen">true</item></style></resources>
+          EOF
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <application android:label="@string/app_name" android:theme="@style/AppTheme">
+                <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN"/>
+                        <category android:name="android.intent.category.LAUNCHER"/>
+                    </intent-filter>
+                </activity>
+            </application>
+          </manifest>
+          EOF
+
+      # Сборка через твой рабочий метод
       - name: Build APK
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
           export PATH="$PWD/gradle-8.5/bin:$PATH"
           gradle wrapper --gradle-version 8.5
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --no-daemon
 
-      - name: Upload
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI_Craft_3D
+          name: Craft_Master_Final
           path: app/build/outputs/apk/debug/app-debug.apk
