@@ -1,4 +1,4 @@
-name: JsAI_Craft_Pro_Build
+name: JsAI_Craft_Turbo_Build
 on: [push, workflow_dispatch]
 
 jobs:
@@ -8,11 +8,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 17 with Turbo Cache
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+          # КЭШ: Сохраняет все скачанные библиотеки. Следующий билд будет летать.
+          cache: 'gradle'
 
       - name: Create Project Files
         run: |
@@ -20,9 +22,18 @@ jobs:
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
 
-          # Configs
-          echo "android.useAndroidX=true" > gradle.properties
+          # ОПТИМИЗАЦИЯ RAM: Выделяем 5 ГБ под сборку
+          cat > gradle.properties << 'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx5120m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
+          org.gradle.parallel=true
+          org.gradle.configureondemand=true
+          org.gradle.caching=true
+          EOF
+
           echo "include ':app'" > settings.gradle
+          
           cat > build.gradle << 'EOF'
           buildscript {
               repositories { google(); mavenCentral() }
@@ -41,34 +52,40 @@ jobs:
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
 
-          # --- LAYOUT (UI с кнопками) ---
+          # --- КОД ИГРЫ (V3) ---
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent">
               <android.opengl.GLSurfaceView android:id="@+id/glView"
                   android:layout_width="match_parent" android:layout_height="match_parent" />
-              <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
-                  android:layout_alignParentBottom="true" android:layout_margin="20dp">
-                  <Button android:id="@+id/btnJump" android:layout_width="80dp" android:layout_height="80dp" android:text="JUMP" />
-              </LinearLayout>
-              <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
-                  android:layout_alignParentBottom="true" android:layout_alignParentRight="true" android:layout_margin="20dp">
-                  <Button android:id="@+id/btnBreak" android:layout_width="80dp" android:layout_height="80dp" android:text="BRK" android:layout_marginRight="10dp" />
-                  <Button android:id="@+id/btnPlace" android:layout_width="80dp" android:layout_height="80dp" android:text="PLC" />
-              </LinearLayout>
-              <View android:layout_width="10dp" android:layout_height="10dp" android:background="#FF0000"
-                  android:layout_centerInParent="true" />
+              <FrameLayout android:id="@+id/joystickZone"
+                  android:layout_width="180dp" android:layout_height="180dp"
+                  android:layout_alignParentBottom="true" android:layout_margin="20dp"
+                  android:background="#22FFFFFF">
+                  <View android:id="@+id/joystickHandle"
+                      android:layout_width="50dp" android:layout_height="50dp"
+                      android:layout_gravity="center" android:background="#66FFFFFF"/>
+              </FrameLayout>
+              <RelativeLayout android:layout_width="220dp" android:layout_height="180dp"
+                  android:layout_alignParentBottom="true" android:layout_alignParentRight="true"
+                  android:layout_margin="10dp">
+                  <Button android:id="@+id/btnJump" android:layout_width="70dp" android:layout_height="70dp" 
+                      android:text="JMP" android:layout_centerHorizontal="true" />
+                  <Button android:id="@+id/btnBreak" android:layout_width="70dp" android:layout_height="70dp" 
+                      android:text="BRK" android:layout_alignParentBottom="true" android:layout_alignParentLeft="true" />
+                  <Button android:id="@+id/btnPlace" android:layout_width="70dp" android:layout_height="70dp" 
+                      android:text="PLC" android:layout_alignParentBottom="true" android:layout_alignParentRight="true" />
+              </RelativeLayout>
+              <View android:layout_width="6dp" android:layout_height="6dp" 
+                  android:background="#FF0000" android:layout_centerInParent="true" />
           </RelativeLayout>
           EOF
 
-          # --- MAIN ACTIVITY ---
           cat > app/src/main/java/com/jsai/craft/MainActivity.java << 'EOF'
           package com.jsai.craft;
           import android.app.Activity;
           import android.os.Bundle;
-          import android.view.Window;
-          import android.view.WindowManager;
-
+          import android.view.*;
           public class MainActivity extends Activity {
               private GameView gv;
               @Override
@@ -81,210 +98,168 @@ jobs:
                   findViewById(R.id.btnJump).setOnClickListener(v -> gv.renderer.jump());
                   findViewById(R.id.btnBreak).setOnClickListener(v -> gv.renderer.interact(true));
                   findViewById(R.id.btnPlace).setOnClickListener(v -> gv.renderer.interact(false));
-              }
-          }
-          EOF
-
-          # --- GAME VIEW (Инверсия X исправлена) ---
-          cat > app/src/main/java/com/jsai/craft/GameView.java << 'EOF'
-          package com.jsai.craft;
-          import android.content.Context;
-          import android.opengl.GLSurfaceView;
-          import android.view.MotionEvent;
-
-          public class GameView {
-              public CraftRenderer renderer;
-              private float lx, ly;
-
-              public GameView(Context ctx, GLSurfaceView gl) {
-                  gl.setEGLContextClientVersion(2);
-                  renderer = new CraftRenderer();
-                  gl.setRenderer(renderer);
-                  gl.setOnTouchListener((v, e) -> {
-                      float x = e.getX(), y = e.getY();
-                      if(e.getAction() == MotionEvent.ACTION_MOVE) {
-                          renderer.yaw -= (x - lx) * 0.2f; // Исправлена инверсия
-                          renderer.pitch += (y - ly) * 0.2f;
-                          if(renderer.pitch > 85) renderer.pitch = 85;
-                          if(renderer.pitch < -85) renderer.pitch = -85;
+                  View joyZone = findViewById(R.id.joystickZone);
+                  View joyHandle = findViewById(R.id.joystickHandle);
+                  joyZone.setOnTouchListener((v, e) -> {
+                      if(e.getAction() == MotionEvent.ACTION_UP) {
+                          joyHandle.setTranslationX(0); joyHandle.setTranslationY(0);
+                          gv.renderer.setMove(0, 0);
+                      } else {
+                          float dx = e.getX() - v.getWidth()/2f, dy = e.getY() - v.getHeight()/2f;
+                          joyHandle.setTranslationX(dx/2.5f); joyHandle.setTranslationY(dy/2.5f);
+                          gv.renderer.setMove(dx/80f, -dy/80f);
                       }
-                      lx = x; ly = y;
                       return true;
                   });
               }
           }
           EOF
 
-          # --- RENDERER (Физика, Мир, Выбор блока) ---
+          cat > app/src/main/java/com/jsai/craft/GameView.java << 'EOF'
+          package com.jsai.craft;
+          import android.content.Context;
+          import android.opengl.GLSurfaceView;
+          import android.view.MotionEvent;
+          public class GameView {
+              public CraftRenderer renderer;
+              private float lx, ly;
+              public GameView(Context ctx, GLSurfaceView gl) {
+                  gl.setEGLContextClientVersion(2);
+                  renderer = new CraftRenderer();
+                  gl.setRenderer(renderer);
+                  gl.setOnTouchListener((v, e) -> {
+                      if(e.getX() > v.getWidth()/2f) {
+                          float x = e.getX(), y = e.getY();
+                          if(e.getAction() == MotionEvent.ACTION_MOVE) {
+                              renderer.yaw -= (x - lx) * 0.3f;
+                              renderer.pitch += (y - ly) * 0.3f;
+                              if(renderer.pitch > 85) renderer.pitch = 85;
+                              if(renderer.pitch < -85) renderer.pitch = -85;
+                          }
+                          lx = x; ly = y;
+                      }
+                      return true;
+                  });
+              }
+          }
+          EOF
+
           cat > app/src/main/java/com/jsai/craft/CraftRenderer.java << 'EOF'
           package com.jsai.craft;
           import android.opengl.GLES20;
           import android.opengl.GLSurfaceView;
           import android.opengl.Matrix;
-          import java.util.*;
+          import java.util.concurrent.ConcurrentHashMap;
           import javax.microedition.khronos.egl.EGLConfig;
           import javax.microedition.khronos.opengles.GL10;
-
           public class CraftRenderer implements GLSurfaceView.Renderer {
               public float yaw = 0, pitch = 0;
-              private float px = 5, py = 10, pz = 5, vy = 0;
+              private float px = 8, py = 12, pz = 8, vy = 0, mvX = 0, mvZ = 0;
               private final float[] proj = new float[16], view = new float[16], mvp = new float[16];
               private Block block;
-              private Map<String, Integer> world = new HashMap<>();
-              private int[] selectedBlock = null;
-
+              private ConcurrentHashMap<String, Integer> world = new ConcurrentHashMap<>();
+              private int[] sel = null;
               public void onSurfaceCreated(GL10 g, EGLConfig c) {
                   GLES20.glClearColor(0.5f, 0.8f, 1.0f, 1.0f);
                   GLES20.glEnable(GLES20.GL_DEPTH_TEST);
                   block = new Block();
-                  // Генерация ландшафта
-                  for(int x=0; x<16; x++) {
-                      for(int z=0; z<16; z++) {
-                          int h = (int)(Math.sin(x*0.3)*Math.cos(z*0.3)*3 + 5);
-                          for(int y=0; y<h; y++) world.put(x+","+y+","+z, 1);
-                      }
+                  for(int x=0; x<16; x++) for(int z=0; z<16; z++) {
+                      int h = (int)(Math.sin(x*0.4)*Math.cos(z*0.4)*2 + 4);
+                      for(int y=0; y<h; y++) world.put(x+","+y+","+z, 1);
                   }
               }
-
+              public void setMove(float x, float z) { mvX = x; mvZ = z; }
               public void jump() { if(vy == 0) vy = 0.25f; }
-
               public void interact(boolean brk) {
-                  if(selectedBlock != null) {
-                      String key = selectedBlock[0]+","+selectedBlock[1]+","+selectedBlock[2];
-                      if(brk) world.remove(key);
-                      else {
-                          int nx = selectedBlock[0], ny = selectedBlock[1]+1, nz = selectedBlock[2];
-                          world.put(nx+","+ny+","+nz, 1);
-                      }
+                  if(sel != null) {
+                      if(brk) world.remove(sel[0]+","+sel[1]+","+sel[2]);
+                      else world.put(sel[0]+","+(sel[1]+1)+","+sel[2], 1);
                   }
               }
-
               public void onDrawFrame(GL10 g) {
-                  updatePhysics();
+                  update();
                   GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
-                  
-                  float lx = (float)(Math.cos(Math.toRadians(pitch))*Math.sin(Math.toRadians(yaw)));
-                  float ly = (float)(-Math.sin(Math.toRadians(pitch)));
-                  float lz = (float)(Math.cos(Math.toRadians(pitch))*Math.cos(Math.toRadians(yaw)));
-                  
+                  float lx = (float)(Math.cos(Math.toRadians(pitch))*Math.sin(Math.toRadians(yaw))),
+                        ly = (float)(-Math.sin(Math.toRadians(pitch))),
+                        lz = (float)(Math.cos(Math.toRadians(pitch))*Math.cos(Math.toRadians(yaw)));
                   Matrix.setLookAtM(view, 0, px, py + 1.6f, pz, px+lx, py+1.6f+ly, pz+lz, 0, 1, 0);
                   Matrix.multiplyMM(mvp, 0, proj, 0, view, 0);
-
-                  selectedBlock = null;
-                  // Простейший рейкастинг (поиск блока перед глазами)
+                  sel = null;
                   for(float d=0; d<5; d+=0.2f) {
-                      int tx = (int)Math.floor(px + lx*d), ty = (int)Math.floor(py+1.6f + ly*d), tz = (int)Math.floor(pz + lz*d);
-                      if(world.containsKey(tx+","+ty+","+tz)) {
-                          selectedBlock = new int[]{tx, ty, tz};
-                          break;
-                      }
+                      int tx=(int)Math.floor(px+lx*d), ty=(int)Math.floor(py+1.6f+ly*d), tz=(int)Math.floor(pz+lz*d);
+                      if(world.containsKey(tx+","+ty+","+tz)) { sel=new int[]{tx,ty,tz}; break; }
                   }
-
                   for(String key : world.keySet()) {
                       String[] pts = key.split(",");
-                      float x = Float.parseFloat(pts[0]), y = Float.parseFloat(pts[1]), z = Float.parseFloat(pts[2]);
-                      float[] model = new float[16], res = new float[16];
-                      Matrix.setIdentityM(model, 0); Matrix.translateM(model, 0, x, y, z);
-                      Matrix.multiplyMM(res, 0, mvp, 0, model, 0);
-                      
-                      boolean isSel = (selectedBlock != null && (int)x==selectedBlock[0] && (int)y==selectedBlock[1] && (int)z==selectedBlock[2]);
-                      block.draw(res, isSel);
+                      float x=Float.parseFloat(pts[0]), y=Float.parseFloat(pts[1]), z=Float.parseFloat(pts[2]);
+                      float[] m=new float[16], r=new float[16];
+                      Matrix.setIdentityM(m, 0); Matrix.translateM(m, 0, x, y, z);
+                      Matrix.multiplyMM(r, 0, mvp, 0, m, 0);
+                      block.draw(r, (sel!=null && (int)x==sel[0] && (int)y==sel[1] && (int)z==sel[2]));
                   }
               }
-
-              private void updatePhysics() {
+              private void update() {
+                  float s = (float)Math.sin(Math.toRadians(yaw)), c = (float)Math.cos(Math.toRadians(yaw));
+                  px += (mvX * c + mvZ * s) * 0.15f; pz += (mvZ * c - mvX * s) * 0.15f;
                   vy -= 0.015f; py += vy;
-                  int tx = (int)Math.floor(px), ty = (int)Math.floor(py), tz = (int)Math.floor(pz);
-                  if(world.containsKey(tx+","+ty+","+tz)) {
-                      py = ty + 1.0f; vy = 0;
-                  }
-                  if(py < -10) { px=5; py=15; pz=5; vy=0; } // Спавн при падении
+                  String k = (int)Math.floor(px)+","+(int)Math.floor(py)+","+(int)Math.floor(pz);
+                  if(world.containsKey(k)) { py=(int)Math.floor(py)+1.0f; vy=0; }
+                  if(py < -5) { px=8; py=10; pz=8; }
               }
-
               public void onSurfaceChanged(GL10 g, int w, int h) {
                   GLES20.glViewport(0,0,w,h);
-                  Matrix.perspectiveM(proj, 0, 80, (float)w/h, 0.1f, 100f);
+                  Matrix.perspectiveM(proj, 0, 75, (float)w/h, 0.1f, 100f);
               }
           }
           EOF
 
-          # --- BLOCK (3D Освещение + Обводка) ---
           cat > app/src/main/java/com/jsai/craft/Block.java << 'EOF'
           package com.jsai.craft;
           import android.opengl.GLES20;
           import java.nio.*;
-
           public class Block {
               private FloatBuffer vb;
-              private int program;
-              static float[] v = {
-                  0,1,1, 0,0,1, 1,1,1, 1,0,1, 1,1,0, 1,0,0, 0,1,0, 0,0,0, 0,1,1, 0,1,0, 1,1,1, 1,1,0, 0,0,1, 0,0,0, 1,0,1, 1,0,0
-              };
-
+              private int prg;
+              static float[] v = { 0,1,1, 0,0,1, 1,1,1, 1,0,1, 1,1,0, 1,0,0, 0,1,0, 0,0,0, 0,1,1, 0,1,0, 1,1,1, 1,1,0, 0,0,1, 0,0,0, 1,0,1, 1,0,0 };
               public Block() {
                   vb = ByteBuffer.allocateDirect(v.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(v);
                   vb.position(0);
-                  String vs = "attribute vec4 p; uniform mat4 m; varying vec3 pos; void main(){gl_Position=m*p; pos=p.xyz;}";
-                  String fs = "precision mediump float; varying vec3 pos; uniform vec3 col; void main(){" +
-                              "float d = dot(vec3(0.5,1.0,0.3), vec3(0.0,1.0,0.0));" + // Простое освещение грани
-                              "gl_FragColor = vec4(col * (pos.y*0.3+0.7), 1.0);}";
-                  int vsh = GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER);
-                  GLES20.glShaderSource(vsh, vs); GLES20.glCompileShader(vsh);
-                  int fsh = GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER);
-                  GLES20.glShaderSource(fsh, fs); GLES20.glCompileShader(fsh);
-                  program = GLES20.glCreateProgram();
-                  GLES20.glAttachShader(program, vsh); GLES20.glAttachShader(program, fsh);
-                  GLES20.glLinkProgram(program);
+                  String vs="attribute vec4 p; uniform mat4 m; varying vec3 pos; void main(){gl_Position=m*p; pos=p.xyz;}",
+                         fs="precision mediump float; varying vec3 pos; uniform vec3 c; void main(){gl_FragColor=vec4(c*(pos.y*0.3+0.7),1.0);}";
+                  int vsh=GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER); GLES20.glShaderSource(vsh,vs); GLES20.glCompileShader(vsh);
+                  int fsh=GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER); GLES20.glShaderSource(fsh,fs); GLES20.glCompileShader(fsh);
+                  prg=GLES20.glCreateProgram(); GLES20.glAttachShader(prg,vsh); GLES20.glAttachShader(prg,fsh); GLES20.glLinkProgram(prg);
               }
-
-              public void draw(float[] m, boolean sel) {
-                  GLES20.glUseProgram(program);
-                  int ph = GLES20.glGetAttribLocation(program, "p");
-                  GLES20.glEnableVertexAttribArray(ph);
-                  GLES20.glVertexAttribPointer(ph, 3, GLES20.GL_FLOAT, false, 0, vb);
-                  GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "m"), 1, false, m, 0);
-                  
-                  int ch = GLES20.glGetUniformLocation(program, "col");
-                  GLES20.glUniform3f(ch, 0.4f, 0.7f, 0.3f); // Цвет земли
-                  GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 16);
-                  
-                  if(sel) { // Рисуем обводку
-                      GLES20.glUniform3f(ch, 1.0f, 1.0f, 1.0f);
-                      GLES20.glLineWidth(5.0f);
-                      GLES20.glDrawArrays(GLES20.GL_LINE_LOOP, 0, 16);
-                  }
+              public void draw(float[] m, boolean s) {
+                  GLES20.glUseProgram(prg);
+                  int ph=GLES20.glGetAttribLocation(prg,"p"); GLES20.glEnableVertexAttribArray(ph);
+                  GLES20.glVertexAttribPointer(ph,3,GLES20.GL_FLOAT,false,0,vb);
+                  GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(prg,"m"),1,false,m,0);
+                  int ch=GLES20.glGetUniformLocation(prg,"c");
+                  GLES20.glUniform3f(ch, s?1:0.4f, s?1:0.7f, s?1:0.3f);
+                  GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,16);
               }
           }
           EOF
 
-          # Ресурсы
-          cat > app/src/main/res/values/strings.xml << 'EOF'
-          <resources><string name="app_name">JsAI Craft PRO</string></resources>
-          EOF
-          cat > app/src/main/res/values/themes.xml << 'EOF'
-          <resources><style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar"><item name="android:windowFullscreen">true</item></style></resources>
-          EOF
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="JsAI Craft PRO" android:theme="@style/AppTheme">
-                  <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape">
+              <application android:label="JsAI Craft Turbo" android:hardwareAccelerated="true">
+                  <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
               </application>
           </manifest>
           EOF
 
-      - name: Build APK
+      - name: Build APK (Turbo Mode)
         run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
-          unzip -q gradle-8.5-bin.zip
-          export PATH="$PWD/gradle-8.5/bin:$PATH"
-          gradle wrapper --gradle-version 8.5
-          ./gradlew assembleDebug --no-daemon
+          # Используем обертку Gradle с максимальными флагами скорости
+          ./gradlew assembleDebug --no-daemon --parallel --build-cache --configure-on-demand
 
-      - name: Upload Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI_Craft_PRO
+          name: JsAI_Craft_Turbo
           path: app/build/outputs/apk/debug/app-debug.apk
