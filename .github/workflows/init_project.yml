@@ -49,14 +49,12 @@ jobs:
           import android.view.Window;
           import android.view.WindowManager;
           public class MainActivity extends Activity {
-              private GameView view;
               @Override
               protected void onCreate(Bundle s) {
                   super.onCreate(s);
                   requestWindowFeature(Window.FEATURE_NO_TITLE);
                   getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                  view = new GameView(this);
-                  setContentView(view);
+                  setContentView(new GameView(this));
               }
           }
           EOF
@@ -69,25 +67,25 @@ jobs:
           import android.view.MotionEvent;
 
           public class GameView extends GLSurfaceView {
-              private final Renderer renderer;
+              private final CraftRenderer craftRenderer;
               private float lastX, lastY;
 
               public GameView(Context context) {
                   super(context);
                   setEGLContextClientVersion(2);
-                  renderer = new Renderer();
-                  setRenderer(renderer);
+                  craftRenderer = new CraftRenderer();
+                  setRenderer(craftRenderer);
                   setRenderMode(RENDERMODE_CONTINUOUSLY);
               }
 
+              @Override
               public boolean onTouchEvent(MotionEvent e) {
                   float x = e.getX(), y = e.getY();
                   if(e.getAction() == MotionEvent.ACTION_MOVE) {
-                      // Вращение камеры (только yaw/pitch)
-                      renderer.yaw   += (x - lastX) * 0.25f;
-                      renderer.pitch += (y - lastY) * 0.25f;
-                      if(renderer.pitch > 89f) renderer.pitch = 89f;
-                      if(renderer.pitch < -89f) renderer.pitch = -89f;
+                      craftRenderer.yaw   += (x - lastX) * 0.25f;
+                      craftRenderer.pitch += (y - lastY) * 0.25f;
+                      if(craftRenderer.pitch > 89f) craftRenderer.pitch = 89f;
+                      if(craftRenderer.pitch < -89f) craftRenderer.pitch = -89f;
                   }
                   lastX = x; lastY = y;
                   return true;
@@ -95,8 +93,8 @@ jobs:
           }
           EOF
 
-          # --- RENDERER (Камера FPS) ---
-          cat > app/src/main/java/com/jsai/craft/Renderer.java << 'EOF'
+          # --- CRAFT RENDERER (Камера FPS) ---
+          cat > app/src/main/java/com/jsai/craft/CraftRenderer.java << 'EOF'
           package com.jsai.craft;
           import android.opengl.GLES20;
           import android.opengl.GLSurfaceView;
@@ -104,8 +102,8 @@ jobs:
           import javax.microedition.khronos.egl.EGLConfig;
           import javax.microedition.khronos.opengles.GL10;
 
-          public class Renderer implements GLSurfaceView.Renderer {
-              public float yaw=20f, pitch=10f;
+          public class CraftRenderer implements GLSurfaceView.Renderer {
+              public float yaw = 0f, pitch = 0f;
               private final float[] proj = new float[16], mv = new float[16], mvp = new float[16];
               private Block block;
               
@@ -119,21 +117,18 @@ jobs:
               public void onDrawFrame(GL10 g) {
                   GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
 
-                  // Расчет вектора взгляда FPS камеры
                   float lx = (float)(Math.cos(Math.toRadians(pitch))*Math.sin(Math.toRadians(yaw)));
                   float ly = (float)(-Math.sin(Math.toRadians(pitch)));
                   float lz = (float)(Math.cos(Math.toRadians(pitch))*Math.cos(Math.toRadians(yaw)));
 
-                  Matrix.setLookAtM(mv, 0, 0, 1.5f, 5, 0+lx, 1.5f+ly, 5+lz, 0, 1, 0);
+                  Matrix.setLookAtM(mv, 0, 0, 1.5f, 5, lx, 1.5f+ly, 5+lz, 0, 1, 0);
                   Matrix.multiplyMM(mvp, 0, proj, 0, mv, 0);
 
-                  // Генерация пола из блоков БЕЗ ПРОМЕЖУТКОВ
                   for(int x=-6; x<6; x++) {
                       for(int z=-6; z<6; z++) {
                           float[] model = new float[16];
                           Matrix.setIdentityM(model, 0);
-                          Matrix.translateM(model, 0, x, -1.5f, z);
-                          
+                          Matrix.translateM(model, 0, x, -1.0f, z);
                           float[] finalMat = new float[16];
                           Matrix.multiplyMM(finalMat, 0, mvp, 0, model, 0);
                           block.draw(finalMat);
@@ -142,13 +137,13 @@ jobs:
               }
 
               public void onSurfaceChanged(GL10 g, int w, int h) {
-                  GLES20.glViewport(0,0,w,h);
+                  GLES20.glViewport(0, 0, w, h);
                   Matrix.perspectiveM(proj, 0, 75, (float)w/h, 0.1f, 100f);
               }
           }
           EOF
 
-          # --- BLOCK WITH NOISE SHADER (3D Текстура) ---
+          # --- BLOCK ---
           cat > app/src/main/java/com/jsai/craft/Block.java << 'EOF'
           package com.jsai.craft;
           import android.opengl.GLES20;
@@ -157,33 +152,22 @@ jobs:
           public class Block {
               private FloatBuffer vb;
               private int program;
-              
-              // Вершины куба размером ровно 1.0
               static float[] v = new float[]{
-                 -0.5f, 0.5f,-0.5f,  -0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f,  0.5f, 0.5f,-0.5f,
-                 -0.5f, 0.5f, 0.5f,  0.5f, 0.5f, 0.5f,  0.5f,-0.5f, 0.5f, -0.5f,-0.5f, 0.5f,
-                 -0.5f, 0.5f, 0.5f, -0.5f, 0.5f,-0.5f,  0.5f, 0.5f,-0.5f,  0.5f, 0.5f, 0.5f,
-                 -0.5f,-0.5f, 0.5f,  0.5f,-0.5f, 0.5f,  0.5f,-0.5f,-0.5f, -0.5f,-0.5f,-0.5f,
-                 -0.5f, 0.5f, 0.5f,  0.5f, 0.5f, 0.5f,  0.5f, 0.5f,-0.5f, -0.5f, 0.5f,-0.5f,
-                 -0.5f,-0.5f, 0.5f, -0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f,  0.5f,-0.5f, 0.5f
+                 -0.5f,0.5f,-0.5f, -0.5f,-0.5f,-0.5f, 0.5f,-0.5f,-0.5f, 0.5f,0.5f,-0.5f,
+                 -0.5f,0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,-0.5f, 0.5f, -0.5f,-0.5f, 0.5f,
+                 -0.5f,0.5f, 0.5f, -0.5f,0.5f,-0.5f, 0.5f,0.5f,-0.5f, 0.5f,0.5f, 0.5f,
+                 -0.5f,-0.5f,0.5f, 0.5f,-0.5f, 0.5f, 0.5f,-0.5f,-0.5f, -0.5f,-0.5f,-0.5f,
+                 -0.5f,0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,-0.5f, -0.5f,0.5f,-0.5f,
+                 -0.5f,-0.5f,0.5f, -0.5f,-0.5f,-0.5f, 0.5f,-0.5f,-0.5f, 0.5f,-0.5f, 0.5f
               };
               static short[] idx = {0,1,2,0,2,3,4,5,6,4,6,7,8,9,10,8,10,11,12,13,14,12,14,15,16,17,18,16,18,19,20,21,22,20,22,23};
 
               public Block(){
-                  ByteBuffer bb = ByteBuffer.allocateDirect(v.length*4).order(ByteOrder.nativeOrder());
-                  vb = bb.asFloatBuffer(); vb.put(v); vb.position(0);
-                  
-                  // ШЕЙДЕР С ШУМОМ (Генерация текстуры на лету)
-                  String vs="attribute vec4 p; uniform mat4 mvp; varying vec3 pos;" +
-                           "void main(){gl_Position=mvp*p;pos=p.xyz;}";
-                  String fs="precision mediump float;varying vec3 pos;" +
-                           "float hash(vec3 p){p=fract(p*0.3183099+0.1);" +
-                           "p*=17.0;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}" +
-                           "void main(){" +
-                           "vec3 col=mix(vec3(0.5,0.45,0.35),vec3(0.7,0.65,0.55),hash(pos*8.0));" +
-                           "col*=0.9+0.1*hash(pos*50.0);" + // Микро-зернистость
-                           "gl_FragColor=vec4(col,1.0);}";
-
+                  vb = ByteBuffer.allocateDirect(v.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(v);
+                  vb.position(0);
+                  String vs="attribute vec4 p; uniform mat4 mvp; varying vec3 pos; void main(){gl_Position=mvp*p;pos=p.xyz;}";
+                  String fs="precision mediump float;varying vec3 pos; float hash(vec3 p){p=fract(p*0.3183+0.1);p*=17.0;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}" +
+                           "void main(){vec3 col=mix(vec3(0.4,0.35,0.25),vec3(0.6,0.55,0.45),hash(pos*8.0));gl_FragColor=vec4(col,1.0);}";
                   int vsID=GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER);
                   GLES20.glShaderSource(vsID,vs);GLES20.glCompileShader(vsID);
                   int fsID=GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER);
@@ -199,14 +183,14 @@ jobs:
                   GLES20.glEnableVertexAttribArray(h);
                   GLES20.glVertexAttribPointer(h,3,GLES20.GL_FLOAT,false,0,vb);
                   GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program,"mvp"),1,false,mat,0);
-                  
-                  ShortBuffer ib=ByteBuffer.allocateDirect(idx.length*2).order(ByteOrder.nativeOrder()).asShortBuffer().put(idx);ib.position(0);
+                  ShortBuffer ib=ByteBuffer.allocateDirect(idx.length*2).order(ByteOrder.nativeOrder()).asShortBuffer().put(idx);
+                  ib.position(0);
                   GLES20.glDrawElements(GLES20.GL_TRIANGLES,idx.length,GLES20.GL_UNSIGNED_SHORT,ib);
               }
           }
           EOF
 
-          # Manifest & Resources
+          # Manifest
           cat > app/src/main/res/values/strings.xml << 'EOF'
           <resources><string name="app_name">Craft Master</string></resources>
           EOF
@@ -227,7 +211,6 @@ jobs:
           </manifest>
           EOF
 
-      # Сборка через твой рабочий метод
       - name: Build APK
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
