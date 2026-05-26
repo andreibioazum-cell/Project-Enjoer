@@ -1,4 +1,4 @@
-name: JsAI_Craft_V12_MEGA_ULTIMATE
+name: JsAI_Craft_V12_FIXED
 on: [push, workflow_dispatch]
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
           EOF
 
           echo "android.useAndroidX=true" > gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m" >> gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
           echo "include ':app'" > settings.gradle
           cat > build.gradle << 'EOF'
           buildscript {
@@ -62,14 +62,6 @@ jobs:
                   applicationId 'com.jsai.craft'
                   minSdk 24
                   targetSdk 34
-                  ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
-              }
-              buildTypes {
-                  release {
-                      minifyEnabled true
-                      shrinkResources true
-                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
-                  }
               }
           }
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
@@ -99,19 +91,15 @@ jobs:
                   android:layout_alignParentTop="true" android:layout_alignParentRight="true"
                   android:layout_margin="10dp" android:text="⚙" android:textSize="24sp"/>
 
-              <ScrollView android:id="@+id/settingsPanel" android:layout_width="300dp" android:layout_height="wrap_content"
+              <ScrollView android:id="@+id/settingsPanel" android:layout_width="280dp" android:layout_height="wrap_content"
                   android:layout_alignParentTop="true" android:layout_alignParentRight="true"
-                  android:layout_margin="70dp" android:background="#DD000000" android:padding="10dp" android:visibility="gone">
+                  android:layout_marginTop="70dp" android:layout_marginRight="10dp"
+                  android:background="#DD000000" android:padding="10dp" android:visibility="gone">
                   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                       <TextView android:text="RENDER DISTANCE" android:textColor="#FFF" android:textStyle="bold"/>
                       <SeekBar android:id="@+id/seekRender" android:layout_width="match_parent" android:layout_height="wrap_content"
-                          android:max="64" android:progress="24"/>
-                      <TextView android:id="@+id/txtRender" android:text="24 chunks" android:textColor="#FFF"/>
-                      
-                      <TextView android:text="MEMORY (MB)" android:textColor="#FFF" android:textStyle="bold" android:layout_marginTop="10dp"/>
-                      <SeekBar android:id="@+id/seekMemory" android:layout_width="match_parent" android:layout_height="wrap_content"
-                          android:max="2048" android:progress="512"/>
-                      <TextView android:id="@+id/txtMemory" android:text="512 MB" android:textColor="#FFF"/>
+                          android:max="48" android:progress="20"/>
+                      <TextView android:id="@+id/txtRender" android:text="20 chunks" android:textColor="#FFF"/>
                       
                       <CheckBox android:id="@+id/chkFastLoad" android:layout_width="match_parent" android:layout_height="wrap_content"
                           android:text="Fast Chunk Loading" android:textColor="#FFF" android:checked="true"/>
@@ -121,6 +109,9 @@ jobs:
                       
                       <CheckBox android:id="@+id/chkVillages" android:layout_width="match_parent" android:layout_height="wrap_content"
                           android:text="Generate Villages" android:textColor="#FFF" android:checked="true"/>
+                      
+                      <CheckBox android:id="@+id/chkFps" android:layout_width="match_parent" android:layout_height="wrap_content"
+                          android:text="Show FPS" android:textColor="#FFF" android:checked="true"/>
                   </LinearLayout>
               </ScrollView>
 
@@ -158,8 +149,9 @@ jobs:
               private GameView gv;
               private Button btnGrass, btnStone, btnDirt;
               private View settingsPanel;
-              private TextView txtFPS, txtRender, txtMemory;
-              private SeekBar seekRender, seekMemory;
+              private TextView txtFPS, txtRender;
+              private SeekBar seekRender;
+              private CheckBox chkFps;
               
               @Override
               protected void onCreate(Bundle s) {
@@ -172,9 +164,8 @@ jobs:
                   txtFPS = findViewById(R.id.txtFPS);
                   settingsPanel = findViewById(R.id.settingsPanel);
                   txtRender = findViewById(R.id.txtRender);
-                  txtMemory = findViewById(R.id.txtMemory);
                   seekRender = findViewById(R.id.seekRender);
-                  seekMemory = findViewById(R.id.seekMemory);
+                  chkFps = findViewById(R.id.chkFps);
                   
                   findViewById(R.id.btnSettings).setOnClickListener(v -> 
                       settingsPanel.setVisibility(settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
@@ -183,15 +174,6 @@ jobs:
                       public void onProgressChanged(SeekBar s, int p, boolean u) {
                           gv.renderer.renderDistance = Math.max(8, p);
                           txtRender.setText(gv.renderer.renderDistance + " chunks");
-                          gv.renderer.rebuildAllChunks();
-                      }
-                      public void onStartTrackingTouch(SeekBar s) {}
-                      public void onStopTrackingTouch(SeekBar s) {}
-                  });
-                  
-                  seekMemory.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                      public void onProgressChanged(SeekBar s, int p, boolean u) {
-                          txtMemory.setText(Math.max(256, p) + " MB");
                       }
                       public void onStartTrackingTouch(SeekBar s) {}
                       public void onStopTrackingTouch(SeekBar s) {}
@@ -200,6 +182,7 @@ jobs:
                   ((CheckBox)findViewById(R.id.chkFastLoad)).setOnCheckedChangeListener((b,c) -> gv.renderer.fastLoad = c);
                   ((CheckBox)findViewById(R.id.chkMobs)).setOnCheckedChangeListener((b,c) -> gv.renderer.mobsEnabled = c);
                   ((CheckBox)findViewById(R.id.chkVillages)).setOnCheckedChangeListener((b,c) -> gv.renderer.villagesEnabled = c);
+                  chkFps.setOnCheckedChangeListener((b,c) -> txtFPS.setVisibility(c ? View.VISIBLE : View.GONE));
                   
                   findViewById(R.id.btnJump).setOnClickListener(v -> gv.renderer.jump());
                   findViewById(R.id.btnBreak).setOnTouchListener((v, e) -> {
@@ -270,7 +253,7 @@ jobs:
 
               public GameView(Context ctx, GLSurfaceView gl) {
                   gl.setEGLContextClientVersion(3);
-                  gl.setEGLConfigChooser(8, 8, 8, 8, 24, 8);
+                  gl.setEGLConfigChooser(8, 8, 8, 8, 16, 0);
                   renderer = new CraftRenderer();
                   gl.setRenderer(renderer);
                   gl.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
@@ -320,7 +303,7 @@ jobs:
               public float breakProgress = 0, placeProgress = 0;
               private long breakStart = 0;
               private static final long BREAK_TIME = 1500;
-              public int renderDistance = 24;
+              public int renderDistance = 20;
               public boolean fastLoad = true, mobsEnabled = true, villagesEnabled = true;
               
               private List<Mob> mobs = new ArrayList<>();
@@ -335,17 +318,27 @@ jobs:
                   GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA);
                   block = new Block();
                   
-                  for(int x=0; x<128; x++) for(int z=0; z<128; z++) {
-                      int h = (int)(Math.sin(x*0.12)*Math.cos(z*0.12)*4 + 10);
-                      for(int y=0; y<h; y++) setB(x,y,z,(byte)(y==h-1?1:y<h-3?2:3));
-                      
-                      if(rand.nextInt(100) < 3) {
-                          for(int ty=h; ty<h+5; ty++) setB(x,ty,z,(byte)4);
-                          for(int lx=-2; lx<=2; lx++) for(int lz=-2; lz<=2; lz++) 
-                              if(Math.abs(lx)+Math.abs(lz)<4) setB(x+lx,h+5,z+lz,(byte)5);
+                  // Генерация мира
+                  for(int x=0; x<128; x++) {
+                      for(int z=0; z<128; z++) {
+                          int h = (int)(Math.sin(x*0.12)*Math.cos(z*0.12)*4 + 10);
+                          for(int y=0; y<h; y++) {
+                              setB(x,y,z,(byte)(y==h-1?1:y<h-3?2:3));
+                          }
+                          
+                          // Деревья
+                          if(rand.nextInt(100) < 3 && h < 20) {
+                              for(int ty=h; ty<h+5; ty++) setB(x,ty,z,(byte)4);
+                              for(int lx=-2; lx<=2; lx++) {
+                                  for(int lz=-2; lz<=2; lz++) {
+                                      if(Math.abs(lx)+Math.abs(lz)<4) setB(x+lx,h+5,z+lz,(byte)5);
+                                  }
+                              }
+                          }
                       }
                   }
                   
+                  // Деревни
                   if(villagesEnabled) {
                       for(int i=0; i<3; i++) {
                           int vx = 20 + rand.nextInt(80), vz = 20 + rand.nextInt(80);
@@ -353,19 +346,22 @@ jobs:
                       }
                   }
                   
+                  // Мобы
                   if(mobsEnabled) {
-                      for(int i=0; i<15; i++) {
+                      for(int i=0; i<10; i++) {
                           mobs.add(new Mob(rand.nextInt(128), 20, rand.nextInt(128)));
                       }
                   }
               }
               
               private void generateVillage(int cx, int cz) {
-                  for(int hx=-3; hx<=3; hx++) for(int hz=-3; hz<=3; hz++) {
-                      if(Math.abs(hx)+Math.abs(hz) > 5) continue;
-                      int h = getHeight(cx+hx, cz+hz);
-                      for(int y=h; y<h+4; y++) setB(cx+hx, y, cz+hz, (byte)6);
-                      villagers.add(new Villager(cx+hx, h+4, cz+hz));
+                  for(int hx=-3; hx<=3; hx++) {
+                      for(int hz=-3; hz<=3; hz++) {
+                          if(Math.abs(hx)+Math.abs(hz) > 5) continue;
+                          int h = getHeight(cx+hx, cz+hz);
+                          for(int y=h; y<h+4; y++) setB(cx+hx, y, cz+hz, (byte)6);
+                          if(hx == 0 && hz == 0) villagers.add(new Villager(cx, h+4, cz));
+                      }
                   }
               }
               
@@ -408,8 +404,6 @@ jobs:
                       }
                   }
               }
-              
-              public void rebuildAllChunks() {}
 
               public void onDrawFrame(GL10 g) {
                   update();
@@ -422,6 +416,7 @@ jobs:
                   Matrix.setLookAtM(view, 0, px, py+1.6f, pz, px+lx, py+1.6f+ly, pz+lz, 0, 1, 0);
                   Matrix.multiplyMM(mvp, 0, proj, 0, view, 0);
 
+                  // Raycast
                   sel=null; plc=null;
                   for(float d=0; d<6; d+=0.1f) {
                       int tx=(int)Math.floor(px+lx*d), ty=(int)Math.floor(py+1.6f+ly*d), tz=(int)Math.floor(pz+lz*d);
@@ -445,10 +440,12 @@ jobs:
                   
                   if(placeProgress < 1.0f) placeProgress = Math.min(1.0f, placeProgress + 0.08f);
 
+                  // Рендер блоков
                   int r = renderDistance;
-                  for(int x=(int)px-r; x<(int)px+r; x++) {
-                      for(int z=(int)pz-r; z<(int)pz+r; z++) {
-                          for(int y=0; y<64; y++) {
+                  int rendered = 0;
+                  for(int x=(int)px-r; x<(int)px+r && rendered<2000; x++) {
+                      for(int z=(int)pz-r; z<(int)pz+r && rendered<2000; z++) {
+                          for(int y=Math.max(0,(int)py-r); y<Math.min(64,(int)py+r) && rendered<2000; y++) {
                               byte t = getB(x,y,z);
                               if(t>0) {
                                   float dx = x - px, dy = y - py, dz = z - pz;
@@ -481,29 +478,35 @@ jobs:
                                   Matrix.translateM(m,0,-0.5f,-0.5f,-0.5f);
                                   Matrix.multiplyMM(res,0,mvp,0,m,0);
                                   block.draw(res, isSelected, t, alpha);
+                                  rendered++;
                               }
                           }
                       }
                   }
                   
-                  for(Mob mob : mobs) {
-                      mob.update();
-                      float[] m=new float[16], res=new float[16];
-                      Matrix.setIdentityM(m,0); 
-                      Matrix.translateM(m,0,mob.x,mob.y,mob.z); 
-                      Matrix.scaleM(m,0,0.5f,1.0f,0.5f);
-                      Matrix.multiplyMM(res,0,mvp,0,m,0);
-                      block.draw(res, false, (byte)7, 1.0f);
+                  // Рендер мобов
+                  if(mobsEnabled) {
+                      for(Mob mob : mobs) {
+                          mob.update();
+                          float[] m=new float[16], res=new float[16];
+                          Matrix.setIdentityM(m,0); 
+                          Matrix.translateM(m,0,mob.x,mob.y,mob.z); 
+                          Matrix.scaleM(m,0,0.5f,1.0f,0.5f);
+                          Matrix.multiplyMM(res,0,mvp,0,m,0);
+                          block.draw(res, false, (byte)7, 1.0f);
+                      }
                   }
                   
-                  for(Villager vil : villagers) {
-                      vil.update();
-                      float[] m=new float[16], res=new float[16];
-                      Matrix.setIdentityM(m,0); 
-                      Matrix.translateM(m,0,vil.x,vil.y,vil.z); 
-                      Matrix.scaleM(m,0,0.6f,1.8f,0.6f);
-                      Matrix.multiplyMM(res,0,mvp,0,m,0);
-                      block.draw(res, false, (byte)8, 1.0f);
+                  // Рендер жителей
+                  if(villagesEnabled) {
+                      for(Villager vil : villagers) {
+                          float[] m=new float[16], res=new float[16];
+                          Matrix.setIdentityM(m,0); 
+                          Matrix.translateM(m,0,vil.x,vil.y,vil.z); 
+                          Matrix.scaleM(m,0,0.6f,1.8f,0.6f);
+                          Matrix.multiplyMM(res,0,mvp,0,m,0);
+                          block.draw(res, false, (byte)8, 1.0f);
+                      }
                   }
               }
 
@@ -525,22 +528,29 @@ jobs:
               
               public void onSurfaceChanged(GL10 g, int w, int h) { 
                   GLES30.glViewport(0,0,w,h); 
-                  Matrix.perspectiveM(proj, 0, 70, (float)w/h, 0.1f, 200f); 
+                  Matrix.perspectiveM(proj, 0, 70, (float)w/h, 0.1f, 150f); 
               }
               
               class Mob {
                   float x, y, z, vx, vz;
-                  Mob(float x, float y, float z) { this.x=x; this.y=y; this.z=z; vx=rand.nextFloat()-0.5f; vz=rand.nextFloat()-0.5f; }
+                  Mob(float x, float y, float z) { 
+                      this.x=x; this.y=y; this.z=z; 
+                      vx=(rand.nextFloat()-0.5f)*0.1f; 
+                      vz=(rand.nextFloat()-0.5f)*0.1f; 
+                  }
                   void update() { 
-                      x+=vx*0.05f; z+=vz*0.05f; 
-                      if(rand.nextInt(100)<2) { vx=rand.nextFloat()-0.5f; vz=rand.nextFloat()-0.5f; }
+                      x+=vx; z+=vz; 
+                      if(rand.nextInt(100)<2) { 
+                          vx=(rand.nextFloat()-0.5f)*0.1f; 
+                          vz=(rand.nextFloat()-0.5f)*0.1f; 
+                      }
+                      if(x<0||x>127||z<0||z>127) { vx=-vx; vz=-vz; }
                   }
               }
               
               class Villager {
                   float x, y, z;
                   Villager(float x, float y, float z) { this.x=x; this.y=y; this.z=z; }
-                  void update() {}
               }
           }
           EOF
@@ -563,7 +573,7 @@ jobs:
                   String vs="#version 300 es\n" +
                             "layout(location=0) in vec4 p; uniform mat4 m; out vec3 vP; void main(){gl_Position=m*p; vP=p.xyz;}",
                          fs="#version 300 es\n" +
-                            "precision highp float; in vec3 vP; uniform vec3 c; uniform float a; out vec4 fragColor; " +
+                            "precision mediump float; in vec3 vP; uniform vec3 c; uniform float a; out vec4 fragColor; " +
                             "void main(){float l=clamp(vP.y*0.35+0.65,0.4,1.0); fragColor=vec4(c*l,a);}";
                   
                   int vsh=GLES30.glCreateShader(GLES30.GL_VERTEX_SHADER); 
@@ -614,8 +624,8 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-feature android:glEsVersion="0x00030000" android:required="true"/>
-              <application android:label="JsAI Craft MEGA" android:hardwareAccelerated="true" android:largeHeap="true">
-                  <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape" android:configChanges="orientation|screenSize">
+              <application android:label="JsAI Craft MEGA" android:hardwareAccelerated="true">
+                  <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
               </application>
@@ -628,10 +638,10 @@ jobs:
           unzip -q gradle-8.5-bin.zip
           export PATH="$PWD/gradle-8.5/bin:$PATH"
           gradle wrapper --gradle-version 8.5
-          ./gradlew assembleDebug --no-daemon --parallel --build-cache --max-workers=4
+          ./gradlew assembleDebug --no-daemon --parallel --build-cache
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI_Craft_MEGA
+          name: JsAI_Craft_FIXED
           path: app/build/outputs/apk/debug/app-debug.apk
