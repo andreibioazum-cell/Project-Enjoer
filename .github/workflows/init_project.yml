@@ -1,4 +1,4 @@
-name: JsAI_Craft_V4_Final
+name: JsAI_Craft_V5_Professional
 on: [push, workflow_dispatch]
 
 jobs:
@@ -20,14 +20,26 @@ jobs:
           mkdir -p app/src/main/java/com/jsai/craft
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
 
+          # Стили для джойстика (Круглые)
+          cat > app/src/main/res/drawable/joy_bg.xml << 'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+              <solid android:color="#22FFFFFF"/><stroke android:width="2dp" android:color="#44FFFFFF"/>
+          </shape>
+          EOF
+          cat > app/src/main/res/drawable/joy_handle.xml << 'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+              <solid android:color="#66FFFFFF"/>
+          </shape>
+          EOF
+
+          # Настройки Gradle
           cat > gradle.properties << 'EOF'
           android.useAndroidX=true
           android.enableJetifier=true
-          org.gradle.jvmargs=-Xmx5120m
-          org.gradle.parallel=true
+          org.gradle.jvmargs=-Xmx4096m
           EOF
-
           echo "include ':app'" > settings.gradle
           cat > build.gradle << 'EOF'
           buildscript {
@@ -36,7 +48,6 @@ jobs:
           }
           allprojects { repositories { google(); mavenCentral() } }
           EOF
-          
           cat > app/build.gradle << 'EOF'
           plugins { id 'com.android.application' }
           android {
@@ -47,7 +58,7 @@ jobs:
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           EOF
 
-          # --- UI (Уменьшенный джойстик, серый прицел) ---
+          # --- UI LAYOUT ---
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent" android:layout_height="match_parent">
@@ -55,32 +66,31 @@ jobs:
                   android:layout_width="match_parent" android:layout_height="match_parent" />
               
               <FrameLayout android:id="@+id/joyZone"
-                  android:layout_width="140dp" android:layout_height="140dp"
-                  android:layout_alignParentBottom="true" android:layout_margin="15dp"
-                  android:background="#11FFFFFF">
+                  android:layout_width="120dp" android:layout_height="120dp"
+                  android:layout_alignParentBottom="true" android:layout_margin="20dp"
+                  android:background="@drawable/joy_bg">
                   <View android:id="@+id/joyHandle"
                       android:layout_width="40dp" android:layout_height="40dp"
-                      android:layout_gravity="center" android:background="#44FFFFFF"/>
+                      android:layout_gravity="center" android:background="@drawable/joy_handle"/>
               </FrameLayout>
 
-              <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+              <RelativeLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
                   android:layout_alignParentBottom="true" android:layout_alignParentRight="true"
-                  android:layout_margin="10dp" android:orientation="vertical" android:gravity="center">
-                  <Button android:id="@+id/btnJump" android:layout_width="60dp" android:layout_height="60dp" 
-                      android:text="JMP" android:layout_marginBottom="5dp" />
-                  <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content">
-                      <Button android:id="@+id/btnBreak" android:layout_width="65dp" android:layout_height="65dp" 
-                          android:text="BRK" android:layout_marginRight="5dp"/>
-                      <Button android:id="@+id/btnPlace" android:layout_width="65dp" android:layout_height="65dp" 
-                          android:text="PLC" />
-                  </LinearLayout>
-              </LinearLayout>
+                  android:layout_margin="15dp">
+                  <Button android:id="@+id/btnBreak" android:layout_width="70dp" android:layout_height="70dp" 
+                      android:text="BRK" android:layout_marginBottom="10dp" />
+                  <Button android:id="@+id/btnPlace" android:layout_width="70dp" android:layout_height="70dp" 
+                      android:text="PLC" android:layout_toRightOf="@id/btnBreak" android:layout_marginLeft="10dp" />
+                  <Button android:id="@+id/btnJump" android:layout_width="150dp" android:layout_height="80dp" 
+                      android:text="JUMP" android:layout_below="@id/btnBreak" android:layout_centerHorizontal="true" />
+              </RelativeLayout>
 
-              <View android:layout_width="4dp" android:layout_height="4dp" 
+              <View android:layout_width="6dp" android:layout_height="6dp" 
                   android:background="#888888" android:layout_centerInParent="true" />
           </RelativeLayout>
           EOF
 
+          # --- MAIN ACTIVITY ---
           cat > app/src/main/java/com/jsai/craft/MainActivity.java << 'EOF'
           package com.jsai.craft;
           import android.app.Activity;
@@ -105,8 +115,11 @@ jobs:
                           gv.renderer.setMove(0, 0);
                       } else {
                           float dx = e.getX() - v.getWidth()/2f, dy = e.getY() - v.getHeight()/2f;
-                          jH.setTranslationX(dx/3f); jH.setTranslationY(dy/3f);
-                          gv.renderer.setMove(dx/60f, -dy/60f); // Убрана инверсия
+                          float dist = (float)Math.sqrt(dx*dx + dy*dy);
+                          float max = v.getWidth()/2f;
+                          if(dist > max) { dx = dx/dist*max; dy = dy/dist*max; }
+                          jH.setTranslationX(dx); jH.setTranslationY(dy);
+                          gv.renderer.setMove(dx/max, -dy/max);
                       }
                       return true;
                   });
@@ -114,6 +127,7 @@ jobs:
           }
           EOF
 
+          # --- GAME VIEW ---
           cat > app/src/main/java/com/jsai/craft/GameView.java << 'EOF'
           package com.jsai.craft;
           import android.content.Context;
@@ -129,10 +143,10 @@ jobs:
                   gl.setOnTouchListener((v, e) -> {
                       if(e.getX() > v.getWidth()/2f) {
                           if(e.getAction() == MotionEvent.ACTION_MOVE) {
-                              renderer.yaw -= (e.getX() - lx) * 0.3f; // Правильный Yaw
+                              renderer.yaw -= (e.getX() - lx) * 0.3f;
                               renderer.pitch += (e.getY() - ly) * 0.3f;
-                              if(renderer.pitch > 85) renderer.pitch = 85;
-                              if(renderer.pitch < -85) renderer.pitch = -85;
+                              if(renderer.pitch > 88) renderer.pitch = 88;
+                              if(renderer.pitch < -88) renderer.pitch = -88;
                           }
                           lx = e.getX(); ly = e.getY();
                       }
@@ -142,6 +156,7 @@ jobs:
           }
           EOF
 
+          # --- RENDERER (Исправленная физика и движение) ---
           cat > app/src/main/java/com/jsai/craft/CraftRenderer.java << 'EOF'
           package com.jsai.craft;
           import android.opengl.GLES20;
@@ -152,11 +167,11 @@ jobs:
           import javax.microedition.khronos.opengles.GL10;
           public class CraftRenderer implements GLSurfaceView.Renderer {
               public float yaw = 0, pitch = 0;
-              private float px = 8, py = 12, pz = 8, vy = 0, mvX = 0, mvZ = 0;
+              private float px = 8, py = 15, pz = 8, vy = 0, mvX = 0, mvZ = 0;
               private final float[] proj = new float[16], view = new float[16], mvp = new float[16];
               private Block block;
               private ConcurrentHashMap<String, Integer> world = new ConcurrentHashMap<>();
-              private int[] sel = null, placePos = null;
+              private int[] sel = null, place = null;
 
               public void onSurfaceCreated(GL10 g, EGLConfig c) {
                   GLES20.glClearColor(0.5f, 0.8f, 1.0f, 1.0f);
@@ -168,12 +183,15 @@ jobs:
                   }
               }
               public void setMove(float x, float z) { mvX = x; mvZ = z; }
-              public void jump() { if(Math.abs(vy) < 0.01f) vy = 0.18f; } // Прыжок ниже
+              public void jump() { 
+                  // Проверка коллизии снизу для прыжка (Minecraft style)
+                  if(world.containsKey((int)Math.floor(px)+","+(int)Math.floor(py-0.1f)+","+(int)Math.floor(pz))) vy = 0.22f; 
+              }
 
               public void interact(boolean brk) {
                   if(sel != null) {
                       if(brk) world.remove(sel[0]+","+sel[1]+","+sel[2]);
-                      else if(placePos != null) world.put(placePos[0]+","+placePos[1]+","+placePos[2], 1);
+                      else if(place != null) world.put(place[0]+","+place[1]+","+place[2], 1);
                   }
               }
 
@@ -186,20 +204,19 @@ jobs:
                   Matrix.setLookAtM(view, 0, px, py + 1.6f, pz, px+lx, py+1.6f+ly, pz+lz, 0, 1, 0);
                   Matrix.multiplyMM(mvp, 0, proj, 0, view, 0);
 
-                  sel = null; placePos = null;
+                  sel = null; place = null;
                   for(float d=0; d<5; d+=0.1f) {
                       int tx=(int)Math.floor(px+lx*d), ty=(int)Math.floor(py+1.6f+ly*d), tz=(int)Math.floor(pz+lz*d);
                       if(world.containsKey(tx+","+ty+","+tz)) {
                           sel=new int[]{tx,ty,tz};
-                          float px_off = px+lx*(d-0.1f), py_off = py+1.6f+ly*(d-0.1f), pz_off = pz+lz*(d-0.1f);
-                          placePos = new int[]{(int)Math.floor(px_off), (int)Math.floor(py_off), (int)Math.floor(pz_off)};
+                          float ox=px+lx*(d-0.1f), oy=py+1.6f+ly*(d-0.1f), oz=pz+lz*(d-0.1f);
+                          place=new int[]{(int)Math.floor(ox), (int)Math.floor(oy), (int)Math.floor(oz)};
                           break;
                       }
                   }
-
-                  for(String key : world.keySet()) {
-                      String[] pts = key.split(",");
-                      float x=Float.parseFloat(pts[0]), y=Float.parseFloat(pts[1]), z=Float.parseFloat(pts[2]);
+                  for(String k : world.keySet()) {
+                      String[] p = k.split(",");
+                      float x=Float.parseFloat(p[0]), y=Float.parseFloat(p[1]), z=Float.parseFloat(p[2]);
                       float[] m=new float[16], r=new float[16];
                       Matrix.setIdentityM(m, 0); Matrix.translateM(m, 0, x, y, z);
                       Matrix.multiplyMM(r, 0, mvp, 0, m, 0);
@@ -209,20 +226,21 @@ jobs:
 
               private void update() {
                   float s = (float)Math.sin(Math.toRadians(yaw)), c = (float)Math.cos(Math.toRadians(yaw));
-                  float nextX = px + (mvX * c - mvZ * s) * 0.12f; // Исправлен X
-                  float nextZ = pz + (mvZ * c + mvX * s) * 0.12f;
+                  // Движение: Вектор скорости зависит от поворота головы
+                  float speed = 0.08f;
+                  float dx = (mvX * c - mvZ * s) * speed;
+                  float dz = (mvZ * c + mvX * s) * speed;
                   
-                  // Коллизии по осям (не ходить сквозь блоки)
-                  if(!world.containsKey((int)Math.floor(nextX)+","+(int)Math.floor(py)+","+(int)Math.floor(pz)) &&
-                     !world.containsKey((int)Math.floor(nextX)+","+(int)Math.floor(py+1)+","+(int)Math.floor(pz))) px = nextX;
-                  if(!world.containsKey((int)Math.floor(px)+","+(int)Math.floor(py)+","+(int)Math.floor(nextZ)) &&
-                     !world.containsKey((int)Math.floor(px)+","+(int)Math.floor(py+1)+","+(int)Math.floor(nextZ))) pz = nextZ;
+                  // Коллизии (Стены)
+                  if(!isBlock(px+dx, py, pz) && !isBlock(px+dx, py+1, pz)) px += dx;
+                  if(!isBlock(px, py, pz+dz) && !isBlock(px, py+1, pz+dz)) pz += dz;
 
-                  vy -= 0.015f; py += vy;
-                  if(world.containsKey((int)Math.floor(px)+","+(int)Math.floor(py)+","+(int)Math.floor(pz))) {
-                      py=(int)Math.floor(py)+1.0f; vy=0;
-                  }
-                  if(py < -5) { px=8; py=10; pz=8; }
+                  vy -= 0.012f; py += vy; // Гравитация
+                  if(isBlock(px, py, pz)) { py = (int)Math.floor(py) + 1.0f; vy = 0; }
+                  if(py < -5) { px=8; py=15; pz=8; vy=0; }
+              }
+              private boolean isBlock(float x, float y, float z) {
+                  return world.containsKey((int)Math.floor(x)+","+(int)Math.floor(y)+","+(int)Math.floor(z));
               }
               public void onSurfaceChanged(GL10 g, int w, int h) {
                   GLES20.glViewport(0,0,w,h);
@@ -231,23 +249,41 @@ jobs:
           }
           EOF
 
+          # --- BLOCK (Честный 3D куб с правильной обводкой) ---
           cat > app/src/main/java/com/jsai/craft/Block.java << 'EOF'
           package com.jsai.craft;
           import android.opengl.GLES20;
           import java.nio.*;
           public class Block {
-              private FloatBuffer vb;
+              private FloatBuffer vb, wb;
               private int prg;
-              static float[] v = { 0,1,1, 0,0,1, 1,1,1, 1,0,1, 1,1,0, 1,0,0, 0,1,0, 0,0,0, 0,1,1, 0,1,0, 1,1,1, 1,1,0, 0,0,1, 0,0,0, 1,0,1, 1,0,0 };
+              // 36 вершин (6 граней по 2 треугольника) для правильного освещения
+              static float[] v = {
+                  0,0,0, 0,1,0, 1,1,0, 0,0,0, 1,1,0, 1,0,0, // Back
+                  0,0,1, 1,0,1, 1,1,1, 0,0,1, 1,1,1, 0,1,1, // Front
+                  0,0,0, 0,0,1, 0,1,1, 0,0,0, 0,1,1, 0,1,0, // Left
+                  1,0,0, 1,1,0, 1,1,1, 1,0,0, 1,1,1, 1,0,1, // Right
+                  0,1,0, 0,1,1, 1,1,1, 0,1,0, 1,1,1, 1,1,0, // Top
+                  0,0,0, 1,0,0, 1,0,1, 0,0,0, 1,0,1, 0,0,1  // Bottom
+              };
+              // Ребра для обводки (12 линий = 24 вершины)
+              static float[] w = {
+                  0,0,0, 1,0,0, 1,0,0, 1,1,0, 1,1,0, 0,1,0, 0,1,0, 0,0,0,
+                  0,0,1, 1,0,1, 1,0,1, 1,1,1, 1,1,1, 0,1,1, 0,1,1, 0,0,1,
+                  0,0,0, 0,0,1, 1,0,0, 1,0,1, 1,1,0, 1,1,1, 0,1,0, 0,1,1
+              };
+
               public Block() {
-                  vb = ByteBuffer.allocateDirect(v.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(v);
-                  vb.position(0);
-                  String vs="attribute vec4 p; uniform mat4 m; varying vec3 pos; void main(){gl_Position=m*p; pos=p.xyz;}",
-                         fs="precision mediump float; varying vec3 pos; uniform vec3 c; void main(){gl_FragColor=vec4(c*(pos.y*0.3+0.7),1.0);}";
+                  vb = ByteBuffer.allocateDirect(v.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(v); vb.position(0);
+                  wb = ByteBuffer.allocateDirect(w.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(w); wb.position(0);
+                  String vs="attribute vec4 p; uniform mat4 m; varying vec3 vP; void main(){gl_Position=m*p; vP=p.xyz;}",
+                         fs="precision mediump float; varying vec3 vP; uniform vec3 c; void main(){" +
+                            "float light = vP.y * 0.4 + 0.6; gl_FragColor=vec4(c*light,1.0);}";
                   int vsh=GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER); GLES20.glShaderSource(vsh,vs); GLES20.glCompileShader(vsh);
                   int fsh=GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER); GLES20.glShaderSource(fsh,fs); GLES20.glCompileShader(fsh);
                   prg=GLES20.glCreateProgram(); GLES20.glAttachShader(prg,vsh); GLES20.glAttachShader(prg,fsh); GLES20.glLinkProgram(prg);
               }
+
               public void draw(float[] m, boolean s) {
                   GLES20.glUseProgram(prg);
                   int ph=GLES20.glGetAttribLocation(prg,"p"); GLES20.glEnableVertexAttribArray(ph);
@@ -255,20 +291,28 @@ jobs:
                   GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(prg,"m"),1,false,m,0);
                   int ch=GLES20.glGetUniformLocation(prg,"c");
                   GLES20.glUniform3f(ch, 0.4f, 0.7f, 0.3f);
-                  GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,16);
-                  if(s) { // Белая обводка вместо заливки
+                  GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 36);
+                  if(s) { // Белая обводка ребер
                       GLES20.glUniform3f(ch, 1, 1, 1);
-                      GLES20.glLineWidth(4.0f);
-                      GLES20.glDrawArrays(GLES20.GL_LINE_STRIP,0,16);
+                      GLES20.glLineWidth(5.0f);
+                      GLES20.glVertexAttribPointer(ph,3,GLES20.GL_FLOAT,false,0,wb);
+                      GLES20.glDrawArrays(GLES20.GL_LINES, 0, 24);
                   }
               }
           }
           EOF
 
+          # Manifest
+          cat > app/src/main/res/values/strings.xml << 'EOF'
+          <resources><string name="app_name">JsAI Craft V5</string></resources>
+          EOF
+          cat > app/src/main/res/values/themes.xml << 'EOF'
+          <resources><style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar"><item name="android:windowFullscreen">true</item></style></resources>
+          EOF
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="JsAI Craft V4" android:hardwareAccelerated="true">
+              <application android:label="JsAI Craft V5" android:theme="@style/AppTheme" android:hardwareAccelerated="true">
                   <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
@@ -287,5 +331,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI_Craft_V4
+          name: JsAI_Craft_V5
           path: app/build/outputs/apk/debug/app-debug.apk
