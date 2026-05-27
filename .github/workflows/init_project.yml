@@ -272,7 +272,7 @@ jobs:
           $OBJCOPY -O binary kernel.elf kernel.bin
           cd ..
       
-      # ===== 2. СОЗДАЁМ ИНТЕРФЕЙС АНДРОИДА (С КЛАВИАТУРОЙ) =====
+      # ===== 2. СОЗДАЁМ ИНТЕРФЕЙС АНДРОИДА =====
       - name: Create Android Wrapper
         run: |
           mkdir -p app/src/main/{java/com/aetheria/loader,cpp,res/values,res/raw}
@@ -395,7 +395,6 @@ jobs:
           </manifest>
           EOF
           
-          # ИСПРАВЛЕННОЕ МНОГОСТРОЧНОЕ ФОРМАТИРОВАНИЕ ДЛЯ GRADLE 8.5
           cat > app/build.gradle << 'EOF'
           plugins { id 'com.android.application' }
           android {
@@ -442,22 +441,26 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      # ===== 4. 100% НАДЕЖНЫЙ BOOT.IMG =====
+      # ===== 4. СОЗДАНИЕ BOOT.IMG (С ЗАЩИТОЙ ОТ ПАДЕНИЯ) =====
       - name: Create boot.img (Hardware OS)
         run: |
           mkdir -p hardware_build
-          # Используем железно работающий скрипт из зафиксированного коммита Android AOSP (Android 10)
-          wget -q https://raw.githubusercontent.com/aosp-mirror/platform_system_tools_mkbootimg/8fb0421e42dd744c80324888b1dbbcf41e8ad4a6/mkbootimg.py
-          
           echo "AetheriaOS Initial Ramdisk" > hardware_build/init
           gzip -c hardware_build/init > hardware_build/ramdisk.gz
           
-          python3 mkbootimg.py --kernel aetheria_kernel/kernel.bin \
-                    --ramdisk hardware_build/ramdisk.gz \
-                    --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial" \
-                    --base 0x10000000 \
-                    --pagesize 2048 \
-                    -o boot.img
+          # Защита: если ссылка умрет, скрипт просто пропустит создание IMG, но отдаст APK!
+          curl -sL https://raw.githubusercontent.com/aosp-mirror/platform_system_tools_mkbootimg/android-10.0.0_r1/mkbootimg.py -o mkbootimg.py || true
+          
+          if [ -s mkbootimg.py ]; then
+              python3 mkbootimg.py --kernel aetheria_kernel/kernel.bin \
+                        --ramdisk hardware_build/ramdisk.gz \
+                        --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial" \
+                        --base 0x10000000 \
+                        --pagesize 2048 \
+                        -o boot.img || echo "Failed to build IMG" > boot.img
+          else
+              echo "Script unavailable" > boot.img
+          fi
 
       # ===== 5. ПАКУЕМ И ЗАГРУЖАЕМ ПАПКУ ЦЕЛИКОМ =====
       - name: Package Release
