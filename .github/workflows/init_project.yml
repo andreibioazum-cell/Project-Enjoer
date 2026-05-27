@@ -18,8 +18,7 @@ jobs:
       - name: Setup Android SDK & Tools
         uses: android-actions/setup-android@v3
         with:
-          # ИСПРАВЛЕНО: точки с запятой вместо двоеточий
-          packages: 'platform-tools build-tools;34.0.0 platforms;android-34'
+          packages: 'platform-tools build-tools;34.0.0 platforms;android-34 ndk;25.2.9519653'
       
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
@@ -97,6 +96,7 @@ jobs:
           }
           EOF
           
+          # ИСПРАВЛЕНО: opt-level = 3 (как число, без кавычек)
           cat > aetheria_kernel/Cargo.toml << 'EOF'
           [package]
           name = "aetheria_kernel"
@@ -105,7 +105,7 @@ jobs:
           [lib]
           crate-type = ["staticlib"]
           [profile.release]
-          opt-level = "3"
+          opt-level = 3
           lto = true
           panic = "abort"
           EOF
@@ -113,10 +113,10 @@ jobs:
           cd aetheria_kernel
           cargo build --release --target aarch64-linux-android
           
-          $ANDROID_HOME/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objcopy \
-            --strip-all -O binary target/aarch64-linux-android/release/libaetheria_kernel.a kernel.bin || \
-          $ANDROID_HOME/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objcopy \
-            --strip-all -O binary target/aarch64-linux-android/release/libaetheria_kernel.a kernel.bin
+          # ИСПРАВЛЕНО: Умный поиск llvm-objcopy
+          OBJCOPY=$(find $ANDROID_HOME/ndk -name "llvm-objcopy" | head -n 1)
+          $OBJCOPY --strip-all -O binary target/aarch64-linux-android/release/libaetheria_kernel.a kernel.bin
+          
           cd ..
       
       # ===== 2. СОЗДАЁМ ИНТЕРФЕЙС АНДРОИДА (Виртуализация ОС) =====
@@ -230,10 +230,12 @@ jobs:
           plugins { id 'com.android.application' }
           android { namespace 'com.aetheria.loader'; compileSdk 34; defaultConfig { applicationId 'com.aetheria.loader'; minSdk 24; targetSdk 34; externalNativeBuild { cmake { cppFlags "-O3 -fPIC" } } }; externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } } }
           EOF
+          
           cat > build.gradle << 'EOF'
           buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
           allprojects { repositories { google(); mavenCentral() } }
           EOF
+          
           echo 'include ":app"' > settings.gradle
 
       # ===== 3. СБОРКА APK =====
