@@ -225,7 +225,6 @@ jobs:
           target_compile_options(aetheria_loader PRIVATE -O3 -fPIC)
           EOF
           
-          # ИСПРАВЛЕНО: Удалили package=..., чтобы не было ошибки AGP 8.0
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -278,13 +277,12 @@ jobs:
       - name: Create boot.img (Hardware OS)
         run: |
           mkdir -p hardware_build
-          # ИСПРАВЛЕНО: Берем надежный скрипт mkbootimg от AOSP/LineageOS
-          curl -Lo mkbootimg.py https://raw.githubusercontent.com/LineageOS/android_system_tools_mkbootimg/lineage-20.0/mkbootimg.py
+          # ИСПРАВЛЕНО: Standalone скрипт из AOSP (Android 11), не требующий доп. модулей
+          curl -Lo mkbootimg.py https://raw.githubusercontent.com/aosp-mirror/platform_system_tools_mkbootimg/android-11.0.0_r1/mkbootimg.py
           
           echo "AetheriaOS Initial Ramdisk" > hardware_build/init
           gzip -c hardware_build/init > hardware_build/ramdisk.gz
           
-          # Запускаем через Python 3
           python3 mkbootimg.py --kernel aetheria_kernel/kernel.bin \
                       --ramdisk hardware_build/ramdisk.gz \
                       --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial" \
@@ -300,4 +298,40 @@ jobs:
           В этом архиве находятся 3 файла:
           
           1. AetheriaOS-Virtual.apk
-             Установите это на свой телефон как обычное приложение. 
+             Установите это на свой телефон как обычное приложение. Оно создаст виртуальную среду, 
+             выделит видеопамять и запустит ваше ядро на Rust. Вы увидите рабочий стол ОС!
+             
+          2. kernel.bin
+             Чистый бинарник вашего ядра (Bare-metal ARM64), написанный на Rust.
+             
+          3. boot.img (ЭКСПЕРИМЕНТАЛЬНО)
+             Это НАСТОЯЩИЙ образ загрузчика Android. Он собран из вашего kernel.bin.
+             Теоретически его можно прошить на телефон (с разблокированным загрузчиком).
+             
+             ВНИМАНИЕ: На реальном телефоне он загрузится в память, но вы увидите черный экран, 
+             так как в ядре Rust пока нет драйверов для активации дисплея смартфона.
+             
+             Как прошивать (на свой страх и риск):
+             1. Переведите телефон в режим Fastboot (Кнопка включения + Громкость вниз).
+             2. Подключите к ПК.
+             3. В консоли введите команду: fastboot boot boot.img
+          EOF
+
+      # ===== 5. ПАКУЕМ ВСЁ В АРХИВ =====
+      - name: Package Release
+        run: |
+          mkdir -p AetheriaOS_Release
+          cp app/build/outputs/apk/debug/app-debug.apk AetheriaOS_Release/AetheriaOS-Virtual.apk
+          cp aetheria_kernel/kernel.bin AetheriaOS_Release/kernel.bin
+          cp boot.img AetheriaOS_Release/boot.img
+          cp README_FLASHING.txt AetheriaOS_Release/README_FLASHING.txt
+          
+          cd AetheriaOS_Release
+          zip -r ../AetheriaOS-Ultimate-Build.zip *
+          
+      - name: Upload OS Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AetheriaOS-Ultimate
+          path: AetheriaOS-Ultimate-Build.zip
+          retention-days: 30
