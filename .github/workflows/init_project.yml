@@ -1,4 +1,4 @@
-name: AetheriaOS - Full System Build
+name: AetheriaOS - Interactive Shell
 on:
   push:
     branches: [ main ]
@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-aetheria-os:
-    name: Build AetheriaOS (APK + Boot Image)
+    name: Build AetheriaOS (Interactive)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -27,36 +27,58 @@ jobs:
           target: aarch64-unknown-none
           override: true
           components: rust-src
-      
-      # ===== 1. СОЗДАЁМ ЯДРО AETHERIAOS (Rust) С ТЕРМИНАЛОМ =====
-      - name: Create & Build Rust Kernel
+          
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          
+      - name: Generate Rust Font (ASCII + Cyrillic)
         run: |
           mkdir -p aetheria_kernel/src
-          
+          cat > generate_font.py << 'EOF'
+          import urllib.request, re
+          def get_font(url):
+              req = urllib.request.urlopen(url)
+              content = req.read().decode('utf-8')
+              matches = re.findall(r'\{([^}]+)\}', content)
+              res = []
+              for m in matches:
+                  try:
+                      b = [int(x.strip(), 16) for x in m.split(',') if x.strip()]
+                      if len(b) == 8: res.append(b)
+                  except: pass
+              return res
+          basic = get_font("https://raw.githubusercontent.com/dhepper/font8x8/master/font8x8_basic.h")
+          cyrillic = get_font("https://raw.githubusercontent.com/dhepper/font8x8/master/font8x8_cyrillic.h")
+          with open("aetheria_kernel/src/font.rs", "w") as f:
+              f.write("pub fn get_char_bitmap(c: char) -> [u8; 8] {\n")
+              f.write("    match c as u32 {\n")
+              for i, bmp in enumerate(basic): f.write(f"        {i} => {bmp},\n")
+              for i, bmp in enumerate(cyrillic): f.write(f"        {0x0400 + i} => {bmp},\n")
+              f.write("        _ => [0xFF; 8],\n    }\n}\n")
+          EOF
+          python3 generate_font.py
+      
+      # ===== 1. СОЗДАЁМ ЯДРО AETHERIAOS (Rust) С ИНТЕРАКТИВНОЙ ОБОЛОЧКОЙ =====
+      - name: Create & Build Rust Kernel
+        run: |
           cat > aetheria_kernel/src/lib.rs << 'EOF'
           #![no_std]
           
+          mod font;
+          
           use core::panic::PanicInfo;
-          use core::ptr::write_volatile;
+          use core::ptr::{read_volatile, write_volatile};
+          use core::str;
           
           #[panic_handler]
-          fn panic(_info: &PanicInfo) -> ! {
-              loop { core::hint::spin_loop(); }
-          }
+          fn panic(_info: &PanicInfo) -> ! { loop { core::hint::spin_loop(); } }
           
-          #[no_mangle]
-          pub unsafe extern "C" fn memset(dest: *mut u8, c: i32, n: usize) -> *mut u8 {
-              for i in 0..n { *dest.add(i) = c as u8; }
-              dest
-          }
+          #[no_mangle] pub unsafe extern "C" fn memset(dest: *mut u8, c: i32, n: usize) -> *mut u8 { for i in 0..n { *dest.add(i) = c as u8; } dest }
+          #[no_mangle] pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 { for i in 0..n { *dest.add(i) = *src.add(i); } dest }
           
-          #[no_mangle]
-          pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
-              for i in 0..n { *dest.add(i) = *src.add(i); }
-              dest
-          }
-          
-          // --- ГРАФИЧЕСКИЙ ДРАЙВЕР И ТЕРМИНАЛ ---
+          // --- ГРАФИКА ---
           fn draw_rect(fb: *mut u32, fb_w: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
               for iy in y..(y+h) {
                   for ix in x..(x+w) {
@@ -65,60 +87,153 @@ jobs:
               }
           }
           
-          // Симуляция текста (рисует пиксельные "строки" кода для красоты терминала)
-          fn draw_pseudo_text(fb: *mut u32, fb_w: u32, x: u32, y: u32, length: u32, color: u32) {
-              let mut cx = x;
-              let mut seed = length * y; 
-              for _ in 0..length {
-                  seed = (seed * 1103515245 + 12345) % 2147483648;
-                  let word_len = 10 + (seed % 40) as u32;
-                  draw_rect(fb, fb_w, cx, y, word_len, 10, color);
-                  cx += word_len + 8;
+          fn draw_char(fb: *mut u32, fb_w: u32, x: u32, y: u32, c: char, color: u32, scale: u32) {
+              let bitmap = font::get_char_bitmap(c);
+              for row in 0..8 {
+                  for col in 0..8 {
+                      if (bitmap[row] & (1 << col)) != 0 {
+                          draw_rect(fb, fb_w, x + col * scale, y + (row as u32) * scale, scale, scale, color);
+                      }
+                  }
               }
           }
           
-          // НОВАЯ ТОЧКА ВХОДА (Смещение 0x0)
+          fn draw_text(fb: *mut u32, fb_w: u32, x: u32, y: u32, text: &str, color: u32, scale: u32) {
+              let mut cx = x;
+              for c in text.chars() {
+                  draw_char(fb, fb_w, cx, y, c, color, scale);
+                  cx += 8 * scale;
+              }
+          }
+          
+          // --- ВИРТУАЛЬНАЯ ФАЙЛОВАЯ СИСТЕМА (VFS) ---
+          struct VFile { name: &'static str, content: &'static str }
+          const FILESYSTEM: [VFile; 2] = [
+              VFile { name: "readme.txt", content: "Welcome to AetheriaOS!\nThis is a bare-metal OS written in Rust.\nEnjoy your stay!" },
+              VFile { name: "system.log", content: "[INIT] CPU OK\n[INIT] MEM OK\n[INIT] VFS OK\n" },
+          ];
+          
+          // --- ТОЧКА ВХОДА (Добавлен kb_addr для клавиатуры) ---
           #[no_mangle]
           #[link_section = ".text.entry"]
-          pub extern "C" fn aetheria_main(fb_addr: *mut u32, width: u32, height: u32) -> ! {
+          pub extern "C" fn aetheria_main(fb_addr: *mut u32, kb_addr: *mut u8, width: u32, height: u32) -> ! {
               let bg = 0xFF0D0D14u32;      
               let green = 0xFF4AF626u32;   
               let white = 0xFFFFFFFFu32;   
-              let blue = 0xFF89B4FAu32;
+              let red = 0xFFF38BA8u32;
               
-              // 1. Очистка экрана
+              let mut cursor_y = 20;
+              let scale = 2;
+              let font_w = 8 * scale;
+              let font_h = 8 * scale;
+              
               draw_rect(fb_addr, width, 0, 0, width, height, bg);
+              draw_text(fb_addr, width, 20, cursor_y, "AetheriaOS v0.2 Interactive", green, scale);
+              cursor_y += font_h + 10;
               
-              let mut cursor_y = 40;
+              let prompt = "root@aetheria:~# ";
+              let prompt_len = prompt.len() as u32;
               
-              // 2. Анимация загрузки ядра (выводим "логи")
-              for i in 0..15 {
-                  draw_pseudo_text(fb_addr, width, 20, cursor_y, 5 + (i % 4), white);
-                  draw_rect(fb_addr, width, 20, cursor_y, 40, 10, green); // Метка [ OK ]
-                  cursor_y += 20;
-                  
-                  // Задержка для эффекта "печатания"
-                  for _ in 0..4000000 { core::hint::spin_loop(); }
-              }
+              let mut input_buf = [0u8; 64];
+              let mut input_len = 0;
               
-              // 3. Вывод интерфейса
-              cursor_y += 30;
-              // Рисуем логотип-блок
-              draw_rect(fb_addr, width, 20, cursor_y, 250, 40, blue); 
-              cursor_y += 60;
+              // Функция печати новой строки (с прокруткой)
+              let mut new_line = |cy: &mut u32| {
+                  *cy += font_h + 5;
+                  if *cy > height - 40 { // Простейшая очистка при переполнении
+                      draw_rect(fb_addr, width, 0, 0, width, height, bg);
+                      *cy = 20;
+                  }
+              };
               
-              // 4. Появление командной строки "root@aetheria:~#"
-              draw_rect(fb_addr, width, 20, cursor_y, 150, 15, green); // root@aetheria
-              draw_rect(fb_addr, width, 180, cursor_y, 80, 15, white); // команда
+              draw_text(fb_addr, width, 20, cursor_y, prompt, green, scale);
               
-              // Мигающий курсор терминала
               let mut tick = 0;
               loop {
-                  let cursor_color = if (tick / 50) % 2 == 0 { white } else { bg };
-                  draw_rect(fb_addr, width, 270, cursor_y, 10, 15, cursor_color);
+                  // Читаем байт с "аппаратной" клавиатуры Android
+                  let key = unsafe { read_volatile(kb_addr) };
+                  if key != 0 {
+                      unsafe { write_volatile(kb_addr, 0); } // Очищаем буфер клавы
+                      
+                      if key == 10 { // ENTER
+                          new_line(&mut cursor_y);
+                          
+                          // --- НАШ МИНИ-ИНТЕРПРЕТАТОР (SHELL) ---
+                          if let Ok(cmd_str) = str::from_utf8(&input_buf[..input_len]) {
+                              let cmd = cmd_str.trim();
+                              if cmd == "help" {
+                                  draw_text(fb_addr, width, 20, cursor_y, "Commands: help, ls, cat <file>, clear, calc <num+num>", white, scale);
+                                  new_line(&mut cursor_y);
+                              } else if cmd == "ls" {
+                                  for file in FILESYSTEM.iter() {
+                                      draw_text(fb_addr, width, 20, cursor_y, file.name, white, scale);
+                                      new_line(&mut cursor_y);
+                                  }
+                              } else if cmd.starts_with("cat ") {
+                                  let file_name = &cmd[4..];
+                                  let mut found = false;
+                                  for file in FILESYSTEM.iter() {
+                                      if file.name == file_name {
+                                          draw_text(fb_addr, width, 20, cursor_y, file.content, white, scale);
+                                          new_line(&mut cursor_y);
+                                          new_line(&mut cursor_y); // Под файл с переносами
+                                          found = true;
+                                          break;
+                                      }
+                                  }
+                                  if !found {
+                                      draw_text(fb_addr, width, 20, cursor_y, "File not found", red, scale);
+                                      new_line(&mut cursor_y);
+                                  }
+                              } else if cmd == "clear" {
+                                  draw_rect(fb_addr, width, 0, 0, width, height, bg);
+                                  cursor_y = 20;
+                              } else if cmd.starts_with("calc ") {
+                                  // Мини-скрипт (Только сложение однозначных для демо)
+                                  let expr = &cmd[5..];
+                                  let bytes = expr.as_bytes();
+                                  if bytes.len() >= 3 && bytes[1] == b'+' {
+                                      let a = bytes[0] as i32 - 48;
+                                      let b = bytes[2] as i32 - 48;
+                                      if a>=0 && a<=9 && b>=0 && b<=9 {
+                                          let sum = a + b;
+                                          let res = [ (sum/10 + 48) as u8, (sum%10 + 48) as u8 ];
+                                          draw_text(fb_addr, width, 20, cursor_y, "Result: ", white, scale);
+                                          draw_text(fb_addr, width, 20 + 8*8*2, cursor_y, str::from_utf8(&res).unwrap_or(""), green, scale);
+                                      } else { draw_text(fb_addr, width, 20, cursor_y, "Error", red, scale); }
+                                  } else { draw_text(fb_addr, width, 20, cursor_y, "Format: calc 2+2", red, scale); }
+                                  new_line(&mut cursor_y);
+                              } else if cmd.len() > 0 {
+                                  draw_text(fb_addr, width, 20, cursor_y, "Unknown command", red, scale);
+                                  new_line(&mut cursor_y);
+                              }
+                          }
+                          
+                          input_len = 0;
+                          draw_text(fb_addr, width, 20, cursor_y, prompt, green, scale);
+                          
+                      } else if key == 8 { // BACKSPACE
+                          if input_len > 0 {
+                              input_len -= 1;
+                              let cursor_x = 20 + (prompt_len + input_len as u32) * font_w;
+                              draw_rect(fb_addr, width, cursor_x, cursor_y, font_w, font_h, bg);
+                          }
+                      } else { // ОБЫЧНЫЙ СИМВОЛ
+                          if input_len < 64 && key >= 32 && key <= 126 {
+                              input_buf[input_len] = key;
+                              let cursor_x = 20 + (prompt_len + input_len as u32) * font_w;
+                              draw_char(fb_addr, width, cursor_x, cursor_y, key as char, white, scale);
+                              input_len += 1;
+                          }
+                      }
+                  }
+                  
+                  // Рисуем мигающий курсор
+                  let cursor_x = 20 + (prompt_len + input_len as u32) * font_w;
+                  let cursor_color = if (tick / 500) % 2 == 0 { white } else { bg };
+                  draw_rect(fb_addr, width, cursor_x, cursor_y, font_w, 4, cursor_color);
                   
                   tick += 1;
-                  for _ in 0..100000 { core::hint::spin_loop(); } 
               }
           }
           EOF
@@ -155,7 +270,7 @@ jobs:
           $OBJCOPY -O binary kernel.elf kernel.bin
           cd ..
       
-      # ===== 2. СОЗДАЁМ ИНТЕРФЕЙС АНДРОИДА =====
+      # ===== 2. СОЗДАЁМ ИНТЕРФЕЙС АНДРОИДА (С КЛАВИАТУРОЙ) =====
       - name: Create Android Wrapper
         run: |
           mkdir -p app/src/main/{java/com/aetheria/loader,cpp,res/values,res/raw}
@@ -164,18 +279,21 @@ jobs:
           cat > app/src/main/java/com/aetheria/loader/MainActivity.java << 'EOF'
           package com.aetheria.loader;
           import android.app.Activity;
+          import android.content.Context;
           import android.os.Bundle;
           import android.graphics.*;
-          import android.view.SurfaceView;
-          import android.view.SurfaceHolder;
+          import android.view.*;
+          import android.view.inputmethod.InputMethodManager;
           import java.nio.ByteBuffer;
           
           public class MainActivity extends Activity {
               static { System.loadLibrary("aetheria_loader"); }
-              private native void startKernel(byte[] kernelData, ByteBuffer frameBuffer, int width, int height);
+              // Добавили kbBuffer для клавиатуры
+              private native void startKernel(byte[] kernelData, ByteBuffer frameBuffer, ByteBuffer kbBuffer, int width, int height);
               
               private SurfaceView surface;
               private ByteBuffer frameBuffer;
+              private ByteBuffer kbBuffer; 
               private Bitmap bitmap;
               private final int WIDTH = 1280;
               private final int HEIGHT = 720;
@@ -187,7 +305,30 @@ jobs:
                   setContentView(surface);
                   
                   frameBuffer = ByteBuffer.allocateDirect(WIDTH * HEIGHT * 4);
+                  kbBuffer = ByteBuffer.allocateDirect(1); // 1 байт для передачи символа в Rust
                   bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+                  
+                  // Вызов экранной клавиатуры при нажатии на экран
+                  surface.setFocusable(true);
+                  surface.setFocusableInTouchMode(true);
+                  surface.setOnTouchListener((v, e) -> {
+                      surface.requestFocus();
+                      InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                      imm.showSoftInput(surface, InputMethodManager.SHOW_IMPLICIT);
+                      return true;
+                  });
+                  
+                  // Перехват кнопок и отправка их в ядро Rust
+                  surface.setOnKeyListener((v, keyCode, event) -> {
+                      if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                          int c = event.getUnicodeChar();
+                          if (keyCode == KeyEvent.KEYCODE_DEL) c = 8; // Backspace
+                          if (keyCode == KeyEvent.KEYCODE_ENTER) c = 10; // Enter
+                          if (c != 0) kbBuffer.put(0, (byte)c);
+                          return true;
+                      }
+                      return false;
+                  });
                   
                   surface.getHolder().addCallback(new SurfaceHolder.Callback() {
                       @Override
@@ -195,7 +336,7 @@ jobs:
                           new Thread(() -> {
                               try {
                                   byte[] kernel = getResources().openRawResource(R.raw.kernel_bin).readAllBytes();
-                                  startKernel(kernel, frameBuffer, WIDTH, HEIGHT);
+                                  startKernel(kernel, frameBuffer, kbBuffer, WIDTH, HEIGHT);
                               } catch(Exception e) { e.printStackTrace(); }
                           }).start();
                           
@@ -226,18 +367,19 @@ jobs:
           #include <android/log.h>
           
           extern "C" JNIEXPORT void JNICALL
-          Java_com_aetheria_loader_MainActivity_startKernel(JNIEnv* env, jobject, jbyteArray kernelData, jobject fb, jint w, jint h) {
+          Java_com_aetheria_loader_MainActivity_startKernel(JNIEnv* env, jobject, jbyteArray kernelData, jobject fb, jobject kb, jint w, jint h) {
               jsize len = env->GetArrayLength(kernelData);
               jbyte* bytes = env->GetByteArrayElements(kernelData, nullptr);
               void* fb_ptr = env->GetDirectBufferAddress(fb);
+              void* kb_ptr = env->GetDirectBufferAddress(kb);
               
               void* exec_mem = mmap(nullptr, len, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
               memcpy(exec_mem, bytes, len);
               __builtin___clear_cache((char*)exec_mem, (char*)exec_mem + len);
               
-              typedef void (*KernelMain)(void*, uint32_t, uint32_t);
+              typedef void (*KernelMain)(void*, void*, uint32_t, uint32_t);
               KernelMain kmain = (KernelMain)exec_mem;
-              kmain(fb_ptr, w, h);
+              kmain(fb_ptr, kb_ptr, w, h);
               
               env->ReleaseByteArrayElements(kernelData, bytes, JNI_ABORT);
           }
@@ -297,51 +439,12 @@ jobs:
           gradle wrapper --gradle-version 8.5
           ./gradlew assembleDebug --no-daemon
 
-      # ===== 4. СОЗДАНИЕ НАСТОЯЩЕГО ПРОШИВОЧНОГО BOOT.IMG =====
-      - name: Create boot.img (Hardware OS)
-        run: |
-          mkdir -p hardware_build
-          
-          # 100% НАДЕЖНО: Скачиваем классический mkbootimg от Android 9 (Pie). Нет никаких GKI и сертификатов.
-          curl -sSL https://raw.githubusercontent.com/aosp-mirror/platform_system_core/android-9.0.0_r1/mkbootimg/mkbootimg -o mkbootimg.py
-          
-          echo "AetheriaOS Initial Ramdisk" > hardware_build/init
-          gzip -c hardware_build/init > hardware_build/ramdisk.gz
-          
-          python3 mkbootimg.py --kernel aetheria_kernel/kernel.bin \
-                    --ramdisk hardware_build/ramdisk.gz \
-                    --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial" \
-                    --base 0x10000000 \
-                    --pagesize 2048 \
-                    -o boot.img
-                      
-          cat > README_FLASHING.txt << 'EOF'
-          =======================================
-               AETHERIA OS - РЕЛИЗНЫЙ ПАКЕТ
-          =======================================
-          
-          В архиве находятся:
-          
-          1. AetheriaOS-Virtual.apk
-             Установите это на Android! Вы увидите РЕАЛЬНЫЙ процесс загрузки, 
-             строки логов терминала и мигающий курсор командной строки!
-             Всё это рисует голое ядро на Rust.
-             
-          2. kernel.bin
-             Сырой машинный код вашей ОС.
-             
-          3. boot.img
-             Прошиваемый образ загрузчика.
-          EOF
-
-      # ===== 5. ПАКУЕМ ВСЁ В АРХИВ =====
+      # ===== 4. ПАКУЕМ ВСЁ В АРХИВ =====
       - name: Package Release
         run: |
           mkdir -p AetheriaOS_Release
           cp app/build/outputs/apk/debug/app-debug.apk AetheriaOS_Release/AetheriaOS-Virtual.apk
           cp aetheria_kernel/kernel.bin AetheriaOS_Release/kernel.bin
-          cp boot.img AetheriaOS_Release/boot.img
-          cp README_FLASHING.txt AetheriaOS_Release/README_FLASHING.txt
           
           cd AetheriaOS_Release
           zip -r ../AetheriaOS-Ultimate-Build.zip *
