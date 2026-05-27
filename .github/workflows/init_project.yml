@@ -24,7 +24,8 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
-          target: aarch64-linux-android
+          # ИСПРАВЛЕНО: Теперь мы собираем настоящее голое ядро без привязки к Android OS
+          target: aarch64-unknown-none
           override: true
           components: rust-src
           
@@ -47,22 +48,21 @@ jobs:
           
           #[panic_handler]
           fn panic(_info: &PanicInfo) -> ! {
-              loop {}
+              loop { core::hint::spin_loop(); }
           }
           
-          // Базовые функции памяти для компилятора, чтобы он не искал их в C-библиотеках
           #[no_mangle]
           pub unsafe extern "C" fn memset(dest: *mut u8, c: i32, n: usize) -> *mut u8 {
               for i in 0..n { *dest.add(i) = c as u8; }
               dest
           }
+          
           #[no_mangle]
           pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
               for i in 0..n { *dest.add(i) = *src.add(i); }
               dest
           }
           
-          // Прямая отрисовка пикселей в память (Direct Framebuffer Access)
           fn draw_rect(fb: *mut u32, fb_w: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
               for iy in y..(y+h) {
                   for ix in x..(x+w) {
@@ -96,12 +96,15 @@ jobs:
                   
                   offset += 2;
                   
-                  for _ in 0..500000 {} 
+                  // Задержка (предотвращаем зависание процессора)
+                  for _ in 0..2000000 {
+                      core::hint::spin_loop();
+                  } 
               }
           }
           EOF
           
-          # Скрипт Линкера: расставляет код по правильным адресам
+          # Скрипт Линкера: расставляет код по правильным адресам и удаляет лишний мусор
           cat > aetheria_kernel/linker.ld << 'EOF'
           ENTRY(aetheria_main);
           SECTIONS {
@@ -113,6 +116,7 @@ jobs:
               .rodata : { *(.rodata*) }
               .data : { *(.data*) }
               .bss : { *(.bss*) *(COMMON) }
+              /DISCARD/ : { *(.eh_frame) *(.comment) }
           }
           EOF
           
@@ -131,17 +135,17 @@ jobs:
           EOF
           
           cd aetheria_kernel
-          # 1. Компилируем статический архив
-          cargo build --release --target aarch64-linux-android
+          # 1. Компилируем для "голого" ARM64
+          cargo build --release --target aarch64-unknown-none
           
           LLD=$(find $ANDROID_HOME/ndk -name "ld.lld" | head -n 1)
           OBJCOPY=$(find $ANDROID_HOME/ndk -name "llvm-objcopy" | head -n 1)
           
-          # 2. Связываем архив в единый монолитный исполняемый файл (ELF)
+          # 2. Связываем архив
           echo "Linking kernel..."
-          $LLD -T linker.ld -o kernel.elf --whole-archive target/aarch64-linux-android/release/libaetheria_kernel.a --no-whole-archive
+          $LLD -T linker.ld -o kernel.elf target/aarch64-unknown-none/release/libaetheria_kernel.a
           
-          # 3. Конвертируем ELF в плоский машинный код (Сырой бинарник для процессора)
+          # 3. Вырезаем чистый бинарный код
           echo "Generating raw machine code binary..."
           $OBJCOPY -O binary kernel.elf kernel.bin
           
