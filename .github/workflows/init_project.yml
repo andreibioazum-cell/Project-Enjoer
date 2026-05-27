@@ -81,7 +81,6 @@ jobs:
           #[no_mangle]
           #[link_section = ".text.entry"]
           pub extern "C" fn aetheria_main(fb_addr: *mut u32, width: u32, height: u32) -> ! {
-              // ИСПРАВЛЕНО: Добавлен суффикс u32, чтобы компилятор не ругался на переполнение
               let bg = 0xFF0D0D14u32;      
               let green = 0xFF4AF626u32;   
               let white = 0xFFFFFFFFu32;   
@@ -303,13 +302,13 @@ jobs:
         run: |
           mkdir -p hardware_build
           
-          sudo apt-get update
-          sudo apt-get install -y mkbootimg
+          # 100% НАДЕЖНО: Скачиваем классический mkbootimg от Android 9 (Pie). Нет никаких GKI и сертификатов.
+          curl -sSL https://raw.githubusercontent.com/aosp-mirror/platform_system_core/android-9.0.0_r1/mkbootimg/mkbootimg -o mkbootimg.py
           
           echo "AetheriaOS Initial Ramdisk" > hardware_build/init
           gzip -c hardware_build/init > hardware_build/ramdisk.gz
           
-          mkbootimg --kernel aetheria_kernel/kernel.bin \
+          python3 mkbootimg.py --kernel aetheria_kernel/kernel.bin \
                     --ramdisk hardware_build/ramdisk.gz \
                     --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial" \
                     --base 0x10000000 \
@@ -332,7 +331,7 @@ jobs:
              Сырой машинный код вашей ОС.
              
           3. boot.img
-             Прошиваемый образ загрузчика Android.
+             Прошиваемый образ загрузчика.
           EOF
 
       # ===== 5. ПАКУЕМ ВСЁ В АРХИВ =====
