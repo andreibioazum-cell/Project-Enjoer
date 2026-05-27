@@ -38,9 +38,9 @@ jobs:
         run: |
           mkdir -p aetheria_kernel/src
           
-          cat > aetheria_kernel/src/main.rs << 'EOF'
+          # ИСПРАВЛЕНО: Файл теперь называется lib.rs, так как это staticlib
+          cat > aetheria_kernel/src/lib.rs << 'EOF'
           #![no_std]
-          #![no_main]
           
           use core::panic::PanicInfo;
           use core::ptr::write_volatile;
@@ -96,14 +96,15 @@ jobs:
           }
           EOF
           
-          # ИСПРАВЛЕНО: opt-level = 3 (как число, без кавычек)
           cat > aetheria_kernel/Cargo.toml << 'EOF'
           [package]
           name = "aetheria_kernel"
           version = "0.1.0"
           edition = "2021"
+          
           [lib]
           crate-type = ["staticlib"]
+          
           [profile.release]
           opt-level = 3
           lto = true
@@ -113,7 +114,6 @@ jobs:
           cd aetheria_kernel
           cargo build --release --target aarch64-linux-android
           
-          # ИСПРАВЛЕНО: Умный поиск llvm-objcopy
           OBJCOPY=$(find $ANDROID_HOME/ndk -name "llvm-objcopy" | head -n 1)
           $OBJCOPY --strip-all -O binary target/aarch64-linux-android/release/libaetheria_kernel.a kernel.bin
           
