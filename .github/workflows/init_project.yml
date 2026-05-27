@@ -1,4 +1,4 @@
-name: AetheriaOS - Interactive Reliable Build
+name: AetheriaOS - Final Build
 on:
   push:
     branches: [ main ]
@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-aetheria-os:
-    name: Build AetheriaOS (Interactive)
+    name: Build AetheriaOS (Apps + Games)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -28,17 +28,11 @@ jobs:
           override: true
           components: rust-src
           
-      - name: Install Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-          
-      # ===== 1. СОЗДАЁМ ЯДРО AETHERIAOS (Rust) =====
       - name: Create & Build Rust Kernel
         run: |
           mkdir -p aetheria_kernel/src
           
-          # НАДЕЖНОСТЬ 100%: Шрифт вшит прямо в код, никаких загрузок из сети!
+          # ШРИФТ ВШИТ В КОД (Защита от 404). Индексы для ASCII.
           cat > aetheria_kernel/src/font.rs << 'EOF'
           pub fn get_char_bitmap(c: char) -> [u8; 8] {
               let idx = c as usize;
@@ -96,6 +90,7 @@ jobs:
           ];
           EOF
           
+          # ЯДРО С ПРИЛОЖЕНИЯМИ И ИГРАМИ
           cat > aetheria_kernel/src/lib.rs << 'EOF'
           #![no_std]
           
@@ -118,7 +113,8 @@ jobs:
               let bitmap = font::get_char_bitmap(c);
               for row in 0..8 {
                   for col in 0..8 {
-                      if (bitmap[row] & (1 << col)) != 0 {
+                      // ИСПРАВЛЕНИЕ ЗЕРКАЛЬНОСТИ! Читаем биты с MSB (7 - col). Буквы теперь правильные!
+                      if (bitmap[row] & (1 << (7 - col))) != 0 {
                           draw_rect(fb, fb_w, x + col * scale, y + (row as u32) * scale, scale, scale, color);
                       }
                   }
@@ -128,6 +124,71 @@ jobs:
           fn draw_text(fb: *mut u32, fb_w: u32, x: u32, y: u32, text: &str, color: u32, scale: u32) {
               let mut cx = x;
               for c in text.chars() { draw_char(fb, fb_w, cx, y, c, color, scale); cx += 8 * scale; }
+          }
+          
+          // ================== ИГРА: ЗМЕЙКА ==================
+          fn run_snake(fb: *mut u32, kb: *mut u8, w: u32, h: u32) {
+              draw_rect(fb, w, 0, 0, w, h, 0xFF0D0D14);
+              draw_text(fb, w, 20, 10, "AETHERIA SNAKE - W/A/S/D to move, Q to quit", 0xFF89B4FA, 2);
+              
+              let mut sx = [0i32; 256]; let mut sy = [0i32; 256];
+              let mut len = 3;
+              sx[0]=15; sy[0]=10; sx[1]=14; sy[1]=10; sx[2]=13; sy[2]=10;
+              
+              let mut dx = 1; let mut dy = 0;
+              let mut ax = 30; let mut ay = 15;
+              let mut seed = 12345;
+              let mut over = false;
+              
+              loop {
+                  let key = unsafe { read_volatile(kb) };
+                  if key != 0 {
+                      unsafe { write_volatile(kb, 0); }
+                      let k = key as char;
+                      if (k == 'w' || k == 'W') && dy == 0 { dx=0; dy=-1; }
+                      if (k == 's' || k == 'S') && dy == 0 { dx=0; dy=1; }
+                      if (k == 'a' || k == 'A') && dx == 0 { dx=-1; dy=0; }
+                      if (k == 'd' || k == 'D') && dx == 0 { dx=1; dy=0; }
+                      if k == 'q' || k == 'Q' { break; }
+                  }
+                  
+                  if !over {
+                      for i in (1..len).rev() { sx[i]=sx[i-1]; sy[i]=sy[i-1]; }
+                      sx[0] += dx; sy[0] += dy;
+                      
+                      if sx[0] < 0 || sx[0] >= 64 || sy[0] < 2 || sy[0] >= 36 { over = true; }
+                      for i in 1..len { if sx[0]==sx[i] && sy[0]==sy[i] { over = true; } }
+                      
+                      if sx[0] == ax && sy[0] == ay {
+                          if len < 256 { len += 1; }
+                          seed = (seed * 1103515245 + 12345) % 2147483648; ax = (seed % 60) as i32 + 2;
+                          seed = (seed * 1103515245 + 12345) % 2147483648; ay = (seed % 30) as i32 + 3;
+                      }
+                      
+                      draw_rect(fb, w, 0, 40, w, h-40, 0xFF0D0D14);
+                      draw_rect(fb, w, (ax as u32)*20, (ay as u32)*20, 20, 20, 0xFFF38BA8); // Яблоко (Красное)
+                      for i in 0..len { draw_rect(fb, w, (sx[i] as u32)*20, (sy[i] as u32)*20, 20, 20, 0xFF4AF626); } // Змея (Зеленая)
+                  } else {
+                      draw_text(fb, w, 400, 300, "GAME OVER! Press Q", 0xFFF38BA8, 4);
+                  }
+                  for _ in 0..8_000_000 { core::hint::spin_loop(); } // Скорость игры
+              }
+          }
+          
+          // ================== ПРИЛОЖЕНИЕ: СИСТЕМА ==================
+          fn run_sysinfo(fb: *mut u32, kb: *mut u8, w: u32, h: u32) {
+              draw_rect(fb, w, 0, 0, w, h, 0xFF0D0D14);
+              draw_text(fb, w, 20, 20, "AETHERIA OS - SYSTEM MONITOR", 0xFF89B4FA, 3);
+              draw_text(fb, w, 20, 80, "Kernel       : Bare-Metal Rust 0.4", 0xFFFFFFFF, 2);
+              draw_text(fb, w, 20, 110, "Architecture : aarch64 (ARM64)", 0xFFFFFFFF, 2);
+              draw_text(fb, w, 20, 140, "Memory Mode  : Direct Framebuffer", 0xFFFFFFFF, 2);
+              draw_text(fb, w, 20, 170, "Resolution   : 1280x720 ARGB", 0xFFFFFFFF, 2);
+              draw_text(fb, w, 20, 200, "Graphics     : Active", 0xFF4AF626, 2);
+              draw_text(fb, w, 20, 280, "Press 'Q' to exit...", 0xFFF38BA8, 2);
+              loop {
+                  let key = unsafe { read_volatile(kb) };
+                  if key == b'q' || key == b'Q' { unsafe { write_volatile(kb, 0); } break; }
+              }
           }
           
           struct VFile { name: &'static str, content: &'static str }
@@ -150,7 +211,7 @@ jobs:
               let font_h = 8 * scale;
               
               draw_rect(fb_addr, width, 0, 0, width, height, bg);
-              draw_text(fb_addr, width, 20, cursor_y, "AetheriaOS v0.3 Shell Ready", green, scale);
+              draw_text(fb_addr, width, 20, cursor_y, "AetheriaOS v0.4 Terminal", green, scale);
               cursor_y += font_h + 10;
               
               let prompt = "root@aetheria:~# ";
@@ -173,8 +234,14 @@ jobs:
                           if let Ok(cmd_str) = str::from_utf8(&input_buf[..input_len]) {
                               let cmd = cmd_str.trim();
                               if cmd == "help" {
-                                  draw_text(fb_addr, width, 20, cursor_y, "Cmds: help, ls, cat <file>, clear, calc <x+y>", white, scale);
+                                  draw_text(fb_addr, width, 20, cursor_y, "Apps: sysinfo | Games: snake | Shell: ls, cat, clear, calc", white, scale);
                                   cursor_y += font_h + 5;
+                              } else if cmd == "snake" {
+                                  run_snake(fb_addr, kb_addr, width, height);
+                                  draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20;
+                              } else if cmd == "sysinfo" {
+                                  run_sysinfo(fb_addr, kb_addr, width, height);
+                                  draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20;
                               } else if cmd == "ls" {
                                   for file in FILESYSTEM.iter() {
                                       draw_text(fb_addr, width, 20, cursor_y, file.name, white, scale);
@@ -194,22 +261,8 @@ jobs:
                               } else if cmd == "clear" {
                                   draw_rect(fb_addr, width, 0, 0, width, height, bg);
                                   cursor_y = 20;
-                              } else if cmd.starts_with("calc ") && cmd.len() >= 8 {
-                                  let expr = &cmd[5..];
-                                  let bytes = expr.as_bytes();
-                                  if bytes[1] == b'+' {
-                                      let a = bytes[0] as i32 - 48;
-                                      let b = bytes[2] as i32 - 48;
-                                      if a>=0 && a<=9 && b>=0 && b<=9 {
-                                          let sum = a + b;
-                                          let res = [ (sum/10 + 48) as u8, (sum%10 + 48) as u8 ];
-                                          draw_text(fb_addr, width, 20, cursor_y, "Result: ", white, scale);
-                                          draw_text(fb_addr, width, 20 + 8*8*2, cursor_y, str::from_utf8(&res).unwrap_or(""), green, scale);
-                                      } else { draw_text(fb_addr, width, 20, cursor_y, "Error", red, scale); }
-                                  } else { draw_text(fb_addr, width, 20, cursor_y, "Format: calc 2+2", red, scale); }
-                                  cursor_y += font_h + 5;
                               } else if cmd.len() > 0 {
-                                  draw_text(fb_addr, width, 20, cursor_y, "Unknown cmd", red, scale);
+                                  draw_text(fb_addr, width, 20, cursor_y, "Command not found", red, scale);
                                   cursor_y += font_h + 5;
                               }
                           }
@@ -412,22 +465,13 @@ jobs:
           
           cat > build.gradle << 'EOF'
           buildscript {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:8.2.2'
-              }
+              repositories { google(); mavenCentral() }
+              dependencies { classpath 'com.android.tools.build:gradle:8.2.2' }
           }
           allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
+              repositories { google(); mavenCentral() }
           }
           EOF
-          
           echo 'include ":app"' > settings.gradle
 
       # ===== 3. СБОРКА APK =====
@@ -441,34 +485,15 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      # ===== 4. СОЗДАНИЕ BOOT.IMG (С ЗАЩИТОЙ ОТ ПАДЕНИЯ) =====
-      - name: Create boot.img (Hardware OS)
-        run: |
-          mkdir -p hardware_build
-          echo "AetheriaOS Initial Ramdisk" > hardware_build/init
-          gzip -c hardware_build/init > hardware_build/ramdisk.gz
-          
-          # Защита: если ссылка умрет, скрипт просто пропустит создание IMG, но отдаст APK!
-          curl -sL https://raw.githubusercontent.com/aosp-mirror/platform_system_tools_mkbootimg/android-10.0.0_r1/mkbootimg.py -o mkbootimg.py || true
-          
-          if [ -s mkbootimg.py ]; then
-              python3 mkbootimg.py --kernel aetheria_kernel/kernel.bin \
-                        --ramdisk hardware_build/ramdisk.gz \
-                        --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial" \
-                        --base 0x10000000 \
-                        --pagesize 2048 \
-                        -o boot.img || echo "Failed to build IMG" > boot.img
-          else
-              echo "Script unavailable" > boot.img
-          fi
-
-      # ===== 5. ПАКУЕМ И ЗАГРУЖАЕМ ПАПКУ ЦЕЛИКОМ =====
+      # ===== 4. ПАКУЕМ И ЗАГРУЖАЕМ ПАПКУ ЦЕЛИКОМ =====
       - name: Package Release
         run: |
           mkdir -p AetheriaOS_Release
           cp app/build/outputs/apk/debug/app-debug.apk AetheriaOS_Release/AetheriaOS-Interactive.apk
           cp aetheria_kernel/kernel.bin AetheriaOS_Release/kernel.bin
-          cp boot.img AetheriaOS_Release/boot.img
+          
+          cd AetheriaOS_Release
+          zip -r ../AetheriaOS-Interactive-Bundle.zip *
           
       - name: Upload OS Package
         uses: actions/upload-artifact@v4
