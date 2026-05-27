@@ -395,20 +395,40 @@ jobs:
           </manifest>
           EOF
           
+          # ИСПРАВЛЕННОЕ МНОГОСТРОЧНОЕ ФОРМАТИРОВАНИЕ ДЛЯ GRADLE 8.5
           cat > app/build.gradle << 'EOF'
           plugins { id 'com.android.application' }
           android {
               namespace 'com.aetheria.loader'
               compileSdk 34
-              defaultConfig { applicationId 'com.aetheria.loader'; minSdk 24; targetSdk 34; externalNativeBuild { cmake { cppFlags "-O3 -fPIC" } } }
+              defaultConfig {
+                  applicationId 'com.aetheria.loader'
+                  minSdk 24
+                  targetSdk 34
+                  externalNativeBuild { cmake { cppFlags "-O3 -fPIC" } }
+              }
               externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
           }
           EOF
           
           cat > build.gradle << 'EOF'
-          buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
-          allprojects { repositories { google(); mavenCentral() } }
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.2.2'
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
           EOF
+          
           echo 'include ":app"' > settings.gradle
 
       # ===== 3. СБОРКА APK =====
