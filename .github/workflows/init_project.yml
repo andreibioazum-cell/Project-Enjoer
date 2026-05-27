@@ -18,7 +18,8 @@ jobs:
       - name: Setup Android SDK & Tools
         uses: android-actions/setup-android@v3
         with:
-          packages: platform-tools build-tools:34.0.0 platforms:android-34
+          # ИСПРАВЛЕНО: точки с запятой вместо двоеточий
+          packages: 'platform-tools build-tools;34.0.0 platforms;android-34'
       
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
@@ -29,7 +30,7 @@ jobs:
           components: rust-src
           
       - name: Install Python (for mkbootimg)
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.x'
       
@@ -38,7 +39,6 @@ jobs:
         run: |
           mkdir -p aetheria_kernel/src
           
-          # Ядро теперь умеет принимать реальный адрес экрана от загрузчика
           cat > aetheria_kernel/src/main.rs << 'EOF'
           #![no_std]
           #![no_main]
@@ -59,7 +59,6 @@ jobs:
               loop {}
           }
           
-          // Функция отрисовки прямоугольника
           fn draw_rect(fb: *mut u32, fb_w: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
               for iy in y..(y+h) {
                   for ix in x..(x+w) {
@@ -68,39 +67,31 @@ jobs:
               }
           }
           
-          // НОВАЯ ТОЧКА ВХОДА: Получает видеопамять от загрузчика
           #[no_mangle]
           pub extern "C" fn aetheria_main(fb_addr: *mut u32, width: u32, height: u32) -> ! {
               console::print("Kernel started with Real Graphics!");
               
-              let bg_color = 0xFF1E1E2E; // Тёмный фон
-              let panel_color = 0xFF181825; // Нижняя панель
-              let window_color = 0xFF313244; // Окно
+              let bg_color = 0xFF1E1E2E;
+              let panel_color = 0xFF181825;
+              let window_color = 0xFF313244;
               
-              // Главный цикл ОС
               let mut offset = 0;
               loop {
-                  // 1. Рисуем фон (очистка экрана)
                   draw_rect(fb_addr, width, 0, 0, width, height, bg_color);
                   
-                  // 2. Рисуем "Окно" по центру
                   let win_w = 400; let win_h = 300;
                   let win_x = (width - win_w) / 2;
                   let win_y = (height - win_h) / 2;
                   draw_rect(fb_addr, width, win_x, win_y, win_w, win_h, window_color);
-                  // Заголовок окна
                   draw_rect(fb_addr, width, win_x, win_y, win_w, 30, 0xFF89B4FA);
                   
-                  // 3. Рисуем панель задач внизу
                   draw_rect(fb_addr, width, 0, height - 60, width, 60, panel_color);
                   
-                  // 4. Анимированный кубик загрузки
                   let load_x = 50 + (offset % (width - 100));
                   draw_rect(fb_addr, width, load_x, height - 45, 30, 30, 0xFFA6E3A1);
                   
-                  offset += 2; // Двигаем анимацию
+                  offset += 2;
                   
-                  // Имитация задержки VSync
                   for _ in 0..500000 {} 
               }
           }
@@ -122,6 +113,8 @@ jobs:
           cd aetheria_kernel
           cargo build --release --target aarch64-linux-android
           
+          $ANDROID_HOME/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objcopy \
+            --strip-all -O binary target/aarch64-linux-android/release/libaetheria_kernel.a kernel.bin || \
           $ANDROID_HOME/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objcopy \
             --strip-all -O binary target/aarch64-linux-android/release/libaetheria_kernel.a kernel.bin
           cd ..
@@ -157,14 +150,12 @@ jobs:
                   surface = new SurfaceView(this);
                   setContentView(surface);
                   
-                  // Выделяем память для видеокарты ядра
                   frameBuffer = ByteBuffer.allocateDirect(WIDTH * HEIGHT * 4);
                   bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
                   
                   surface.getHolder().addCallback(new SurfaceHolder.Callback() {
                       @Override
                       public void surfaceCreated(SurfaceHolder h) {
-                          // Запуск ядра в фоновом потоке
                           new Thread(() -> {
                               try {
                                   byte[] kernel = getResources().openRawResource(R.raw.kernel_bin).readAllBytes();
@@ -172,7 +163,6 @@ jobs:
                               } catch(Exception e) { e.printStackTrace(); }
                           }).start();
                           
-                          // Поток обновления экрана (монитор)
                           new Thread(() -> {
                               while(true) {
                                   Canvas c = h.lockCanvas();
@@ -182,7 +172,7 @@ jobs:
                                       c.drawBitmap(bitmap, null, new Rect(0,0, surface.getWidth(), surface.getHeight()), null);
                                       h.unlockCanvasAndPost(c);
                                   }
-                                  try { Thread.sleep(16); } catch(Exception e){} // 60 FPS
+                                  try { Thread.sleep(16); } catch(Exception e){}
                               }
                           }).start();
                       }
@@ -209,7 +199,6 @@ jobs:
               memcpy(exec_mem, bytes, len);
               __builtin___clear_cache((char*)exec_mem, (char*)exec_mem + len);
               
-              // Вызов ядра ОС и передача ему экрана
               typedef void (*KernelMain)(void*, uint32_t, uint32_t);
               KernelMain kmain = (KernelMain)exec_mem;
               kmain(fb_ptr, w, h);
@@ -257,15 +246,12 @@ jobs:
       - name: Create boot.img (Hardware OS)
         run: |
           mkdir -p hardware_build
-          # Скачиваем утилиту создания образов Android
           curl -LO https://raw.githubusercontent.com/osm0sis/mkbootimg/master/mkbootimg
           chmod +x mkbootimg
           
-          # Создаем фиктивный ramdisk (файловую систему ядра)
           echo "AetheriaOS Initial Ramdisk" > hardware_build/init
           gzip -c hardware_build/init > hardware_build/ramdisk.gz
           
-          # Собираем boot.img (Ядро + Ramdisk)
           ./mkbootimg --kernel aetheria_kernel/kernel.bin \
                       --ramdisk hardware_build/ramdisk.gz \
                       --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial" \
@@ -273,7 +259,6 @@ jobs:
                       --pagesize 2048 \
                       -o boot.img
                       
-          # Создаем инструкцию
           cat > README_FLASHING.txt << 'EOF'
           =======================================
                AETHERIA OS - РЕЛИЗНЫЙ ПАКЕТ
