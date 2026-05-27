@@ -68,7 +68,7 @@ jobs:
           // Симуляция текста (рисует пиксельные "строки" кода для красоты терминала)
           fn draw_pseudo_text(fb: *mut u32, fb_w: u32, x: u32, y: u32, length: u32, color: u32) {
               let mut cx = x;
-              let mut seed = length * y; // Простой генератор случайных отрезков
+              let mut seed = length * y; 
               for _ in 0..length {
                   seed = (seed * 1103515245 + 12345) % 2147483648;
                   let word_len = 10 + (seed % 40) as u32;
@@ -81,10 +81,11 @@ jobs:
           #[no_mangle]
           #[link_section = ".text.entry"]
           pub extern "C" fn aetheria_main(fb_addr: *mut u32, width: u32, height: u32) -> ! {
-              let bg = 0xFF0D0D14;      // Черный экран терминала
-              let green = 0xFF4AF626;   // Хакерский зеленый
-              let white = 0xFFFFFFFF;   // Белый текст
-              let gray = 0xFF333333;
+              // ИСПРАВЛЕНО: Добавлен суффикс u32, чтобы компилятор не ругался на переполнение
+              let bg = 0xFF0D0D14u32;      
+              let green = 0xFF4AF626u32;   
+              let white = 0xFFFFFFFFu32;   
+              let blue = 0xFF89B4FAu32;
               
               // 1. Очистка экрана
               draw_rect(fb_addr, width, 0, 0, width, height, bg);
@@ -104,7 +105,7 @@ jobs:
               // 3. Вывод интерфейса
               cursor_y += 30;
               // Рисуем логотип-блок
-              draw_rect(fb_addr, width, 20, cursor_y, 250, 40, 0xFF89B4FA); 
+              draw_rect(fb_addr, width, 20, cursor_y, 250, 40, blue); 
               cursor_y += 60;
               
               // 4. Появление командной строки "root@aetheria:~#"
@@ -302,14 +303,12 @@ jobs:
         run: |
           mkdir -p hardware_build
           
-          # 100% РАБОЧИЙ ФИКС: Устанавливаем официальную утилиту напрямую из Linux
           sudo apt-get update
           sudo apt-get install -y mkbootimg
           
           echo "AetheriaOS Initial Ramdisk" > hardware_build/init
           gzip -c hardware_build/init > hardware_build/ramdisk.gz
           
-          # Используем системный mkbootimg
           mkbootimg --kernel aetheria_kernel/kernel.bin \
                     --ramdisk hardware_build/ramdisk.gz \
                     --cmdline "console=ttyMSM0,115200n8 earlycon=msm_geni_serial" \
