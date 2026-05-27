@@ -1,4 +1,4 @@
-name: JsAI_Craft_V12_WHITE_FIXED
+name: JsAI_Craft_V12_MEGA_ULTRA_OPTIMIZED
 on: [push, workflow_dispatch]
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><solid android:color="#FFFFFF"/></shape>
           EOF
           cat > app/src/main/res/drawable/btn_grass.xml << 'EOF'
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#7ED321"/></shape>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#5FBF3D"/></shape>
           EOF
           cat > app/src/main/res/drawable/btn_stone.xml << 'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#999999"/></shape>
@@ -42,8 +42,21 @@ jobs:
           cat > app/src/main/res/drawable/btn_dirt.xml << 'EOF'
           <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#8B4513"/></shape>
           EOF
+          cat > app/src/main/res/drawable/btn_wood.xml << 'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#8B6F47"/></shape>
+          EOF
+          cat > app/src/main/res/drawable/btn_sand.xml << 'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#EDC9AF"/></shape>
+          EOF
+          cat > app/src/main/res/drawable/settings_bg.xml << 'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+              <solid android:color="#E0FFFFFF"/>
+              <corners android:radius="8dp"/>
+          </shape>
+          EOF
 
           echo "android.useAndroidX=true" > gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m" >> gradle.properties
           echo "include ':app'" > settings.gradle
           cat > build.gradle << 'EOF'
           buildscript {
@@ -61,9 +74,18 @@ jobs:
                   applicationId 'com.jsai.craft'
                   minSdk 24
                   targetSdk 34
+                  versionCode 12
+                  versionName "12.0"
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
               }
           }
-          dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
+          dependencies { 
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+          }
           EOF
 
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
@@ -84,27 +106,41 @@ jobs:
                       android:background="@drawable/btn_stone" android:text="2" android:textColor="#FFF" android:layout_marginLeft="5dp"/>
                   <Button android:id="@+id/btnDirt" android:layout_width="50dp" android:layout_height="50dp" 
                       android:background="@drawable/btn_dirt" android:text="3" android:textColor="#FFF" android:layout_marginLeft="5dp"/>
+                  <Button android:id="@+id/btnWood" android:layout_width="50dp" android:layout_height="50dp" 
+                      android:background="@drawable/btn_wood" android:text="4" android:textColor="#FFF" android:layout_marginLeft="5dp"/>
+                  <Button android:id="@+id/btnSand" android:layout_width="50dp" android:layout_height="50dp" 
+                      android:background="@drawable/btn_sand" android:text="5" android:textColor="#000" android:layout_marginLeft="5dp"/>
               </LinearLayout>
 
-              <Button android:id="@+id/btnSettings" android:layout_width="50dp" android:layout_height="50dp"
+              <Button android:id="@+id/btnSettings"
+                  android:layout_width="50dp" android:layout_height="50dp"
                   android:layout_alignParentTop="true" android:layout_alignParentRight="true"
                   android:layout_margin="10dp" android:text="⚙" android:textSize="24sp"/>
 
-              <LinearLayout android:id="@+id/settingsPanel" android:layout_width="250dp" android:layout_height="wrap_content"
+              <ScrollView android:id="@+id/settingsPanel"
+                  android:layout_width="300dp" android:layout_height="wrap_content"
                   android:layout_alignParentTop="true" android:layout_alignParentRight="true"
-                  android:layout_marginTop="70dp" android:layout_marginRight="10dp"
-                  android:background="#DD000000" android:padding="10dp" android:visibility="gone" android:orientation="vertical">
-                  <TextView android:text="RENDER DISTANCE" android:textColor="#FFF" android:textStyle="bold"/>
-                  <SeekBar android:id="@+id/seekRender" android:layout_width="match_parent" android:layout_height="wrap_content"
-                      android:max="40" android:progress="20"/>
-                  <TextView android:id="@+id/txtRender" android:text="20 chunks" android:textColor="#FFF"/>
-                  
-                  <CheckBox android:id="@+id/chkMobs" android:layout_width="match_parent" android:layout_height="wrap_content"
-                      android:text="Enable Mobs" android:textColor="#FFF" android:checked="true"/>
-                  
-                  <CheckBox android:id="@+id/chkVillages" android:layout_width="match_parent" android:layout_height="wrap_content"
-                      android:text="Villages" android:textColor="#FFF" android:checked="true"/>
-              </LinearLayout>
+                  android:layout_marginTop="65dp" android:layout_marginRight="10dp"
+                  android:background="@drawable/settings_bg"
+                  android:padding="15dp" android:visibility="gone">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                      android:orientation="vertical">
+                      <TextView android:text="Настройки производительности" android:textSize="16sp" android:textStyle="bold"/>
+                      <TextView android:id="@+id/txtMemory" android:text="RAM: 512 MB" android:layout_marginTop="10dp"/>
+                      <SeekBar android:id="@+id/seekMemory" android:layout_width="match_parent" android:layout_height="wrap_content"
+                          android:max="7" android:progress="2"/>
+                      <TextView android:id="@+id/txtRenderDist" android:text="Дальность: 25" android:layout_marginTop="10dp"/>
+                      <SeekBar android:id="@+id/seekRenderDist" android:layout_width="match_parent" android:layout_height="wrap_content"
+                          android:max="30" android:progress="12"/>
+                      <CheckBox android:id="@+id/chkFastLoad" android:text="Быстрая загрузка чанков" 
+                          android:layout_marginTop="10dp" android:checked="false"/>
+                      <CheckBox android:id="@+id/chkSmoothLight" android:text="Плавное освещение" 
+                          android:layout_marginTop="5dp" android:checked="true"/>
+                      <CheckBox android:id="@+id/chkParticles" android:text="Частицы при ломании" 
+                          android:layout_marginTop="5dp" android:checked="true"/>
+                      <TextView android:id="@+id/txtFPS" android:text="FPS: 60" android:layout_marginTop="10dp" android:textStyle="bold"/>
+                  </LinearLayout>
+              </ScrollView>
 
               <FrameLayout android:id="@+id/joyZone"
                   android:layout_width="90dp" android:layout_height="90dp"
@@ -114,7 +150,6 @@ jobs:
                       android:layout_width="34dp" android:layout_height="34dp"
                       android:layout_gravity="center" android:background="@drawable/joy_handle"/>
               </FrameLayout>
-              
               <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
                   android:layout_alignParentBottom="true" android:layout_alignParentRight="true"
                   android:layout_margin="10dp" android:orientation="vertical">
@@ -135,10 +170,11 @@ jobs:
           import android.widget.*;
           public class MainActivity extends Activity {
               private GameView gv;
-              private Button btnGrass, btnStone, btnDirt;
+              private Button[] blockBtns;
               private View settingsPanel;
-              private TextView txtRender;
-              private SeekBar seekRender;
+              private SeekBar seekMemory, seekRenderDist;
+              private TextView txtMemory, txtRenderDist, txtFPS;
+              private CheckBox chkFastLoad, chkSmoothLight, chkParticles;
               
               @Override
               protected void onCreate(Bundle s) {
@@ -148,24 +184,6 @@ jobs:
                   setContentView(R.layout.activity_main);
                   
                   gv = new GameView(this, findViewById(R.id.glView));
-                  settingsPanel = findViewById(R.id.settingsPanel);
-                  txtRender = findViewById(R.id.txtRender);
-                  seekRender = findViewById(R.id.seekRender);
-                  
-                  findViewById(R.id.btnSettings).setOnClickListener(v -> 
-                      settingsPanel.setVisibility(settingsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
-                  
-                  seekRender.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                      public void onProgressChanged(SeekBar sb, int p, boolean u) {
-                          gv.renderer.renderDistance = Math.max(8, p);
-                          txtRender.setText(gv.renderer.renderDistance + " chunks");
-                      }
-                      public void onStartTrackingTouch(SeekBar sb) {}
-                      public void onStopTrackingTouch(SeekBar sb) {}
-                  });
-                  
-                  ((CheckBox)findViewById(R.id.chkMobs)).setOnCheckedChangeListener((b,c) -> gv.renderer.mobsEnabled = c);
-                  ((CheckBox)findViewById(R.id.chkVillages)).setOnCheckedChangeListener((b,c) -> gv.renderer.villagesEnabled = c);
                   
                   findViewById(R.id.btnJump).setOnClickListener(v -> gv.renderer.jump());
                   findViewById(R.id.btnBreak).setOnTouchListener((v, e) -> {
@@ -173,17 +191,69 @@ jobs:
                       else if(e.getAction() == MotionEvent.ACTION_UP) gv.renderer.stopBreak();
                       return true;
                   });
-                  findViewById(R.id.btnPlace).setOnClickListener(v -> gv.renderer.place());
+                  findViewById(R.id.btnPlace).setOnTouchListener((v, e) -> {
+                      if(e.getAction() == MotionEvent.ACTION_DOWN) gv.renderer.startPlace();
+                      else if(e.getAction() == MotionEvent.ACTION_UP) gv.renderer.stopPlace();
+                      return true;
+                  });
                   
-                  btnGrass = findViewById(R.id.btnGrass);
-                  btnStone = findViewById(R.id.btnStone);
-                  btnDirt = findViewById(R.id.btnDirt);
+                  blockBtns = new Button[5];
+                  blockBtns[0] = findViewById(R.id.btnGrass);
+                  blockBtns[1] = findViewById(R.id.btnStone);
+                  blockBtns[2] = findViewById(R.id.btnDirt);
+                  blockBtns[3] = findViewById(R.id.btnWood);
+                  blockBtns[4] = findViewById(R.id.btnSand);
                   
-                  btnGrass.setOnClickListener(v -> selectBlock(1));
-                  btnStone.setOnClickListener(v -> selectBlock(2));
-                  btnDirt.setOnClickListener(v -> selectBlock(3));
-                  
+                  for(int i=0; i<5; i++) {
+                      final int idx = i;
+                      blockBtns[i].setOnClickListener(v -> selectBlock(idx+1));
+                  }
                   selectBlock(1);
+                  
+                  settingsPanel = findViewById(R.id.settingsPanel);
+                  findViewById(R.id.btnSettings).setOnClickListener(v -> 
+                      settingsPanel.setVisibility(settingsPanel.getVisibility()==View.VISIBLE ? View.GONE : View.VISIBLE)
+                  );
+                  
+                  seekMemory = findViewById(R.id.seekMemory);
+                  seekRenderDist = findViewById(R.id.seekRenderDist);
+                  txtMemory = findViewById(R.id.txtMemory);
+                  txtRenderDist = findViewById(R.id.txtRenderDist);
+                  txtFPS = findViewById(R.id.txtFPS);
+                  chkFastLoad = findViewById(R.id.chkFastLoad);
+                  chkSmoothLight = findViewById(R.id.chkSmoothLight);
+                  chkParticles = findViewById(R.id.chkParticles);
+                  
+                  seekMemory.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                      public void onProgressChanged(SeekBar s, int p, boolean u) {
+                          int mem = 256 * (1 << p);
+                          txtMemory.setText("RAM: " + mem + " MB");
+                          gv.renderer.memoryBudget = mem;
+                      }
+                      public void onStartTrackingTouch(SeekBar s) {}
+                      public void onStopTrackingTouch(SeekBar s) {}
+                  });
+                  
+                  seekRenderDist.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                      public void onProgressChanged(SeekBar s, int p, boolean u) {
+                          int dist = p + 10;
+                          txtRenderDist.setText("Дальность: " + dist);
+                          gv.renderer.renderDistance = dist;
+                      }
+                      public void onStartTrackingTouch(SeekBar s) {}
+                      public void onStopTrackingTouch(SeekBar s) {}
+                  });
+                  
+                  chkFastLoad.setOnCheckedChangeListener((b, c) -> gv.renderer.fastLoad = c);
+                  chkSmoothLight.setOnCheckedChangeListener((b, c) -> gv.renderer.smoothLight = c);
+                  chkParticles.setOnCheckedChangeListener((b, c) -> gv.renderer.particles = c);
+                  
+                  new Thread(() -> {
+                      while(true) {
+                          try { Thread.sleep(500); } catch(Exception e) {}
+                          runOnUiThread(() -> txtFPS.setText("FPS: " + gv.renderer.fps));
+                      }
+                  }).start();
                   
                   View jZ = findViewById(R.id.joyZone), jH = findViewById(R.id.joyHandle);
                   jZ.setOnTouchListener((v, e) -> {
@@ -201,9 +271,7 @@ jobs:
               
               private void selectBlock(int type) {
                   gv.renderer.selectedBlock = (byte)type;
-                  btnGrass.setAlpha(type==1?1f:0.5f);
-                  btnStone.setAlpha(type==2?1f:0.5f);
-                  btnDirt.setAlpha(type==3?1f:0.5f);
+                  for(int i=0; i<5; i++) blockBtns[i].setAlpha(i==type-1?1f:0.5f);
               }
           }
           EOF
@@ -219,9 +287,11 @@ jobs:
               private boolean isPanning = false;
 
               public GameView(Context ctx, GLSurfaceView gl) {
-                  gl.setEGLContextClientVersion(2);
+                  gl.setEGLContextClientVersion(3);
+                  gl.setEGLConfigChooser(8, 8, 8, 8, 16, 0);
                   renderer = new CraftRenderer();
                   gl.setRenderer(renderer);
+                  gl.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
                   gl.setOnTouchListener((v, e) -> {
                       float x = e.getX(), y = e.getY();
                       switch(e.getAction()) {
@@ -230,8 +300,8 @@ jobs:
                               break;
                           case MotionEvent.ACTION_MOVE:
                               if(isPanning) {
-                                  renderer.yaw -= (x - lx) * 0.25f;
-                                  renderer.pitch += (y - ly) * 0.25f;
+                                  renderer.yaw -= (x - lx) * 0.3f;
+                                  renderer.pitch += (y - ly) * 0.3f;
                                   if(renderer.pitch > 89) renderer.pitch = 89;
                                   if(renderer.pitch < -89) renderer.pitch = -89;
                                   lx = x; ly = y;
@@ -249,7 +319,7 @@ jobs:
 
           cat > app/src/main/java/com/jsai/craft/CraftRenderer.java << 'EOF'
           package com.jsai.craft;
-          import android.opengl.GLES20;
+          import android.opengl.GLES30;
           import android.opengl.GLSurfaceView;
           import android.opengl.Matrix;
           import javax.microedition.khronos.egl.EGLConfig;
@@ -258,79 +328,75 @@ jobs:
 
           public class CraftRenderer implements GLSurfaceView.Renderer {
               public float yaw = 0, pitch = 0;
-              private float px = 64, py = 25, pz = 64, vy = 0, mvX = 0, mvZ = 0;
+              private float px = 64, py = 30, pz = 64, vy = 0, mvX = 0, mvZ = 0;
               private final float[] proj = new float[16], view = new float[16], mvp = new float[16];
               private Block block;
-              private byte[] world;
+              private byte[] world = new byte[128 * 64 * 128];
               private int[] sel = null, plc = null;
               public byte selectedBlock = 1;
-              public boolean isBreaking = false;
-              public float breakProgress = 0, placeProgress = 1.0f;
-              private long breakStart = 0;
-              private static final long BREAK_TIME = 1500;
-              public int renderDistance = 20;
-              public boolean mobsEnabled = true, villagesEnabled = true;
+              public boolean isBreaking = false, isPlacing = false;
+              public float breakProgress = 0, placeProgress = 0;
+              private long breakStart = 0, placeStart = 0;
+              private static final long BREAK_TIME = 1500, PLACE_TIME = 200;
+              
+              public int memoryBudget = 512, renderDistance = 22, fps = 60;
+              public boolean fastLoad = false, smoothLight = true, particles = true;
+              
+              private List<int[]> visibleBlocks = new ArrayList<>();
+              private int lastChunkX = -999, lastChunkZ = -999;
+              private long lastFrame = 0, frameCount = 0, lastFpsUpdate = 0;
               
               private List<Mob> mobs = new ArrayList<>();
+              private List<Village> villages = new ArrayList<>();
               private Random rand = new Random();
 
               public void onSurfaceCreated(GL10 g, EGLConfig c) {
-                  GLES20.glClearColor(0.53f, 0.81f, 0.92f, 1.0f);
-                  GLES20.glEnable(GLES20.GL_DEPTH_TEST);
-                  GLES20.glEnable(GLES20.GL_CULL_FACE);
-                  GLES20.glEnable(GLES20.GL_BLEND);
-                  GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
-                  
-                  world = new byte[128 * 64 * 128];
+                  GLES30.glClearColor(0.53f, 0.81f, 0.98f, 1.0f);
+                  GLES30.glEnable(GLES30.GL_DEPTH_TEST);
+                  GLES30.glEnable(GLES30.GL_CULL_FACE);
+                  GLES30.glDepthFunc(GLES30.GL_LEQUAL);
+                  GLES30.glCullFace(GLES30.GL_BACK);
+                  GLES30.glEnable(GLES30.GL_BLEND);
+                  GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA);
                   block = new Block();
                   
-                  // Генерация ландшафта
+                  // Генерация мира с биомами
                   for(int x=0; x<128; x++) {
                       for(int z=0; z<128; z++) {
-                          int h = (int)(Math.sin(x*0.12)*Math.cos(z*0.12)*4 + 10);
+                          double noise = Math.sin(x*0.08)*Math.cos(z*0.08) + Math.sin(x*0.03)*Math.cos(z*0.05)*2;
+                          int h = (int)(noise*3 + 12);
+                          boolean isSand = Math.abs(noise) < 0.3;
+                          
                           for(int y=0; y<h; y++) {
-                              setB(x,y,z,(byte)(y==h-1?1:y<h-3?2:3));
+                              if(isSand) setB(x,y,z,(byte)5);
+                              else setB(x,y,z,(byte)(y==h-1?1:y<h-3?2:3));
                           }
-                      }
-                  }
-                  
-                  // Деревни (без жителей)
-                  if(villagesEnabled) {
-                      for(int i=0; i<2; i++) {
-                          int vx = 30 + rand.nextInt(60);
-                          int vz = 30 + rand.nextInt(60);
-                          generateVillage(vx, vz);
-                      }
-                  }
-                  
-                  // Мобы
-                  if(mobsEnabled) {
-                      for(int i=0; i<8; i++) {
-                          mobs.add(new Mob(rand.nextInt(100)+10, 20, rand.nextInt(100)+10));
-                      }
-                  }
-              }
-              
-              private void generateVillage(int cx, int cz) {
-                  int h = getHeight(cx, cz);
-                  // Дом 5x5x4
-                  for(int dx=-2; dx<=2; dx++) {
-                      for(int dz=-2; dz<=2; dz++) {
-                          // Пол
-                          setB(cx+dx, h, cz+dz, (byte)4);
-                          // Стены
-                          if(Math.abs(dx)==2 || Math.abs(dz)==2) {
-                              for(int y=h+1; y<h+4; y++) {
-                                  setB(cx+dx, y, cz+dz, (byte)4);
+                          
+                          // Деревья
+                          if(!isSand && rand.nextFloat() < 0.02f && h > 10) {
+                              for(int ty=h; ty<h+5; ty++) setB(x,ty,z,(byte)4);
+                              for(int lx=-2; lx<=2; lx++) {
+                                  for(int lz=-2; lz<=2; lz++) {
+                                      if(Math.abs(lx)+Math.abs(lz) < 4) setB(x+lx,h+5,z+lz,(byte)1);
+                                  }
                               }
                           }
                       }
                   }
-                  // Крыша
-                  for(int dx=-2; dx<=2; dx++) {
-                      for(int dz=-2; dz<=2; dz++) {
-                          setB(cx+dx, h+4, cz+dz, (byte)4);
-                      }
+                  
+                  // Создание деревень
+                  for(int i=0; i<3; i++) {
+                      int vx = 20 + rand.nextInt(88);
+                      int vz = 20 + rand.nextInt(88);
+                      int vy = getHeight(vx, vz);
+                      villages.add(new Village(vx, vy, vz, this));
+                  }
+                  
+                  // Спавн мобов
+                  for(int i=0; i<15; i++) {
+                      int mx = rand.nextInt(128);
+                      int mz = rand.nextInt(128);
+                      mobs.add(new Mob(mx, getHeight(mx, mz)+1, mz));
                   }
               }
               
@@ -340,7 +406,10 @@ jobs:
               }
               
               private void setB(int x, int y, int z, byte t) { 
-                  if(x>=0&&x<128&&y>=0&&y<64&&z>=0&&z<128) world[x+y*128+z*128*64]=t;
+                  if(x>=0&&x<128&&y>=0&&y<64&&z>=0&&z<128) {
+                      world[x+y*128+z*128*64]=t;
+                      lastChunkX = -999;
+                  }
               }
               
               private byte getB(int x, int y, int z) { 
@@ -349,34 +418,23 @@ jobs:
               }
 
               public void setMove(float x, float z) { mvX = x; mvZ = z; }
-              public void jump() { if(Math.abs(vy) < 0.02f) vy = 0.218f; }
-
-              public void startBreak() { 
-                  if(sel != null) { 
-                      isBreaking = true; 
-                      breakStart = System.currentTimeMillis(); 
-                  } 
-              }
-              
-              public void stopBreak() { 
-                  isBreaking = false; 
-                  breakProgress = 0; 
-              }
-              
-              public void place() {
-                  if(plc != null && sel != null) {
-                      int px = plc[0], py = plc[1], pz = plc[2];
-                      if(getB(px,py,pz) == 0 && 
-                         !(Math.abs(this.px-px)<0.815f && Math.abs(this.py-py)<1.83f && Math.abs(this.pz-pz)<0.815f)) {
-                          setB(px, py, pz, selectedBlock);
-                          placeProgress = 0;
-                      }
-                  }
-              }
+              public void jump() { if(Math.abs(vy) < 0.02f) vy = 0.2184f; } // -9%
+              public void startBreak() { if(sel != null) { isBreaking = true; breakStart = System.currentTimeMillis(); } }
+              public void stopBreak() { isBreaking = false; breakProgress = 0; }
+              public void startPlace() { if(plc != null) { isPlacing = true; placeStart = System.currentTimeMillis(); placeProgress = 0; } }
+              public void stopPlace() { isPlacing = false; placeProgress = 0; }
 
               public void onDrawFrame(GL10 g) {
+                  long now = System.currentTimeMillis();
+                  if(now - lastFpsUpdate > 500) {
+                      fps = (int)(frameCount * 1000.0 / (now - lastFpsUpdate));
+                      frameCount = 0;
+                      lastFpsUpdate = now;
+                  }
+                  frameCount++;
+                  
                   update();
-                  GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
+                  GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT | GLES30.GL_DEPTH_BUFFER_BIT);
                   
                   float lx=(float)(Math.cos(Math.toRadians(pitch))*Math.sin(Math.toRadians(yaw))), 
                         ly=(float)(-Math.sin(Math.toRadians(pitch))), 
@@ -385,9 +443,9 @@ jobs:
                   Matrix.setLookAtM(view, 0, px, py+1.6f, pz, px+lx, py+1.6f+ly, pz+lz, 0, 1, 0);
                   Matrix.multiplyMM(mvp, 0, proj, 0, view, 0);
 
-                  // Raycast
+                  // Raycast с увеличенным хитбоксом
                   sel=null; plc=null;
-                  for(float d=0; d<6; d+=0.1f) {
+                  for(float d=0; d<6; d+=0.08f) {
                       int tx=(int)Math.floor(px+lx*d), ty=(int)Math.floor(py+1.6f+ly*d), tz=(int)Math.floor(pz+lz*d);
                       if(getB(tx,ty,tz)>0) {
                           sel=new int[]{tx,ty,tz};
@@ -407,100 +465,202 @@ jobs:
                       }
                   }
                   
-                  if(placeProgress < 1.0f) placeProgress = Math.min(1.0f, placeProgress + 0.08f);
-
-                  // Рендер блоков
-                  int r = renderDistance;
-                  int rendered = 0;
-                  for(int x=(int)px-r; x<(int)px+r && rendered<1500; x++) {
-                      for(int z=(int)pz-r; z<(int)pz+r && rendered<1500; z++) {
-                          for(int y=Math.max(0,(int)py-r); y<Math.min(64,(int)py+r) && rendered<1500; y++) {
-                              byte t = getB(x,y,z);
-                              if(t>0) {
-                                  float dx = x - px, dy = y - py, dz = z - pz;
-                                  if(dx*dx + dy*dy + dz*dz > r*r) continue;
-                                  
-                                  if(getB(x+1,y,z)>0 && getB(x-1,y,z)>0 && 
-                                     getB(x,y+1,z)>0 && getB(x,y-1,z)>0 && 
-                                     getB(x,y,z+1)>0 && getB(x,y,z-1)>0) continue;
-                                  
-                                  float[] m=new float[16], res=new float[16]; 
-                                  Matrix.setIdentityM(m,0); 
-                                  
-                                  boolean isSelected = (sel!=null && x==sel[0] && y==sel[1] && z==sel[2]);
-                                  boolean isPlaced = (plc!=null && x==plc[0] && y==plc[1] && z==plc[2] && placeProgress<1.0f);
-                                  
-                                  float scale = 1.0f, alpha = 1.0f;
-                                  
-                                  if(isSelected && isBreaking) {
-                                      scale = 1.0f - breakProgress * 0.3f;
-                                      alpha = 1.0f - breakProgress * 0.7f;
-                                  } else if(isPlaced) {
-                                      scale = placeProgress;
-                                      alpha = placeProgress;
-                                  }
-                                  
-                                  Matrix.translateM(m,0,x+0.5f,y+0.5f,z+0.5f); 
-                                  Matrix.scaleM(m,0,scale,scale,scale);
-                                  Matrix.translateM(m,0,-0.5f,-0.5f,-0.5f);
-                                  Matrix.multiplyMM(res,0,mvp,0,m,0);
-                                  block.draw(res, isSelected, t, alpha);
-                                  rendered++;
-                              }
+                  if(isPlacing && plc != null) {
+                      long elapsed = System.currentTimeMillis() - placeStart;
+                      placeProgress = Math.min(1.0f, elapsed / (float)PLACE_TIME);
+                      if(placeProgress >= 1.0f) {
+                          int ppx = plc[0], ppy = plc[1], ppz = plc[2];
+                          if(getB(ppx,ppy,ppz) == 0 && 
+                             !(Math.abs(px-ppx)<0.9f && Math.abs(py-ppy)<1.9f && Math.abs(pz-ppz)<0.9f)) {
+                              setB(ppx, ppy, ppz, selectedBlock);
                           }
+                          isPlacing = false;
+                          placeProgress = 0;
+                      }
+                  }
+
+                  int chunkX = ((int)px) >> 4, chunkZ = ((int)pz) >> 4;
+                  if(chunkX != lastChunkX || chunkZ != lastChunkZ || fastLoad) {
+                      rebuildVisibleBlocks(lx, lz);
+                      lastChunkX = chunkX;
+                      lastChunkZ = chunkZ;
+                  }
+
+                  for(int[] b : visibleBlocks) {
+                      int x = b[0], y = b[1], z = b[2];
+                      byte t = getB(x,y,z);
+                      if(t > 0) {
+                          float[] m=new float[16], res=new float[16]; 
+                          Matrix.setIdentityM(m,0);
+                          
+                          float scale = 1.015f; // +1.5%
+                          Matrix.translateM(m,0,x-0.0075f,y-0.0075f,z-0.0075f);
+                          Matrix.scaleM(m,0,scale,scale,scale);
+                          
+                          Matrix.multiplyMM(res,0,mvp,0,m,0);
+                          boolean isSel = sel!=null && x==sel[0] && y==sel[1] && z==sel[2];
+                          block.draw(res, isSel, t, isSel?breakProgress:0, smoothLight?(y/64f):0.7f);
                       }
                   }
                   
+                  // Рендер блока который ставим
+                  if(isPlacing && plc != null && placeProgress > 0) {
+                      float[] m=new float[16], res=new float[16]; 
+                      Matrix.setIdentityM(m,0);
+                      float s = placeProgress * 1.015f;
+                      float offset = (1.015f - s) / 2f;
+                      Matrix.translateM(m,0,plc[0]+offset,plc[1]+offset,plc[2]+offset);
+                      Matrix.scaleM(m,0,s,s,s);
+                      Matrix.multiplyMM(res,0,mvp,0,m,0);
+                      block.draw(res, false, selectedBlock, 0, smoothLight?(plc[1]/64f):0.7f, placeProgress);
+                  }
+                  
                   // Рендер мобов
-                  if(mobsEnabled) {
-                      for(Mob mob : mobs) {
-                          mob.update();
+                  for(Mob mob : mobs) {
+                      mob.update(this);
+                      float[] m=new float[16], res=new float[16];
+                      Matrix.setIdentityM(m,0);
+                      Matrix.translateM(m,0,mob.x,mob.y,mob.z);
+                      Matrix.scaleM(m,0,0.4f,0.8f,0.4f);
+                      Matrix.multiplyMM(res,0,mvp,0,m,0);
+                      block.draw(res, false, (byte)2, 0, 0.8f);
+                  }
+                  
+                  // Рендер жителей
+                  for(Village v : villages) {
+                      for(Villager vil : v.villagers) {
+                          vil.update(this);
                           float[] m=new float[16], res=new float[16];
-                          Matrix.setIdentityM(m,0); 
-                          Matrix.translateM(m,0,mob.x,mob.y,mob.z); 
-                          Matrix.scaleM(m,0,0.5f,1.0f,0.5f);
+                          Matrix.setIdentityM(m,0);
+                          Matrix.translateM(m,0,vil.x,vil.y,vil.z);
+                          Matrix.scaleM(m,0,0.5f,1.2f,0.5f);
                           Matrix.multiplyMM(res,0,mvp,0,m,0);
-                          block.draw(res, false, (byte)5, 1.0f);
+                          block.draw(res, false, (byte)4, 0, 0.9f);
+                      }
+                  }
+              }
+              
+              private void rebuildVisibleBlocks(float lx, float lz) {
+                  visibleBlocks.clear();
+                  int r = renderDistance;
+                  int maxBlocks = memoryBudget * 100;
+                  
+                  for(int x=(int)px-r; x<(int)px+r && visibleBlocks.size()<maxBlocks; x++) {
+                      for(int z=(int)pz-r; z<(int)pz+r && visibleBlocks.size()<maxBlocks; z++) {
+                          for(int y=Math.max(0,(int)py-r); y<Math.min(64,(int)py+r) && visibleBlocks.size()<maxBlocks; y++) {
+                              if(getB(x,y,z) == 0) continue;
+                              
+                              float dx = x - px, dy = y - py, dz = z - pz;
+                              float dist = dx*dx + dy*dy + dz*dz;
+                              if(dist > r*r) continue;
+                              
+                              float dot = dx * lx + dz * lz;
+                              if(dot < -3.0f && dist > 49.0f) continue;
+                              
+                              if(getB(x+1,y,z)>0 && getB(x-1,y,z)>0 && 
+                                 getB(x,y+1,z)>0 && getB(x,y-1,z)>0 && 
+                                 getB(x,y,z+1)>0 && getB(x,y,z-1)>0) continue;
+                              
+                              visibleBlocks.add(new int[]{x,y,z});
+                          }
                       }
                   }
               }
 
               private void update() {
                   float s=(float)Math.sin(Math.toRadians(yaw)), c=(float)Math.cos(Math.toRadians(yaw));
-                  float dx = (mvZ * s - mvX * c) * 0.1079f;
-                  float dz = (mvZ * c + mvX * s) * 0.1079f;
+                  float speed = 0.1079f; // -17%
+                  float dx = (mvZ * s - mvX * c) * speed;
+                  float dz = (mvZ * c + mvX * s) * speed;
                   
-                  if(getB((int)Math.floor(px+dx+(dx>0?0.5f:-0.5f)), (int)py, (int)pz)==0 && 
-                     getB((int)Math.floor(px+dx+(dx>0?0.5f:-0.5f)), (int)py+1, (int)pz)==0) px+=dx;
-                  if(getB((int)px, (int)py, (int)Math.floor(pz+dz+(dz>0?0.5f:-0.5f)))==0 &&
-                     getB((int)px, (int)py+1, (int)Math.floor(pz+dz+(dz>0?0.5f:-0.5f)))==0) pz+=dz;
+                  float hitbox = 0.5075f; // +1.5%
+                  if(getB((int)Math.floor(px+dx+(dx>0?hitbox:-hitbox)), (int)py, (int)pz)==0 && 
+                     getB((int)Math.floor(px+dx+(dx>0?hitbox:-hitbox)), (int)py+1, (int)pz)==0) px+=dx;
+                  if(getB((int)px, (int)py, (int)Math.floor(pz+dz+(dz>0?hitbox:-hitbox)))==0 &&
+                     getB((int)px, (int)py+1, (int)Math.floor(pz+dz+(dz>0?hitbox:-hitbox)))==0) pz+=dz;
 
-                  vy-=0.01148f; 
+                  vy-=0.01148f; // -18%
                   py+=vy;
                   if(getB((int)px, (int)Math.floor(py), (int)pz)>0) { py=(int)Math.floor(py)+1; vy=0; }
                   if(py < -10) { px=64; py=30; pz=64; vy=0; }
               }
               
               public void onSurfaceChanged(GL10 g, int w, int h) { 
-                  GLES20.glViewport(0,0,w,h); 
-                  Matrix.perspectiveM(proj, 0, 70, (float)w/h, 0.1f, 120f); 
+                  GLES30.glViewport(0,0,w,h); 
+                  Matrix.perspectiveM(proj, 0, 80, (float)w/h, 0.05f, 200f); 
               }
               
               class Mob {
-                  float x, y, z, vx, vz;
-                  Mob(float x, float y, float z) { 
-                      this.x=x; this.y=y; this.z=z; 
-                      vx=(rand.nextFloat()-0.5f)*0.05f; 
-                      vz=(rand.nextFloat()-0.5f)*0.05f; 
-                  }
-                  void update() { 
-                      x+=vx; z+=vz; 
-                      if(rand.nextInt(100)<3) { 
-                          vx=(rand.nextFloat()-0.5f)*0.05f; 
-                          vz=(rand.nextFloat()-0.5f)*0.05f; 
+                  float x, y, z, yaw;
+                  long lastMove = 0;
+                  
+                  Mob(float x, float y, float z) { this.x=x; this.y=y; this.z=z; this.yaw=rand.nextFloat()*360; }
+                  
+                  void update(CraftRenderer r) {
+                      if(System.currentTimeMillis() - lastMove > 2000) {
+                          yaw = rand.nextFloat()*360;
+                          lastMove = System.currentTimeMillis();
                       }
-                      if(x<10) x=10; if(x>118) x=118;
-                      if(z<10) z=10; if(z>118) z=118;
+                      float dx = (float)Math.sin(Math.toRadians(yaw))*0.02f;
+                      float dz = (float)Math.cos(Math.toRadians(yaw))*0.02f;
+                      if(r.getB((int)(x+dx), (int)y, (int)(z+dz))==0) { x+=dx; z+=dz; }
+                      y = r.getHeight((int)x, (int)z);
+                  }
+              }
+              
+              class Villager {
+                  float x, y, z, yaw;
+                  int homeX, homeZ;
+                  long lastMove = 0;
+                  
+                  Villager(float x, float y, float z) { 
+                      this.x=x; this.y=y; this.z=z; 
+                      homeX=(int)x; homeZ=(int)z;
+                      this.yaw=rand.nextFloat()*360; 
+                  }
+                  
+                  void update(CraftRenderer r) {
+                      if(System.currentTimeMillis() - lastMove > 3000) {
+                          float tx = homeX + (rand.nextFloat()-0.5f)*10;
+                          float tz = homeZ + (rand.nextFloat()-0.5f)*10;
+                          yaw = (float)Math.toDegrees(Math.atan2(tx-x, tz-z));
+                          lastMove = System.currentTimeMillis();
+                      }
+                      float dx = (float)Math.sin(Math.toRadians(yaw))*0.015f;
+                      float dz = (float)Math.cos(Math.toRadians(yaw))*0.015f;
+                      if(r.getB((int)(x+dx), (int)y, (int)(z+dz))==0) { x+=dx; z+=dz; }
+                      y = r.getHeight((int)x, (int)z);
+                  }
+              }
+              
+              class Village {
+                  List<Villager> villagers = new ArrayList<>();
+                  
+                  Village(int x, int y, int z, CraftRenderer r) {
+                      // Строим 3-5 домов
+                      int houses = 3 + rand.nextInt(3);
+                      for(int h=0; h<houses; h++) {
+                          int hx = x + (h%2)*8 - 4;
+                          int hz = z + (h/2)*8 - 4;
+                          buildHouse(hx, y, hz, r);
+                          villagers.add(new Villager(hx+2, y+1, hz+2));
+                      }
+                  }
+                  
+                  void buildHouse(int x, int y, int z, CraftRenderer r) {
+                      // Пол
+                      for(int i=0; i<5; i++) for(int j=0; j<5; j++) r.setB(x+i,y,z+j,(byte)4);
+                      // Стены
+                      for(int i=0; i<5; i++) {
+                          r.setB(x+i,y+1,z,(byte)4); r.setB(x+i,y+2,z,(byte)4);
+                          r.setB(x+i,y+1,z+4,(byte)4); r.setB(x+i,y+2,z+4,(byte)4);
+                      }
+                      for(int j=1; j<4; j++) {
+                          r.setB(x,y+1,z+j,(byte)4); r.setB(x,y+2,z+j,(byte)4);
+                          r.setB(x+4,y+1,z+j,(byte)4); r.setB(x+4,y+2,z+j,(byte)4);
+                      }
+                      // Крыша
+                      for(int i=0; i<5; i++) for(int j=0; j<5; j++) r.setB(x+i,y+3,z+j,(byte)3);
                   }
               }
           }
@@ -508,7 +668,7 @@ jobs:
 
           cat > app/src/main/java/com/jsai/craft/Block.java << 'EOF'
           package com.jsai.craft;
-          import android.opengl.GLES20;
+          import android.opengl.GLES30;
           import java.nio.*;
           
           public class Block {
@@ -521,46 +681,61 @@ jobs:
                   vb = ByteBuffer.allocateDirect(v.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(v); vb.position(0);
                   wb = ByteBuffer.allocateDirect(w.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(w); wb.position(0);
                   
-                  String vs="attribute vec4 p; uniform mat4 m; varying vec3 vP; void main(){gl_Position=m*p; vP=p.xyz;}",
-                         fs="precision mediump float; varying vec3 vP; uniform vec3 c; uniform float a; void main(){float l=clamp(vP.y*0.35+0.65,0.4,1.0); gl_FragColor=vec4(c*l,a);}";
+                  String vs="#version 300 es\n" +
+                            "layout(location=0) in vec4 p; uniform mat4 m; out vec3 vP; void main(){gl_Position=m*p; vP=p.xyz;}",
+                         fs="#version 300 es\n" +
+                            "precision highp float; in vec3 vP; uniform vec3 c; uniform float br; uniform float light; uniform float alpha; out vec4 fragColor; " +
+                            "void main(){" +
+                            "float ambient=0.6+vP.y*0.4*light; " +
+                            "vec3 col=c*ambient; " +
+                            "if(br>0.0) col=mix(col,vec3(0.1),br*0.6); " +
+                            "fragColor=vec4(col,alpha);}";
                   
-                  int vsh=GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER); 
-                  GLES20.glShaderSource(vsh,vs); GLES20.glCompileShader(vsh);
-                  int fsh=GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER); 
-                  GLES20.glShaderSource(fsh,fs); GLES20.glCompileShader(fsh);
-                  prg=GLES20.glCreateProgram(); 
-                  GLES20.glAttachShader(prg,vsh); 
-                  GLES20.glAttachShader(prg,fsh); 
-                  GLES20.glLinkProgram(prg);
+                  int vsh=GLES30.glCreateShader(GLES30.GL_VERTEX_SHADER); 
+                  GLES30.glShaderSource(vsh,vs); GLES30.glCompileShader(vsh);
+                  int fsh=GLES30.glCreateShader(GLES30.GL_FRAGMENT_SHADER); 
+                  GLES30.glShaderSource(fsh,fs); GLES30.glCompileShader(fsh);
+                  prg=GLES30.glCreateProgram(); 
+                  GLES30.glAttachShader(prg,vsh); 
+                  GLES30.glAttachShader(prg,fsh); 
+                  GLES30.glLinkProgram(prg);
               }
               
-              public void draw(float[] m, boolean selected, int type, float alpha) {
-                  GLES20.glUseProgram(prg);
-                  int ph=GLES20.glGetAttribLocation(prg,"p"),
-                      ch=GLES20.glGetUniformLocation(prg,"c"),
-                      ah=GLES20.glGetUniformLocation(prg,"a");
+              public void draw(float[] m, boolean selected, int type, float breakProg, float lightLevel) {
+                  draw(m, selected, type, breakProg, lightLevel, 1.0f);
+              }
+              
+              public void draw(float[] m, boolean selected, int type, float breakProg, float lightLevel, float alpha) {
+                  GLES30.glUseProgram(prg);
+                  int ch=GLES30.glGetUniformLocation(prg,"c"),
+                      bh=GLES30.glGetUniformLocation(prg,"br"),
+                      lh=GLES30.glGetUniformLocation(prg,"light"),
+                      ah=GLES30.glGetUniformLocation(prg,"alpha");
                   
-                  GLES20.glEnableVertexAttribArray(ph); 
-                  GLES20.glVertexAttribPointer(ph,3,GLES20.GL_FLOAT,false,0,vb);
-                  GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(prg,"m"),1,false,m,0);
+                  GLES30.glEnableVertexAttribArray(0); 
+                  GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,vb);
+                  GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(prg,"m"),1,false,m,0);
                   
                   float r=0.5f, g=0.5f, b=0.5f;
-                  if(type==1) { r=0.48f; g=0.85f; b=0.31f; }
-                  else if(type==2) { r=0.65f; g=0.65f; b=0.65f; }
-                  else if(type==3) { r=0.58f; g=0.38f; b=0.22f; }
-                  else if(type==4) { r=0.8f; g=0.6f; b=0.4f; }
-                  else if(type==5) { r=0.3f; g=0.8f; b=0.3f; }
+                  if(type==1) { r=0.37f; g=0.75f; b=0.24f; } // Трава ярче
+                  else if(type==2) { r=0.55f; g=0.55f; b=0.55f; }
+                  else if(type==3) { r=0.52f; g=0.32f; b=0.18f; }
+                  else if(type==4) { r=0.55f; g=0.43f; b=0.28f; } // Дерево
+                  else if(type==5) { r=0.93f; g=0.79f; b=0.69f; } // Песок
                   
-                  GLES20.glUniform3f(ch, r, g, b);
-                  GLES20.glUniform1f(ah, alpha);
-                  GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 36);
+                  GLES30.glUniform3f(ch, r, g, b);
+                  GLES30.glUniform1f(bh, selected ? breakProg : 0.0f);
+                  GLES30.glUniform1f(lh, lightLevel);
+                  GLES30.glUniform1f(ah, alpha);
+                  GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 36);
                   
-                  if(selected) {
-                      GLES20.glLineWidth(3.0f);
-                      GLES20.glUniform3f(ch, 1, 1, 1);
-                      GLES20.glUniform1f(ah, 1.0f);
-                      GLES20.glVertexAttribPointer(ph,3,GLES20.GL_FLOAT,false,0,wb); 
-                      GLES20.glDrawArrays(GLES20.GL_LINES, 0, 24);
+                  if(selected && breakProg < 0.99f) {
+                      GLES30.glLineWidth(3.5f);
+                      GLES30.glUniform3f(ch, 1, 1, 1);
+                      GLES30.glUniform1f(bh, 0.0f);
+                      GLES30.glUniform1f(ah, 1.0f);
+                      GLES30.glVertexAttribPointer(0,3,GLES30.GL_FLOAT,false,0,wb); 
+                      GLES30.glDrawArrays(GLES30.GL_LINES, 0, 24);
                   }
               }
           }
@@ -569,25 +744,34 @@ jobs:
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-feature android:glEsVersion="0x00020000" android:required="true"/>
-              <application android:label="JsAI Craft" android:hardwareAccelerated="true">
-                  <activity android:name="com.jsai.craft.MainActivity" android:exported="true" android:screenOrientation="landscape">
-                      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+              <uses-feature android:glEsVersion="0x00030000" android:required="true"/>
+              <application android:label="JsAI Craft V12 MEGA" 
+                  android:hardwareAccelerated="true"
+                  android:largeHeap="true"
+                  android:allowBackup="true">
+                  <activity android:name="com.jsai.craft.MainActivity" 
+                      android:exported="true" 
+                      android:screenOrientation="landscape"
+                      android:configChanges="orientation|screenSize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
                   </activity>
               </application>
           </manifest>
           EOF
 
-      - name: Turbo Build
+      - name: Mega Build
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
           export PATH="$PWD/gradle-8.5/bin:$PATH"
           gradle wrapper --gradle-version 8.5
-          ./gradlew assembleDebug --no-daemon --parallel --build-cache
+          ./gradlew assembleDebug --no-daemon --parallel --build-cache --max-workers=4
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: JsAI_Craft_Villages
+          name: JsAI_Craft_V12_MEGA
           path: app/build/outputs/apk/debug/app-debug.apk
