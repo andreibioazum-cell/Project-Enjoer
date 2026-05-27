@@ -38,26 +38,31 @@ jobs:
         run: |
           mkdir -p aetheria_kernel/src
           
-          # ИСПРАВЛЕНО: Файл теперь называется lib.rs, так как это staticlib
+          # Настоящий, полностью автономный код ядра ОС
           cat > aetheria_kernel/src/lib.rs << 'EOF'
           #![no_std]
           
           use core::panic::PanicInfo;
           use core::ptr::write_volatile;
           
-          mod console {
-              extern "C" { fn __android_log_write(prio: i32, tag: *const u8, msg: *const u8) -> i32; }
-              pub fn print(msg: &str) {
-                  unsafe { __android_log_write(4, b"AetheriaKernel\0".as_ptr(), msg.as_ptr()); }
-              }
-          }
-          
           #[panic_handler]
           fn panic(_info: &PanicInfo) -> ! {
-              console::print("KERNEL PANIC!");
               loop {}
           }
           
+          // Базовые функции памяти для компилятора, чтобы он не искал их в C-библиотеках
+          #[no_mangle]
+          pub unsafe extern "C" fn memset(dest: *mut u8, c: i32, n: usize) -> *mut u8 {
+              for i in 0..n { *dest.add(i) = c as u8; }
+              dest
+          }
+          #[no_mangle]
+          pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+              for i in 0..n { *dest.add(i) = *src.add(i); }
+              dest
+          }
+          
+          // Прямая отрисовка пикселей в память (Direct Framebuffer Access)
           fn draw_rect(fb: *mut u32, fb_w: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
               for iy in y..(y+h) {
                   for ix in x..(x+w) {
@@ -66,13 +71,13 @@ jobs:
               }
           }
           
+          // Точка входа в систему. .text.entry гарантирует, что она будет в самом начале бинарника (Смещение 0x0)
           #[no_mangle]
+          #[link_section = ".text.entry"]
           pub extern "C" fn aetheria_main(fb_addr: *mut u32, width: u32, height: u32) -> ! {
-              console::print("Kernel started with Real Graphics!");
-              
-              let bg_color = 0xFF1E1E2E;
-              let panel_color = 0xFF181825;
-              let window_color = 0xFF313244;
+              let bg_color = 0xFF1E1E2E;     // Тёмный фон
+              let panel_color = 0xFF181825;  // Нижняя панель
+              let window_color = 0xFF313244; // Окно
               
               let mut offset = 0;
               loop {
@@ -96,6 +101,21 @@ jobs:
           }
           EOF
           
+          # Скрипт Линкера: расставляет код по правильным адресам
+          cat > aetheria_kernel/linker.ld << 'EOF'
+          ENTRY(aetheria_main);
+          SECTIONS {
+              . = 0x00000000;
+              .text : {
+                  *(.text.entry)
+                  *(.text*)
+              }
+              .rodata : { *(.rodata*) }
+              .data : { *(.data*) }
+              .bss : { *(.bss*) *(COMMON) }
+          }
+          EOF
+          
           cat > aetheria_kernel/Cargo.toml << 'EOF'
           [package]
           name = "aetheria_kernel"
@@ -107,15 +127,23 @@ jobs:
           
           [profile.release]
           opt-level = 3
-          lto = true
           panic = "abort"
           EOF
           
           cd aetheria_kernel
+          # 1. Компилируем статический архив
           cargo build --release --target aarch64-linux-android
           
+          LLD=$(find $ANDROID_HOME/ndk -name "ld.lld" | head -n 1)
           OBJCOPY=$(find $ANDROID_HOME/ndk -name "llvm-objcopy" | head -n 1)
-          $OBJCOPY --strip-all -O binary target/aarch64-linux-android/release/libaetheria_kernel.a kernel.bin
+          
+          # 2. Связываем архив в единый монолитный исполняемый файл (ELF)
+          echo "Linking kernel..."
+          $LLD -T linker.ld -o kernel.elf --whole-archive target/aarch64-linux-android/release/libaetheria_kernel.a --no-whole-archive
+          
+          # 3. Конвертируем ELF в плоский машинный код (Сырой бинарник для процессора)
+          echo "Generating raw machine code binary..."
+          $OBJCOPY -O binary kernel.elf kernel.bin
           
           cd ..
       
