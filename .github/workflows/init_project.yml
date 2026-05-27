@@ -1,4 +1,4 @@
-name: AetheriaOS - Interactive Shell
+name: AetheriaOS - Interactive Fast Build
 on:
   push:
     branches: [ main ]
@@ -15,6 +15,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
+      # УЛЬТРА КЭШИРОВАНИЕ GRADLE (Ускоряет сборку APK)
+      - name: Setup Gradle Cache
+        uses: gradle/actions/setup-gradle@v3
+      
       - name: Setup Android SDK & Tools
         uses: android-actions/setup-android@v3
         with:
@@ -28,12 +32,18 @@ jobs:
           override: true
           components: rust-src
           
+      # УЛЬТРА КЭШИРОВАНИЕ RUST (Сохраняет скомпилированное ядро)
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: aetheria_kernel
+          
       - name: Install Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
           
-      - name: Generate Rust Font (ASCII + Cyrillic)
+      - name: Generate Rust Font (100% Reliable & Fast)
         run: |
           mkdir -p aetheria_kernel/src
           cat > generate_font.py << 'EOF'
@@ -49,13 +59,12 @@ jobs:
                       if len(b) == 8: res.append(b)
                   except: pass
               return res
+          # Берем только надежный ASCII шрифт, чтобы избежать 404
           basic = get_font("https://raw.githubusercontent.com/dhepper/font8x8/master/font8x8_basic.h")
-          cyrillic = get_font("https://raw.githubusercontent.com/dhepper/font8x8/master/font8x8_cyrillic.h")
           with open("aetheria_kernel/src/font.rs", "w") as f:
               f.write("pub fn get_char_bitmap(c: char) -> [u8; 8] {\n")
               f.write("    match c as u32 {\n")
               for i, bmp in enumerate(basic): f.write(f"        {i} => {bmp},\n")
-              for i, bmp in enumerate(cyrillic): f.write(f"        {0x0400 + i} => {bmp},\n")
               f.write("        _ => [0xFF; 8],\n    }\n}\n")
           EOF
           python3 generate_font.py
@@ -78,7 +87,6 @@ jobs:
           #[no_mangle] pub unsafe extern "C" fn memset(dest: *mut u8, c: i32, n: usize) -> *mut u8 { for i in 0..n { *dest.add(i) = c as u8; } dest }
           #[no_mangle] pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 { for i in 0..n { *dest.add(i) = *src.add(i); } dest }
           
-          // --- ГРАФИКА ---
           fn draw_rect(fb: *mut u32, fb_w: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
               for iy in y..(y+h) {
                   for ix in x..(x+w) {
@@ -106,14 +114,12 @@ jobs:
               }
           }
           
-          // --- ВИРТУАЛЬНАЯ ФАЙЛОВАЯ СИСТЕМА (VFS) ---
           struct VFile { name: &'static str, content: &'static str }
           const FILESYSTEM: [VFile; 2] = [
-              VFile { name: "readme.txt", content: "Welcome to AetheriaOS!\nThis is a bare-metal OS written in Rust.\nEnjoy your stay!" },
-              VFile { name: "system.log", content: "[INIT] CPU OK\n[INIT] MEM OK\n[INIT] VFS OK\n" },
+              VFile { name: "readme.txt", content: "Welcome to AetheriaOS!\nThis is a bare-metal OS written in Rust." },
+              VFile { name: "system.log", content: "[INIT] CPU OK\n[INIT] MEM OK\n[INIT] VFS OK" },
           ];
           
-          // --- ТОЧКА ВХОДА (Добавлен kb_addr для клавиатуры) ---
           #[no_mangle]
           #[link_section = ".text.entry"]
           pub extern "C" fn aetheria_main(fb_addr: *mut u32, kb_addr: *mut u8, width: u32, height: u32) -> ! {
@@ -128,41 +134,36 @@ jobs:
               let font_h = 8 * scale;
               
               draw_rect(fb_addr, width, 0, 0, width, height, bg);
-              draw_text(fb_addr, width, 20, cursor_y, "AetheriaOS v0.2 Interactive", green, scale);
+              draw_text(fb_addr, width, 20, cursor_y, "AetheriaOS v0.3 Interactive", green, scale);
               cursor_y += font_h + 10;
               
               let prompt = "root@aetheria:~# ";
               let prompt_len = prompt.len() as u32;
-              
               let mut input_buf = [0u8; 64];
               let mut input_len = 0;
               
-              // Функция печати новой строки (с прокруткой)
               let mut new_line = |cy: &mut u32| {
                   *cy += font_h + 5;
-                  if *cy > height - 40 { // Простейшая очистка при переполнении
+                  if *cy > height - 40 {
                       draw_rect(fb_addr, width, 0, 0, width, height, bg);
                       *cy = 20;
                   }
               };
               
               draw_text(fb_addr, width, 20, cursor_y, prompt, green, scale);
-              
               let mut tick = 0;
+              
               loop {
-                  // Читаем байт с "аппаратной" клавиатуры Android
                   let key = unsafe { read_volatile(kb_addr) };
                   if key != 0 {
-                      unsafe { write_volatile(kb_addr, 0); } // Очищаем буфер клавы
+                      unsafe { write_volatile(kb_addr, 0); }
                       
                       if key == 10 { // ENTER
                           new_line(&mut cursor_y);
-                          
-                          // --- НАШ МИНИ-ИНТЕРПРЕТАТОР (SHELL) ---
                           if let Ok(cmd_str) = str::from_utf8(&input_buf[..input_len]) {
                               let cmd = cmd_str.trim();
                               if cmd == "help" {
-                                  draw_text(fb_addr, width, 20, cursor_y, "Commands: help, ls, cat <file>, clear, calc <num+num>", white, scale);
+                                  draw_text(fb_addr, width, 20, cursor_y, "Cmds: help, ls, cat <file>, clear, calc <x+y>", white, scale);
                                   new_line(&mut cursor_y);
                               } else if cmd == "ls" {
                                   for file in FILESYSTEM.iter() {
@@ -176,9 +177,8 @@ jobs:
                                       if file.name == file_name {
                                           draw_text(fb_addr, width, 20, cursor_y, file.content, white, scale);
                                           new_line(&mut cursor_y);
-                                          new_line(&mut cursor_y); // Под файл с переносами
-                                          found = true;
-                                          break;
+                                          new_line(&mut cursor_y);
+                                          found = true; break;
                                       }
                                   }
                                   if !found {
@@ -189,7 +189,6 @@ jobs:
                                   draw_rect(fb_addr, width, 0, 0, width, height, bg);
                                   cursor_y = 20;
                               } else if cmd.starts_with("calc ") {
-                                  // Мини-скрипт (Только сложение однозначных для демо)
                                   let expr = &cmd[5..];
                                   let bytes = expr.as_bytes();
                                   if bytes.len() >= 3 && bytes[1] == b'+' {
@@ -208,10 +207,8 @@ jobs:
                                   new_line(&mut cursor_y);
                               }
                           }
-                          
                           input_len = 0;
                           draw_text(fb_addr, width, 20, cursor_y, prompt, green, scale);
-                          
                       } else if key == 8 { // BACKSPACE
                           if input_len > 0 {
                               input_len -= 1;
@@ -228,11 +225,9 @@ jobs:
                       }
                   }
                   
-                  // Рисуем мигающий курсор
                   let cursor_x = 20 + (prompt_len + input_len as u32) * font_w;
                   let cursor_color = if (tick / 500) % 2 == 0 { white } else { bg };
                   draw_rect(fb_addr, width, cursor_x, cursor_y, font_w, 4, cursor_color);
-                  
                   tick += 1;
               }
           }
@@ -288,12 +283,9 @@ jobs:
           
           public class MainActivity extends Activity {
               static { System.loadLibrary("aetheria_loader"); }
-              // Добавили kbBuffer для клавиатуры
               private native void startKernel(byte[] kernelData, ByteBuffer frameBuffer, ByteBuffer kbBuffer, int width, int height);
-              
               private SurfaceView surface;
-              private ByteBuffer frameBuffer;
-              private ByteBuffer kbBuffer; 
+              private ByteBuffer frameBuffer, kbBuffer; 
               private Bitmap bitmap;
               private final int WIDTH = 1280;
               private final int HEIGHT = 720;
@@ -305,10 +297,9 @@ jobs:
                   setContentView(surface);
                   
                   frameBuffer = ByteBuffer.allocateDirect(WIDTH * HEIGHT * 4);
-                  kbBuffer = ByteBuffer.allocateDirect(1); // 1 байт для передачи символа в Rust
+                  kbBuffer = ByteBuffer.allocateDirect(1);
                   bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
                   
-                  // Вызов экранной клавиатуры при нажатии на экран
                   surface.setFocusable(true);
                   surface.setFocusableInTouchMode(true);
                   surface.setOnTouchListener((v, e) -> {
@@ -318,12 +309,11 @@ jobs:
                       return true;
                   });
                   
-                  // Перехват кнопок и отправка их в ядро Rust
                   surface.setOnKeyListener((v, keyCode, event) -> {
                       if (event.getAction() == KeyEvent.ACTION_DOWN) {
                           int c = event.getUnicodeChar();
-                          if (keyCode == KeyEvent.KEYCODE_DEL) c = 8; // Backspace
-                          if (keyCode == KeyEvent.KEYCODE_ENTER) c = 10; // Enter
+                          if (keyCode == KeyEvent.KEYCODE_DEL) c = 8;
+                          if (keyCode == KeyEvent.KEYCODE_ENTER) c = 10;
                           if (c != 0) kbBuffer.put(0, (byte)c);
                           return true;
                       }
@@ -364,8 +354,6 @@ jobs:
           #include <jni.h>
           #include <sys/mman.h>
           #include <cstring>
-          #include <android/log.h>
-          
           extern "C" JNIEXPORT void JNICALL
           Java_com_aetheria_loader_MainActivity_startKernel(JNIEnv* env, jobject, jbyteArray kernelData, jobject fb, jobject kb, jint w, jint h) {
               jsize len = env->GetArrayLength(kernelData);
@@ -380,8 +368,6 @@ jobs:
               typedef void (*KernelMain)(void*, void*, uint32_t, uint32_t);
               KernelMain kmain = (KernelMain)exec_mem;
               kmain(fb_ptr, kb_ptr, w, h);
-              
-              env->ReleaseByteArrayElements(kernelData, bytes, JNI_ABORT);
           }
           EOF
           
@@ -409,49 +395,4 @@ jobs:
           android {
               namespace 'com.aetheria.loader'
               compileSdk 34
-              defaultConfig {
-                  applicationId 'com.aetheria.loader'
-                  minSdk 24
-                  targetSdk 34
-                  externalNativeBuild { cmake { cppFlags "-O3 -fPIC" } }
-              }
-              externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
-          }
-          EOF
-          
-          cat > build.gradle << 'EOF'
-          buildscript {
-              repositories { google(); mavenCentral() }
-              dependencies { classpath 'com.android.tools.build:gradle:8.2.2' }
-          }
-          allprojects { repositories { google(); mavenCentral() } }
-          EOF
-          
-          echo 'include ":app"' > settings.gradle
-
-      # ===== 3. СБОРКА APK =====
-      - name: Build APK
-        run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
-          unzip -q gradle-8.5-bin.zip
-          export PATH="$PWD/gradle-8.5/bin:$PATH"
-          
-          gradle wrapper --gradle-version 8.5
-          ./gradlew assembleDebug --no-daemon
-
-      # ===== 4. ПАКУЕМ ВСЁ В АРХИВ =====
-      - name: Package Release
-        run: |
-          mkdir -p AetheriaOS_Release
-          cp app/build/outputs/apk/debug/app-debug.apk AetheriaOS_Release/AetheriaOS-Virtual.apk
-          cp aetheria_kernel/kernel.bin AetheriaOS_Release/kernel.bin
-          
-          cd AetheriaOS_Release
-          zip -r ../AetheriaOS-Ultimate-Build.zip *
-          
-      - name: Upload OS Package
-        uses: actions/upload-artifact@v4
-        with:
-          name: AetheriaOS-Ultimate
-          path: AetheriaOS-Ultimate-Build.zip
-          retention-days: 30
+              defaultConfig { applicationId 'com.aetheria.loader'; 
