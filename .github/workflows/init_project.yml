@@ -24,7 +24,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
-          # ИСПРАВЛЕНО: Теперь мы собираем настоящее голое ядро без привязки к Android OS
           target: aarch64-unknown-none
           override: true
           components: rust-src
@@ -39,7 +38,6 @@ jobs:
         run: |
           mkdir -p aetheria_kernel/src
           
-          # Настоящий, полностью автономный код ядра ОС
           cat > aetheria_kernel/src/lib.rs << 'EOF'
           #![no_std]
           
@@ -71,13 +69,12 @@ jobs:
               }
           }
           
-          // Точка входа в систему. .text.entry гарантирует, что она будет в самом начале бинарника (Смещение 0x0)
           #[no_mangle]
           #[link_section = ".text.entry"]
           pub extern "C" fn aetheria_main(fb_addr: *mut u32, width: u32, height: u32) -> ! {
-              let bg_color = 0xFF1E1E2E;     // Тёмный фон
-              let panel_color = 0xFF181825;  // Нижняя панель
-              let window_color = 0xFF313244; // Окно
+              let bg_color = 0xFF1E1E2E;
+              let panel_color = 0xFF181825;
+              let window_color = 0xFF313244;
               
               let mut offset = 0;
               loop {
@@ -95,24 +92,16 @@ jobs:
                   draw_rect(fb_addr, width, load_x, height - 45, 30, 30, 0xFFA6E3A1);
                   
                   offset += 2;
-                  
-                  // Задержка (предотвращаем зависание процессора)
-                  for _ in 0..2000000 {
-                      core::hint::spin_loop();
-                  } 
+                  for _ in 0..2000000 { core::hint::spin_loop(); } 
               }
           }
           EOF
           
-          # Скрипт Линкера: расставляет код по правильным адресам и удаляет лишний мусор
           cat > aetheria_kernel/linker.ld << 'EOF'
           ENTRY(aetheria_main);
           SECTIONS {
               . = 0x00000000;
-              .text : {
-                  *(.text.entry)
-                  *(.text*)
-              }
+              .text : { *(.text.entry) *(.text*) }
               .rodata : { *(.rodata*) }
               .data : { *(.data*) }
               .bss : { *(.bss*) *(COMMON) }
@@ -125,33 +114,22 @@ jobs:
           name = "aetheria_kernel"
           version = "0.1.0"
           edition = "2021"
-          
           [lib]
           crate-type = ["staticlib"]
-          
           [profile.release]
           opt-level = 3
           panic = "abort"
           EOF
           
           cd aetheria_kernel
-          # 1. Компилируем для "голого" ARM64
           cargo build --release --target aarch64-unknown-none
-          
           LLD=$(find $ANDROID_HOME/ndk -name "ld.lld" | head -n 1)
           OBJCOPY=$(find $ANDROID_HOME/ndk -name "llvm-objcopy" | head -n 1)
-          
-          # 2. Связываем архив
-          echo "Linking kernel..."
           $LLD -T linker.ld -o kernel.elf target/aarch64-unknown-none/release/libaetheria_kernel.a
-          
-          # 3. Вырезаем чистый бинарный код
-          echo "Generating raw machine code binary..."
           $OBJCOPY -O binary kernel.elf kernel.bin
-          
           cd ..
       
-      # ===== 2. СОЗДАЁМ ИНТЕРФЕЙС АНДРОИДА (Виртуализация ОС) =====
+      # ===== 2. СОЗДАЁМ ИНТЕРФЕЙС АНДРОИДА =====
       - name: Create Android Wrapper
         run: |
           mkdir -p app/src/main/{java/com/aetheria/loader,cpp,res/values,res/raw}
@@ -258,14 +236,30 @@ jobs:
           </manifest>
           EOF
           
+          # ИСПРАВЛЕНЫ ПРОБЛЕМЫ С GRADLE ФАЙЛАМИ
           cat > app/build.gradle << 'EOF'
           plugins { id 'com.android.application' }
-          android { namespace 'com.aetheria.loader'; compileSdk 34; defaultConfig { applicationId 'com.aetheria.loader'; minSdk 24; targetSdk 34; externalNativeBuild { cmake { cppFlags "-O3 -fPIC" } } }; externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } } }
+          android {
+              namespace 'com.aetheria.loader'
+              compileSdk 34
+              defaultConfig {
+                  applicationId 'com.aetheria.loader'
+                  minSdk 24
+                  targetSdk 34
+                  externalNativeBuild { cmake { cppFlags "-O3 -fPIC" } }
+              }
+              externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
+          }
           EOF
           
           cat > build.gradle << 'EOF'
-          buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.2' } }
-          allprojects { repositories { google(); mavenCentral() } }
+          buildscript {
+              repositories { google(); mavenCentral() }
+              dependencies { classpath 'com.android.tools.build:gradle:8.2.2' }
+          }
+          allprojects {
+              repositories { google(); mavenCentral() }
+          }
           EOF
           
           echo 'include ":app"' > settings.gradle
@@ -273,8 +267,13 @@ jobs:
       # ===== 3. СБОРКА APK =====
       - name: Build APK
         run: |
+          # Жесткое скачивание Gradle 8.5
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          unzip -q gradle-8.5-bin.zip
+          export PATH="$PWD/gradle-8.5/bin:$PATH"
+          
           gradle wrapper --gradle-version 8.5
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --no-daemon
 
       # ===== 4. СОЗДАНИЕ НАСТОЯЩЕГО ПРОШИВОЧНОГО BOOT.IMG =====
       - name: Create boot.img (Hardware OS)
