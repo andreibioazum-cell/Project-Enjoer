@@ -1,508 +1,344 @@
-name: AetheriaOS - Final Build
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+name: JsAI_GD_Studio_Final
+on: [push, workflow_dispatch]
 
 jobs:
-  build-aetheria-os:
-    name: Build AetheriaOS (Apps + Games)
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      - name: Setup Android SDK & Tools
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools build-tools;34.0.0 platforms;android-34 ndk;25.2.9519653'
-      
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          target: aarch64-unknown-none
-          override: true
-          components: rust-src
-          
-      - name: Create & Build Rust Kernel
+
+      - name: Create Studio Structure
         run: |
-          mkdir -p aetheria_kernel/src
-          
-          # ШРИФТ ВШИТ В КОД (Защита от 404).
-          cat > aetheria_kernel/src/font.rs << 'EOF'
-          pub fn get_char_bitmap(c: char) -> [u8; 8] {
-              let idx = c as usize;
-              if idx >= 32 && idx <= 126 { FONT_DATA[idx - 32] } else { [0xFF; 8] }
+          mkdir -p app/src/main/java/com/jsai/studio
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+
+          cat > settings.gradle << 'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal(); } }
+          dependencyResolutionManagement { 
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral(); } 
           }
-          const FONT_DATA: [[u8; 8]; 95] = [
-              [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], [0x18,0x3C,0x3C,0x18,0x18,0x00,0x18,0x00],
-              [0x66,0x66,0x24,0x00,0x00,0x00,0x00,0x00], [0x6C,0x6C,0xFE,0x6C,0xFE,0x6C,0x6C,0x00],
-              [0x18,0x3E,0x60,0x3C,0x06,0x7C,0x18,0x00], [0x00,0xC6,0xCC,0x18,0x30,0x66,0xC6,0x00],
-              [0x38,0x6C,0x38,0x76,0xDC,0xCC,0x76,0x00], [0x18,0x18,0x30,0x00,0x00,0x00,0x00,0x00],
-              [0x0C,0x18,0x30,0x30,0x30,0x18,0x0C,0x00], [0x30,0x18,0x0C,0x0C,0x0C,0x18,0x30,0x00],
-              [0x00,0x66,0x3C,0xFF,0x3C,0x66,0x00,0x00], [0x00,0x18,0x18,0x7E,0x18,0x18,0x00,0x00],
-              [0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x30], [0x00,0x00,0x00,0x7E,0x00,0x00,0x00,0x00],
-              [0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x00], [0x00,0x06,0x0C,0x18,0x30,0x60,0x00,0x00],
-              [0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00], [0x18,0x38,0x18,0x18,0x18,0x18,0x7E,0x00],
-              [0x3C,0x66,0x06,0x0C,0x30,0x60,0xFF,0x00], [0x3C,0x66,0x06,0x1C,0x06,0x66,0x3C,0x00],
-              [0x0C,0x1C,0x3C,0x6C,0xFF,0x0C,0x0C,0x00], [0xFF,0x60,0x7C,0x06,0x06,0x66,0x3C,0x00],
-              [0x3C,0x66,0x60,0x7C,0x66,0x66,0x3C,0x00], [0xFF,0x06,0x0C,0x18,0x30,0x30,0x30,0x00],
-              [0x3C,0x66,0x66,0x3C,0x66,0x66,0x3C,0x00], [0x3C,0x66,0x66,0x3E,0x06,0x66,0x3C,0x00],
-              [0x00,0x18,0x18,0x00,0x18,0x18,0x00,0x00], [0x00,0x18,0x18,0x00,0x18,0x18,0x30,0x00],
-              [0x00,0x0C,0x18,0x30,0x18,0x0C,0x00,0x00], [0x00,0x00,0x7E,0x00,0x7E,0x00,0x00,0x00],
-              [0x00,0x30,0x18,0x0C,0x18,0x30,0x00,0x00], [0x3C,0x66,0x06,0x0C,0x18,0x00,0x18,0x00],
-              [0x3C,0x66,0x6E,0x6E,0x60,0x66,0x3C,0x00], [0x3C,0x66,0x66,0x7E,0x66,0x66,0x66,0x00],
-              [0x7C,0x66,0x66,0x7C,0x66,0x66,0x7C,0x00], [0x3C,0x66,0x60,0x60,0x60,0x66,0x3C,0x00],
-              [0x78,0x6C,0x66,0x66,0x66,0x6C,0x78,0x00], [0x7E,0x60,0x60,0x78,0x60,0x60,0x7E,0x00],
-              [0x7E,0x60,0x60,0x78,0x60,0x60,0x60,0x00], [0x3C,0x66,0x60,0x6E,0x66,0x66,0x3E,0x00],
-              [0x66,0x66,0x66,0x7E,0x66,0x66,0x66,0x00], [0x3E,0x18,0x18,0x18,0x18,0x18,0x3E,0x00],
-              [0x0F,0x06,0x06,0x06,0x66,0x66,0x3C,0x00], [0x66,0x6C,0x78,0x70,0x78,0x6C,0x66,0x00],
-              [0x60,0x60,0x60,0x60,0x60,0x60,0x7E,0x00], [0x63,0x77,0x7F,0x6B,0x63,0x63,0x63,0x00],
-              [0x66,0x76,0x7E,0x7E,0x6E,0x66,0x66,0x00], [0x3C,0x66,0x66,0x66,0x66,0x66,0x3C,0x00],
-              [0x7C,0x66,0x66,0x7C,0x60,0x60,0x60,0x00], [0x3C,0x66,0x66,0x66,0x66,0x3C,0x0E,0x00],
-              [0x7C,0x66,0x66,0x7C,0x78,0x6C,0x66,0x00], [0x3C,0x66,0x60,0x3C,0x06,0x66,0x3C,0x00],
-              [0x7E,0x18,0x18,0x18,0x18,0x18,0x18,0x00], [0x66,0x66,0x66,0x66,0x66,0x66,0x3C,0x00],
-              [0x66,0x66,0x66,0x66,0x66,0x3C,0x18,0x00], [0x63,0x63,0x6B,0x7F,0x77,0x63,0x63,0x00],
-              [0x66,0x66,0x3C,0x18,0x3C,0x66,0x66,0x00], [0x66,0x66,0x66,0x3C,0x18,0x18,0x18,0x00],
-              [0x7E,0x06,0x0C,0x18,0x30,0x60,0x7E,0x00], [0x3C,0x30,0x30,0x30,0x30,0x30,0x3C,0x00],
-              [0x00,0x60,0x30,0x18,0x0C,0x06,0x00,0x00], [0x3C,0x0C,0x0C,0x0C,0x0C,0x0C,0x3C,0x00],
-              [0x18,0x3C,0x66,0x00,0x00,0x00,0x00,0x00], [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF],
-              [0x30,0x18,0x0C,0x00,0x00,0x00,0x00,0x00], [0x00,0x00,0x3C,0x06,0x3E,0x66,0x3E,0x00],
-              [0x60,0x60,0x7C,0x66,0x66,0x66,0x7C,0x00], [0x00,0x00,0x3C,0x60,0x60,0x60,0x3C,0x00],
-              [0x06,0x06,0x3E,0x66,0x66,0x66,0x3E,0x00], [0x00,0x00,0x3C,0x66,0x7E,0x60,0x3C,0x00],
-              [0x1C,0x30,0x7C,0x30,0x30,0x30,0x30,0x00], [0x00,0x00,0x3E,0x66,0x66,0x3E,0x06,0x3C],
-              [0x60,0x60,0x7C,0x66,0x66,0x66,0x66,0x00], [0x18,0x00,0x38,0x18,0x18,0x18,0x3C,0x00],
-              [0x0C,0x00,0x1C,0x0C,0x0C,0x0C,0x0C,0x38], [0x60,0x60,0x66,0x6C,0x78,0x6C,0x66,0x00],
-              [0x38,0x18,0x18,0x18,0x18,0x18,0x3C,0x00], [0x00,0x00,0x6C,0xFE,0xD6,0xD6,0xC6,0x00],
-              [0x00,0x00,0x7C,0x66,0x66,0x66,0x66,0x00], [0x00,0x00,0x3C,0x66,0x66,0x66,0x3C,0x00],
-              [0x00,0x00,0x7C,0x66,0x66,0x7C,0x60,0x60], [0x00,0x00,0x3E,0x66,0x66,0x3E,0x06,0x06],
-              [0x00,0x00,0x7C,0x66,0x60,0x60,0x60,0x00], [0x00,0x00,0x3C,0x60,0x3C,0x06,0x3C,0x00],
-              [0x30,0x30,0x7C,0x30,0x30,0x30,0x1C,0x00], [0x00,0x00,0x66,0x66,0x66,0x66,0x3E,0x00],
-              [0x00,0x00,0x66,0x66,0x66,0x3C,0x18,0x00], [0x00,0x00,0xC6,0xD6,0xD6,0xFE,0x6C,0x00],
-              [0x00,0x00,0x66,0x3C,0x18,0x3C,0x66,0x00], [0x00,0x00,0x66,0x66,0x66,0x3E,0x06,0x3C],
-              [0x00,0x00,0x7E,0x0C,0x18,0x30,0x7E,0x00], [0x0E,0x18,0x18,0x70,0x18,0x18,0x0E,0x00],
-              [0x18,0x18,0x18,0x00,0x18,0x18,0x18,0x00], [0x70,0x18,0x18,0x0E,0x18,0x18,0x70,0x00],
-              [0x3A,0x6E,0x00,0x00,0x00,0x00,0x00,0x00]
-          ];
+          include ':app'
           EOF
           
-          # ЯДРО С ПРИЛОЖЕНИЯМИ И ИГРАМИ (ИСПРАВЛЕН U64 В ЗМЕЙКЕ)
-          cat > aetheria_kernel/src/lib.rs << 'EOF'
-          #![no_std]
-          
-          mod font;
-          use core::panic::PanicInfo;
-          use core::ptr::{read_volatile, write_volatile};
-          use core::str;
-          
-          #[panic_handler] fn panic(_info: &PanicInfo) -> ! { loop { core::hint::spin_loop(); } }
-          #[no_mangle] pub unsafe extern "C" fn memset(dest: *mut u8, c: i32, n: usize) -> *mut u8 { for i in 0..n { *dest.add(i) = c as u8; } dest }
-          #[no_mangle] pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 { for i in 0..n { *dest.add(i) = *src.add(i); } dest }
-          
-          fn draw_rect(fb: *mut u32, fb_w: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
-              for iy in y..(y+h) {
-                  for ix in x..(x+w) { unsafe { write_volatile(fb.add((iy * fb_w + ix) as usize), color); } }
-              }
+          echo "android.useAndroidX=true" > gradle.properties
+
+          cat > build.gradle << 'EOF'
+          plugins { id 'com.android.application' version '8.1.1' apply false }
+          EOF
+
+          cat > app/build.gradle << 'EOF'
+          plugins { id 'com.android.application' }
+          android {
+              namespace 'com.jsai.studio'
+              compileSdk 34
+              defaultConfig { applicationId "com.jsai.studio"; minSdk 26; targetSdk 34; versionCode 1; versionName "6.0" }
           }
-          
-          fn draw_char(fb: *mut u32, fb_w: u32, x: u32, y: u32, c: char, color: u32, scale: u32) {
-              let bitmap = font::get_char_bitmap(c);
-              for row in 0..8 {
-                  for col in 0..8 {
-                      // Читаем биты с MSB (7 - col). Буквы теперь правильные!
-                      if (bitmap[row] & (1 << (7 - col))) != 0 {
-                          draw_rect(fb, fb_w, x + col * scale, y + (row as u32) * scale, scale, scale, color);
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'org.luaj:luaj-jse:3.0.1'
+          }
+          EOF
+
+          # --- ИНТЕРФЕЙС ---
+          cat > app/src/main/res/layout/editor_main.xml << 'EOF'
+          <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#1B1B1B">
+              <LinearLayout android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="38dp" android:background="#222" android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="8dp">
+                  <Button android:id="@+id/btnAdd" android:layout_width="35dp" android:layout_height="30dp" android:text="+" android:backgroundTint="#FFF" android:textColor="#000" android:insetTop="0dp" android:insetBottom="0dp"/>
+                  <Button android:id="@+id/btnPlay" android:layout_width="80dp" android:layout_height="30dp" android:text="Запуск" android:backgroundTint="#FFF" android:textColor="#000" android:textSize="10sp" android:layout_marginLeft="8dp" android:insetTop="0dp" android:insetBottom="0dp"/>
+                  <Space android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="JsAI: GD-Pro" android:textColor="#555" android:textSize="10sp"/>
+              </LinearLayout>
+              
+              <LinearLayout android:id="@+id/sidebar" android:layout_width="165dp" android:layout_height="match_parent" android:layout_below="@id/toolbar" android:layout_alignParentRight="true" android:background="#252525" android:orientation="vertical">
+                  <TextView android:layout_width="match_parent" android:layout_height="22dp" android:text=" Проводник" android:textColor="#AAA" android:textSize="9sp" android:background="#333" android:gravity="center_vertical" android:textStyle="bold"/>
+                  <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"><LinearLayout android:id="@+id/explorer" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"/></ScrollView>
+                  <TextView android:layout_width="match_parent" android:layout_height="22dp" android:text=" Свойства" android:textColor="#AAA" android:textSize="9sp" android:background="#333" android:gravity="center_vertical" android:textStyle="bold"/>
+                  <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1.3" android:background="#1A1A1A"><LinearLayout android:id="@+id/properties" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="5dp"/></ScrollView>
+              </LinearLayout>
+
+              <FrameLayout android:layout_width="match_parent" android:layout_height="match_parent" android:layout_below="@id/toolbar" android:layout_toLeftOf="@id/sidebar">
+                  <com.jsai.studio.GameView android:id="@+id/gameView" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000"/>
+                  <EditText android:id="@+id/codeEditor" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#111" android:textColor="#0F4" android:fontFamily="monospace" android:gravity="top" android:padding="10dp" android:visibility="gone" android:textSize="13sp"/>
+              </FrameLayout>
+          </RelativeLayout>
+          EOF
+
+          # --- КЛАСС ОБЪЕКТА (NODE) ---
+          cat > app/src/main/java/com/jsai/studio/Instance.java << 'EOF'
+          package com.jsai.studio;
+          import java.util.*;
+          import org.luaj.vm2.LuaValue;
+          public class Instance {
+              public String name, type, luaCode = "", text = "";
+              public float x=400, y=400, w=150, h=150, scale=1, rotation=0;
+              public float sX, sY, sW, sH, sSc, sRot;
+              public int color = 0xFF00A2FF;
+              public boolean isOpen = true, isDeleted = false;
+              public Instance parent;
+              public List<Instance> children = new ArrayList<>();
+              public LuaValue onClick = LuaValue.NIL, onUpdate = LuaValue.NIL;
+
+              public Instance(String n, String t) { name=n; type=t; }
+              public void save() { sX=x; sY=y; sW=w; sH=h; sSc=scale; sRot=rotation; }
+              public void reset() { x=sX; y=sY; w=sW; h=sH; scale=sSc; rotation=sRot; isDeleted=false; onClick=LuaValue.NIL; onUpdate=LuaValue.NIL; }
+              
+              // Методы для GDScript (Lua)
+              public void setX(float v) { x=v; } public float getX() { return x; }
+              public void setY(float v) { y=v; } public float getY() { return y; }
+              public void setRot(float v) { rotation=v; } public float getRot() { return rotation; }
+              public void setScale(float v) { scale=v; }
+              public void setText(String v) { text=v; }
+              public void remove() { isDeleted = true; }
+          }
+          EOF
+
+          # --- ENGINE (GDScript Parser) ---
+          cat > app/src/main/java/com/jsai/studio/EngineCore.java << 'EOF'
+          package com.jsai.studio;
+          import java.util.*;
+          import org.luaj.vm2.*;
+          import org.luaj.vm2.lib.jse.*;
+          public class EngineCore {
+              public static List<Instance> root = new ArrayList<>();
+              public static boolean isPlaying = false;
+              
+              public static String compile(String r) {
+                  return r.replace("пусть ", "local ")
+                          .replace("старт", "function _ready()")
+                          .replace("цикл", "function _process")
+                          .replace("нажат", "function _on_click()")
+                          .replace("конец", "end")
+                          .replace("если ", "if ")
+                          .replace("тогда", "then")
+                          .replace("иначе", "else")
+                          .replace("я.", "self:")
+                          .replace("предок.", "parent:")
+                          .replace("я:", "self:")
+                          .replace("равно", "==");
+              }
+
+              public static void start() {
+                  isPlaying = true;
+                  process(root);
+              }
+              private static void process(List<Instance> list) {
+                  for(Instance i : list) {
+                      i.save();
+                      if(i.type.equals("Script") && i.parent != null) {
+                          Globals g = JsePlatform.standardGlobals();
+                          g.set("self", CoerceJavaToLua.coerce(i.parent));
+                          g.set("parent", i.parent.parent != null ? CoerceJavaToLua.coerce(i.parent.parent) : LuaValue.NIL);
+                          try {
+                              g.load(compile(i.luaCode)).call();
+                              i.parent.onUpdate = g.get("_process");
+                              i.parent.onClick = g.get("_on_click");
+                              LuaValue ready = g.get("_ready");
+                              if(!ready.isnil()) ready.call();
+                          } catch(Exception e) {}
                       }
+                      process(i.children);
                   }
               }
-          }
-          
-          fn draw_text(fb: *mut u32, fb_w: u32, x: u32, y: u32, text: &str, color: u32, scale: u32) {
-              let mut cx = x;
-              for c in text.chars() { draw_char(fb, fb_w, cx, y, c, color, scale); cx += 8 * scale; }
-          }
-          
-          // ================== ИГРА: ЗМЕЙКА ==================
-          fn run_snake(fb: *mut u32, kb: *mut u8, w: u32, h: u32) {
-              draw_rect(fb, w, 0, 0, w, h, 0xFF0D0D14);
-              draw_text(fb, w, 20, 10, "AETHERIA SNAKE - W/A/S/D to move, Q to quit", 0xFF89B4FA, 2);
-              
-              let mut sx = [0i32; 256]; let mut sy = [0i32; 256];
-              let mut len = 3;
-              sx[0]=15; sy[0]=10; sx[1]=14; sy[1]=10; sx[2]=13; sy[2]=10;
-              
-              let mut dx = 1; let mut dy = 0;
-              let mut ax = 30; let mut ay = 15;
-              
-              // ИСПРАВЛЕНИЕ ОШИБКИ ПЕРЕПОЛНЕНИЯ РАСТА (u64 вместо i32)
-              let mut seed: u64 = 12345;
-              let mut over = false;
-              
-              loop {
-                  let key = unsafe { read_volatile(kb) };
-                  if key != 0 {
-                      unsafe { write_volatile(kb, 0); }
-                      let k = key as char;
-                      if (k == 'w' || k == 'W') && dy == 0 { dx=0; dy=-1; }
-                      if (k == 's' || k == 'S') && dy == 0 { dx=0; dy=1; }
-                      if (k == 'a' || k == 'A') && dx == 0 { dx=-1; dy=0; }
-                      if (k == 'd' || k == 'D') && dx == 0 { dx=1; dy=0; }
-                      if k == 'q' || k == 'Q' { break; }
-                  }
-                  
-                  if !over {
-                      for i in (1..len).rev() { sx[i]=sx[i-1]; sy[i]=sy[i-1]; }
-                      sx[0] += dx; sy[0] += dy;
-                      
-                      if sx[0] < 0 || sx[0] >= 64 || sy[0] < 2 || sy[0] >= 36 { over = true; }
-                      for i in 1..len { if sx[0]==sx[i] && sy[0]==sy[i] { over = true; } }
-                      
-                      if sx[0] == ax && sy[0] == ay {
-                          if len < 256 { len += 1; }
-                          // u64 гарантирует, что число не переполнит лимит
-                          seed = (seed.wrapping_mul(1103515245).wrapping_add(12345)) % 2147483648; 
-                          ax = (seed % 60) as i32 + 2;
-                          seed = (seed.wrapping_mul(1103515245).wrapping_add(12345)) % 2147483648; 
-                          ay = (seed % 30) as i32 + 3;
-                      }
-                      
-                      draw_rect(fb, w, 0, 40, w, h-40, 0xFF0D0D14);
-                      draw_rect(fb, w, (ax as u32)*20, (ay as u32)*20, 20, 20, 0xFFF38BA8); // Яблоко
-                      for i in 0..len { draw_rect(fb, w, (sx[i] as u32)*20, (sy[i] as u32)*20, 20, 20, 0xFF4AF626); } // Змея
-                  } else {
-                      draw_text(fb, w, 400, 300, "GAME OVER! Press Q", 0xFFF38BA8, 4);
-                  }
-                  for _ in 0..8_000_000 { core::hint::spin_loop(); }
+              public static void stop() { isPlaying = false; resetR(root); }
+              private static void resetR(List<Instance> list) {
+                  for(Instance i : list) { i.reset(); resetR(i.children); }
               }
-          }
-          
-          // ================== ПРИЛОЖЕНИЕ: СИСТЕМА ==================
-          fn run_sysinfo(fb: *mut u32, kb: *mut u8, w: u32, h: u32) {
-              draw_rect(fb, w, 0, 0, w, h, 0xFF0D0D14);
-              draw_text(fb, w, 20, 20, "AETHERIA OS - SYSTEM MONITOR", 0xFF89B4FA, 3);
-              draw_text(fb, w, 20, 80, "Kernel       : Bare-Metal Rust 0.4", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 110, "Architecture : aarch64 (ARM64)", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 140, "Memory Mode  : Direct Framebuffer", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 170, "Resolution   : 1280x720 ARGB", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 200, "Graphics     : Active", 0xFF4AF626, 2);
-              draw_text(fb, w, 20, 280, "Press 'Q' to exit...", 0xFFF38BA8, 2);
-              loop {
-                  let key = unsafe { read_volatile(kb) };
-                  if key == b'q' || key == b'Q' { unsafe { write_volatile(kb, 0); } break; }
+              public static void update(float dt) {
+                  if(!isPlaying) return;
+                  updateR(root, dt);
               }
-          }
-          
-          struct VFile { name: &'static str, content: &'static str }
-          const FILESYSTEM: [VFile; 2] = [
-              VFile { name: "readme.txt", content: "Welcome to AetheriaOS!\nThis is a bare-metal OS written in Rust." },
-              VFile { name: "system.log", content: "[INIT] CPU OK\n[INIT] MEM OK\n[INIT] VFS OK" },
-          ];
-          
-          #[no_mangle]
-          #[link_section = ".text.entry"]
-          pub extern "C" fn aetheria_main(fb_addr: *mut u32, kb_addr: *mut u8, width: u32, height: u32) -> ! {
-              let bg = 0xFF0D0D14u32;      
-              let green = 0xFF4AF626u32;   
-              let white = 0xFFFFFFFFu32;   
-              let red = 0xFFF38BA8u32;
-              
-              let mut cursor_y = 20;
-              let scale = 2;
-              let font_w = 8 * scale;
-              let font_h = 8 * scale;
-              
-              draw_rect(fb_addr, width, 0, 0, width, height, bg);
-              draw_text(fb_addr, width, 20, cursor_y, "AetheriaOS v0.4 Terminal", green, scale);
-              cursor_y += font_h + 10;
-              
-              let prompt = "root@aetheria:~# ";
-              let prompt_len = prompt.len() as u32;
-              let mut input_buf = [0u8; 64];
-              let mut input_len = 0;
-              
-              draw_text(fb_addr, width, 20, cursor_y, prompt, green, scale);
-              let mut tick = 0;
-              
-              loop {
-                  let key = unsafe { read_volatile(kb_addr) };
-                  if key != 0 {
-                      unsafe { write_volatile(kb_addr, 0); }
-                      
-                      if key == 10 { // ENTER
-                          cursor_y += font_h + 5;
-                          if cursor_y > height - 40 { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; }
-                          
-                          if let Ok(cmd_str) = str::from_utf8(&input_buf[..input_len]) {
-                              let cmd = cmd_str.trim();
-                              if cmd == "help" {
-                                  draw_text(fb_addr, width, 20, cursor_y, "Apps: sysinfo | Games: snake | Shell: ls, cat, clear, calc", white, scale);
-                                  cursor_y += font_h + 5;
-                              } else if cmd == "snake" {
-                                  run_snake(fb_addr, kb_addr, width, height);
-                                  draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20;
-                              } else if cmd == "sysinfo" {
-                                  run_sysinfo(fb_addr, kb_addr, width, height);
-                                  draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20;
-                              } else if cmd == "ls" {
-                                  for file in FILESYSTEM.iter() {
-                                      draw_text(fb_addr, width, 20, cursor_y, file.name, white, scale);
-                                      cursor_y += font_h + 5;
-                                  }
-                              } else if cmd.starts_with("cat ") {
-                                  let file_name = &cmd[4..];
-                                  let mut found = false;
-                                  for file in FILESYSTEM.iter() {
-                                      if file.name == file_name {
-                                          draw_text(fb_addr, width, 20, cursor_y, file.content, white, scale);
-                                          cursor_y += font_h + 5;
-                                          found = true; break;
-                                      }
-                                  }
-                                  if !found { draw_text(fb_addr, width, 20, cursor_y, "File not found", red, scale); cursor_y += font_h + 5; }
-                              } else if cmd == "clear" {
-                                  draw_rect(fb_addr, width, 0, 0, width, height, bg);
-                                  cursor_y = 20;
-                              } else if cmd.len() > 0 {
-                                  draw_text(fb_addr, width, 20, cursor_y, "Command not found", red, scale);
-                                  cursor_y += font_h + 5;
-                              }
-                          }
-                          input_len = 0;
-                          if cursor_y > height - 40 { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; }
-                          draw_text(fb_addr, width, 20, cursor_y, prompt, green, scale);
-                      } else if key == 8 { // BACKSPACE
-                          if input_len > 0 {
-                              input_len -= 1;
-                              let cursor_x = 20 + (prompt_len + input_len as u32) * font_w;
-                              draw_rect(fb_addr, width, cursor_x, cursor_y, font_w, font_h, bg);
-                          }
-                      } else { // СИМВОЛ
-                          if input_len < 64 && key >= 32 && key <= 126 {
-                              input_buf[input_len] = key;
-                              let cursor_x = 20 + (prompt_len + input_len as u32) * font_w;
-                              draw_char(fb_addr, width, cursor_x, cursor_y, key as char, white, scale);
-                              input_len += 1;
-                          }
-                      }
+              private static void updateR(List<Instance> list, float dt) {
+                  for(Instance i : list) {
+                      if(!i.onUpdate.isnil()) try { i.onUpdate.call(LuaValue.valueOf(dt)); } catch(Exception e) {}
+                      updateR(i.children, dt);
                   }
-                  
-                  let cursor_x = 20 + (prompt_len + input_len as u32) * font_w;
-                  let cursor_color = if (tick / 500) % 2 == 0 { white } else { bg };
-                  draw_rect(fb_addr, width, cursor_x, cursor_y, font_w, 4, cursor_color);
-                  tick += 1;
               }
           }
           EOF
-          
-          cat > aetheria_kernel/linker.ld << 'EOF'
-          ENTRY(aetheria_main);
-          SECTIONS {
-              . = 0x00000000;
-              .text : { *(.text.entry) *(.text*) }
-              .rodata : { *(.rodata*) }
-              .data : { *(.data*) }
-              .bss : { *(.bss*) *(COMMON) }
-              /DISCARD/ : { *(.eh_frame) *(.comment) }
-          }
-          EOF
-          
-          cat > aetheria_kernel/Cargo.toml << 'EOF'
-          [package]
-          name = "aetheria_kernel"
-          version = "0.1.0"
-          edition = "2021"
-          [lib]
-          crate-type = ["staticlib"]
-          [profile.release]
-          opt-level = 3
-          panic = "abort"
-          EOF
-          
-          cd aetheria_kernel
-          cargo build --release --target aarch64-unknown-none
-          LLD=$(find $ANDROID_HOME/ndk -name "ld.lld" | head -n 1)
-          OBJCOPY=$(find $ANDROID_HOME/ndk -name "llvm-objcopy" | head -n 1)
-          $LLD -T linker.ld -o kernel.elf target/aarch64-unknown-none/release/libaetheria_kernel.a
-          $OBJCOPY -O binary kernel.elf kernel.bin
-          cd ..
-      
-      # ===== 2. СОЗДАЁМ ИНТЕРФЕЙС АНДРОИДА =====
-      - name: Create Android Wrapper
-        run: |
-          mkdir -p app/src/main/{java/com/aetheria/loader,cpp,res/values,res/raw}
-          cp aetheria_kernel/kernel.bin app/src/main/res/raw/kernel_bin
-          
-          cat > app/src/main/java/com/aetheria/loader/MainActivity.java << 'EOF'
-          package com.aetheria.loader;
-          import android.app.Activity;
+
+          cat > app/src/main/java/com/jsai/studio/GameView.java << 'EOF'
+          package com.jsai.studio;
           import android.content.Context;
-          import android.os.Bundle;
           import android.graphics.*;
+          import android.util.AttributeSet;
+          import android.view.*;
+          public class GameView extends View {
+              private Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+              public GameView(Context c, AttributeSet a) { super(c, a); }
+              @Override protected void onDraw(Canvas canvas) {
+                  super.onDraw(canvas);
+                  canvas.drawColor(Color.BLACK);
+                  drawR(canvas, EngineCore.root);
+                  if(EngineCore.isPlaying) { EngineCore.update(0.016f); }
+                  invalidate(); // Теперь обновляется всегда для плавности редактора
+              }
+              private void drawR(Canvas canvas, java.util.List<Instance> list) {
+                  for(int idx=0; idx<list.size(); idx++) {
+                      Instance i = list.get(idx);
+                      if(i.isDeleted) continue;
+                      if(i.type.equals("Блок") || i.type.equals("Шар")) {
+                          p.setColor(i.color);
+                          p.setStyle(Paint.Style.FILL);
+                          canvas.save();
+                          canvas.translate(i.x + (i.w*i.scale)/2, i.y + (i.h*i.scale)/2);
+                          canvas.rotate(i.rotation);
+                          if(i.type.equals("Блок")) canvas.drawRect(-i.w*i.scale/2, -i.h*i.scale/2, i.w*i.scale/2, i.h*i.scale/2, p);
+                          else canvas.drawCircle(0, 0, (i.w/2)*i.scale, p);
+                          if(!i.text.isEmpty()) { p.setColor(Color.WHITE); p.setTextSize(40); p.setTextAlign(Paint.Align.CENTER); canvas.drawText(i.text, 0, 15, p); }
+                          canvas.restore();
+                      }
+                      drawR(canvas, i.children);
+                  }
+              }
+              @Override public boolean onTouchEvent(MotionEvent e) {
+                  if(e.getAction() == MotionEvent.ACTION_DOWN && EngineCore.isPlaying) checkClick(EngineCore.root, e.getX(), e.getY());
+                  return true;
+              }
+              private void checkClick(java.util.List<Instance> list, float tx, float ty) {
+                  for(Instance i : list) {
+                      if(!i.isDeleted && !i.onClick.isnil()) {
+                          if(tx > i.x && tx < i.x + i.w*i.scale && ty > i.y && ty < i.y + i.h*i.scale) try { i.onClick.call(); } catch(Exception ex){}
+                      }
+                      checkClick(i.children, tx, ty);
+                  }
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/jsai/studio/EditorActivity.java << 'EOF'
+          package com.jsai.studio;
+          import android.app.*;
+          import android.os.Bundle;
           import android.view.*;
           import android.view.inputmethod.InputMethodManager;
-          import java.nio.ByteBuffer;
-          
-          public class MainActivity extends Activity {
-              static { System.loadLibrary("aetheria_loader"); }
-              private native void startKernel(byte[] kernelData, ByteBuffer frameBuffer, ByteBuffer kbBuffer, int width, int height);
-              private SurfaceView surface;
-              private ByteBuffer frameBuffer, kbBuffer; 
-              private Bitmap bitmap;
-              
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  surface = new SurfaceView(this);
-                  setContentView(surface);
-                  
-                  frameBuffer = ByteBuffer.allocateDirect(1280 * 720 * 4);
-                  kbBuffer = ByteBuffer.allocateDirect(1);
-                  bitmap = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
-                  
-                  surface.setFocusable(true);
-                  surface.setFocusableInTouchMode(true);
-                  surface.setOnTouchListener((v, e) -> {
-                      surface.requestFocus();
-                      InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                      imm.showSoftInput(surface, InputMethodManager.SHOW_IMPLICIT);
-                      return true;
+          import android.widget.*;
+          import android.graphics.Color;
+          import java.util.*;
+
+          public class EditorActivity extends Activity {
+              LinearLayout explorer, props; EditText codeEd; View gameView; Instance sel, clip;
+              protected void onCreate(Bundle b) {
+                  super.onCreate(b); requestWindowFeature(1); setContentView(R.layout.editor_main);
+                  explorer = findViewById(R.id.explorer); props = findViewById(R.id.properties);
+                  codeEd = findViewById(R.id.codeEditor); gameView = findViewById(R.id.gameView);
+
+                  findViewById(R.id.btnAdd).setOnClickListener(v -> {
+                      PopupMenu pm = new PopupMenu(this, v);
+                      pm.getMenu().add("Блок"); pm.getMenu().add("Шар"); pm.getMenu().add("Folder"); pm.getMenu().add("Script");
+                      pm.setOnMenuItemClickListener(item -> {
+                          Instance i = new Instance(item.getTitle().toString() + " " + (new Random().nextInt(99)), item.getTitle().toString());
+                          if(sel != null && (sel.type.equals("Folder"))) { i.parent = sel; sel.children.add(i); }
+                          else { EngineCore.root.add(i); }
+                          updateExp(); return true;
+                      }); pm.show();
                   });
-                  
-                  surface.setOnKeyListener((v, keyCode, event) -> {
-                      if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                          int c = event.getUnicodeChar();
-                          if (keyCode == KeyEvent.KEYCODE_DEL) c = 8;
-                          if (keyCode == KeyEvent.KEYCODE_ENTER) c = 10;
-                          if (c != 0) kbBuffer.put(0, (byte)c);
-                          return true;
-                      }
-                      return false;
-                  });
-                  
-                  surface.getHolder().addCallback(new SurfaceHolder.Callback() {
-                      @Override
-                      public void surfaceCreated(SurfaceHolder h) {
-                          new Thread(() -> {
-                              try {
-                                  byte[] kernel = getResources().openRawResource(R.raw.kernel_bin).readAllBytes();
-                                  startKernel(kernel, frameBuffer, kbBuffer, 1280, 720);
-                              } catch(Exception e) {}
-                          }).start();
-                          
-                          new Thread(() -> {
-                              while(true) {
-                                  Canvas c = h.lockCanvas();
-                                  if (c != null) {
-                                      frameBuffer.position(0);
-                                      bitmap.copyPixelsFromBuffer(frameBuffer);
-                                      c.drawBitmap(bitmap, null, new Rect(0,0, surface.getWidth(), surface.getHeight()), null);
-                                      h.unlockCanvasAndPost(c);
-                                  }
-                                  try { Thread.sleep(16); } catch(Exception e){}
-                              }
-                          }).start();
-                      }
-                      @Override public void surfaceChanged(SurfaceHolder h, int f, int w, int h2) {}
-                      @Override public void surfaceDestroyed(SurfaceHolder h) {}
+
+                  findViewById(R.id.btnPlay).setOnClickListener(v -> {
+                      hideKB();
+                      if(!EngineCore.isPlaying) { EngineCore.start(); ((Button)v).setText("Стоп"); }
+                      else { EngineCore.stop(); ((Button)v).setText("Запуск"); }
+                      gameView.invalidate();
                   });
               }
+
+              void updateExp() {
+                  explorer.removeAllViews(); renderR(EngineCore.root, 0);
+              }
+
+              void renderR(List<Instance> list, int ind) {
+                  for(Instance i : list) {
+                      LinearLayout row = new LinearLayout(this); row.setPadding(ind * 35, 8, 8, 8);
+                      if(i.type.equals("Folder")) {
+                          TextView t = new TextView(this); t.setText(i.isOpen ? "[-] " : "[+] "); t.setTextColor(Color.WHITE);
+                          t.setOnClickListener(v -> { i.isOpen = !i.isOpen; updateExp(); }); row.addView(t);
+                      }
+                      TextView tv = new TextView(this); tv.setText(i.name); tv.setTextColor(sel == i ? Color.BLACK : Color.WHITE);
+                      tv.setBackgroundColor(sel == i ? Color.WHITE : 0);
+                      tv.setOnClickListener(v -> { sel = i; showProps(i); updateExp(); hideKB(); });
+                      tv.setOnLongClickListener(v -> { showCtx(v, i); return true; });
+                      row.addView(tv); explorer.addView(row);
+                      if(i.isOpen) renderR(i.children, ind + 1);
+                  }
+              }
+
+              void showCtx(View v, Instance i) {
+                  PopupMenu pm = new PopupMenu(this, v); pm.getMenu().add("Вырезать"); pm.getMenu().add("Вставить"); pm.getMenu().add("Удалить");
+                  pm.setOnMenuItemClickListener(item -> {
+                      if(item.getTitle().equals("Удалить")) { if(i.parent!=null) i.parent.children.remove(i); else EngineCore.root.remove(i); sel=null; }
+                      else if(item.getTitle().equals("Вырезать")) clip = i;
+                      else if(item.getTitle().equals("Вставить") && clip != null) {
+                          if(clip.parent!=null) clip.parent.children.remove(clip); else EngineCore.root.remove(clip);
+                          clip.parent = i; i.children.add(clip);
+                      }
+                      updateExp(); return true;
+                  }); pm.show();
+              }
+
+              void showProps(Instance i) {
+                  props.removeAllViews();
+                  boolean isS = i.type.equals("Script");
+                  codeEd.setVisibility(isS ? View.VISIBLE : View.GONE);
+                  gameView.setVisibility(isS ? View.GONE : View.VISIBLE);
+                  if(i.type.equals("Folder")) return;
+                  if(isS) {
+                      codeEd.setText(i.luaCode);
+                      codeEd.addTextChangedListener(new android.text.TextWatcher() {
+                          public void afterTextChanged(android.text.Editable s) { i.luaCode = s.toString(); }
+                          public void beforeTextChanged(CharSequence s, int st, int c, int a) {} public void onTextChanged(CharSequence s, int st, int b, int c) {}
+                      });
+                  }
+                  addS("X", 0, 2000, i.x, v -> i.x = v); addS("Y", 0, 2000, i.y, v -> i.y = v);
+                  addS("Угол", 0, 360, i.rotation, v -> i.rotation = v);
+                  addS("Разм", 10, 1000, i.w, v -> { i.w = v; i.h = v; });
+                  EditText col = new EditText(this); col.setHint("#HEX Цвет"); col.setTextColor(-1);
+                  col.setOnEditorActionListener((v,a,e) -> { try { i.color = Color.parseColor(v.getText().toString()); hideKB(); } catch(Exception ex){} return true; });
+                  props.addView(col);
+              }
+
+              void addS(String l, float min, float max, float cur, Upd u) {
+                  TextView t = new TextView(this); t.setText(l + ": " + (int)cur); t.setTextColor(Color.GRAY); t.setTextSize(10);
+                  SeekBar s = new SeekBar(this); s.setMax(100); s.setProgress((int)((cur-min)/(max-min)*100));
+                  s.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                      public void onProgressChanged(SeekBar sb, int p, boolean b) { float v = min+(max-min)*(p/100f); u.u(v); t.setText(l+": "+(int)v); }
+                      public void onStartTrackingTouch(SeekBar sb) {} public void onStopTrackingTouch(SeekBar sb) {}
+                  });
+                  props.addView(t); props.addView(s);
+              }
+              void hideKB() { InputMethodManager imm = (InputMethodManager)getSystemService(INPUT_METHOD_SERVICE); View f = getCurrentFocus(); if(f!=null) imm.hideSoftInputFromWindow(f.getWindowToken(), 0); }
+              interface Upd { void u(float v); }
           }
           EOF
-          
-          cat > app/src/main/cpp/loader.cpp << 'EOF'
-          #include <jni.h>
-          #include <sys/mman.h>
-          #include <cstring>
-          extern "C" JNIEXPORT void JNICALL
-          Java_com_aetheria_loader_MainActivity_startKernel(JNIEnv* env, jobject, jbyteArray kernelData, jobject fb, jobject kb, jint w, jint h) {
-              jsize len = env->GetArrayLength(kernelData);
-              jbyte* bytes = env->GetByteArrayElements(kernelData, nullptr);
-              void* fb_ptr = env->GetDirectBufferAddress(fb);
-              void* kb_ptr = env->GetDirectBufferAddress(kb);
-              
-              void* exec_mem = mmap(nullptr, len, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-              memcpy(exec_mem, bytes, len);
-              __builtin___clear_cache((char*)exec_mem, (char*)exec_mem + len);
-              
-              typedef void (*KernelMain)(void*, void*, uint32_t, uint32_t);
-              KernelMain kmain = (KernelMain)exec_mem;
-              kmain(fb_ptr, kb_ptr, w, h);
-          }
-          EOF
-          
-          cat > app/src/main/cpp/CMakeLists.txt << 'EOF'
-          cmake_minimum_required(VERSION 3.22)
-          project(aetheria_loader)
-          add_library(aetheria_loader SHARED loader.cpp)
-          target_link_libraries(aetheria_loader log)
-          target_compile_options(aetheria_loader PRIVATE -O3 -fPIC)
-          EOF
-          
+
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="AetheriaOS" android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
-                  <activity android:name="com.aetheria.loader.MainActivity" android:exported="true" android:screenOrientation="landscape">
+              <application android:label="JsAI GD-Pro" android:theme="@android:style/Theme.NoTitleBar">
+                  <activity android:name=".EditorActivity" android:exported="true" android:screenOrientation="landscape" android:windowSoftInputMode="adjustPan">
                       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
                   </activity>
               </application>
           </manifest>
           EOF
-          
-          cat > app/build.gradle << 'EOF'
-          plugins { id 'com.android.application' }
-          android {
-              namespace 'com.aetheria.loader'
-              compileSdk 34
-              defaultConfig {
-                  applicationId 'com.aetheria.loader'
-                  minSdk 24
-                  targetSdk 34
-                  externalNativeBuild { cmake { cppFlags "-O3 -fPIC" } }
-              }
-              externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
-          }
-          EOF
-          
-          cat > build.gradle << 'EOF'
-          buildscript {
-              repositories { google(); mavenCentral() }
-              dependencies { classpath 'com.android.tools.build:gradle:8.2.2' }
-          }
-          allprojects {
-              repositories { google(); mavenCentral() }
-          }
-          EOF
-          echo 'include ":app"' > settings.gradle
 
-      # ===== 3. СБОРКА APK =====
-      - name: Build APK Fast
-        run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
-          unzip -q gradle-8.5-bin.zip
-          export PATH="$PWD/gradle-8.5/bin:$PATH"
-          
-          gradle wrapper --gradle-version 8.5
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.2
 
-      # ===== 4. ПАКУЕМ И ЗАГРУЖАЕМ ПАПКУ ЦЕЛИКОМ =====
-      - name: Package Release
-        run: |
-          mkdir -p AetheriaOS_Release
-          cp app/build/outputs/apk/debug/app-debug.apk AetheriaOS_Release/AetheriaOS-Interactive.apk
-          cp aetheria_kernel/kernel.bin AetheriaOS_Release/kernel.bin
-          
-          cd AetheriaOS_Release
-          zip -r ../AetheriaOS-Interactive-Bundle.zip *
-          
-      - name: Upload OS Package
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AetheriaOS-Interactive-Bundle
-          path: AetheriaOS_Release/
-          retention-days: 30
+          name: JsAI_GD_Pro
+          path: app/build/outputs/apk/debug/app-debug.apk
