@@ -1,4 +1,4 @@
-name: JsAI_GD_Studio_Final
+name: JsAI_GD_Teleport_Edition
 on: [push, workflow_dispatch]
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
           android {
               namespace 'com.jsai.studio'
               compileSdk 34
-              defaultConfig { applicationId "com.jsai.studio"; minSdk 26; targetSdk 34; versionCode 1; versionName "6.0" }
+              defaultConfig { applicationId "com.jsai.studio"; minSdk 26; targetSdk 34; versionCode 1; versionName "7.0" }
           }
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
@@ -42,20 +42,20 @@ jobs:
           }
           EOF
 
-          # --- ИНТЕРФЕЙС ---
+          # --- UI ---
           cat > app/src/main/res/layout/editor_main.xml << 'EOF'
-          <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#1B1B1B">
+          <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#121212">
               <LinearLayout android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="38dp" android:background="#222" android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="8dp">
                   <Button android:id="@+id/btnAdd" android:layout_width="35dp" android:layout_height="30dp" android:text="+" android:backgroundTint="#FFF" android:textColor="#000" android:insetTop="0dp" android:insetBottom="0dp"/>
                   <Button android:id="@+id/btnPlay" android:layout_width="80dp" android:layout_height="30dp" android:text="Запуск" android:backgroundTint="#FFF" android:textColor="#000" android:textSize="10sp" android:layout_marginLeft="8dp" android:insetTop="0dp" android:insetBottom="0dp"/>
                   <Space android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
-                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="JsAI: GD-Pro" android:textColor="#555" android:textSize="10sp"/>
+                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="JsAI Teleport" android:textColor="#444" android:textSize="10sp"/>
               </LinearLayout>
               
               <LinearLayout android:id="@+id/sidebar" android:layout_width="165dp" android:layout_height="match_parent" android:layout_below="@id/toolbar" android:layout_alignParentRight="true" android:background="#252525" android:orientation="vertical">
-                  <TextView android:layout_width="match_parent" android:layout_height="22dp" android:text=" Проводник" android:textColor="#AAA" android:textSize="9sp" android:background="#333" android:gravity="center_vertical" android:textStyle="bold"/>
+                  <TextView android:layout_width="match_parent" android:layout_height="22dp" android:text=" Проводник" android:textColor="#AAA" android:textSize="9sp" android:background="#333" android:gravity="center_vertical"/>
                   <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"><LinearLayout android:id="@+id/explorer" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"/></ScrollView>
-                  <TextView android:layout_width="match_parent" android:layout_height="22dp" android:text=" Свойства" android:textColor="#AAA" android:textSize="9sp" android:background="#333" android:gravity="center_vertical" android:textStyle="bold"/>
+                  <TextView android:layout_width="match_parent" android:layout_height="22dp" android:text=" Свойства" android:textColor="#AAA" android:textSize="9sp" android:background="#333" android:gravity="center_vertical"/>
                   <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1.3" android:background="#1A1A1A"><LinearLayout android:id="@+id/properties" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="5dp"/></ScrollView>
               </LinearLayout>
 
@@ -66,7 +66,7 @@ jobs:
           </RelativeLayout>
           EOF
 
-          # --- КЛАСС ОБЪЕКТА (NODE) ---
+          # --- ENGINE ---
           cat > app/src/main/java/com/jsai/studio/Instance.java << 'EOF'
           package com.jsai.studio;
           import java.util.*;
@@ -85,17 +85,14 @@ jobs:
               public void save() { sX=x; sY=y; sW=w; sH=h; sSc=scale; sRot=rotation; }
               public void reset() { x=sX; y=sY; w=sW; h=sH; scale=sSc; rotation=sRot; isDeleted=false; onClick=LuaValue.NIL; onUpdate=LuaValue.NIL; }
               
-              // Методы для GDScript (Lua)
               public void setX(float v) { x=v; } public float getX() { return x; }
               public void setY(float v) { y=v; } public float getY() { return y; }
-              public void setRot(float v) { rotation=v; } public float getRot() { return rotation; }
+              public void setW(float v) { w=v; } public float getW() { return w; }
+              public void setH(float v) { h=v; } public float getH() { return h; }
               public void setScale(float v) { scale=v; }
-              public void setText(String v) { text=v; }
-              public void remove() { isDeleted = true; }
           }
           EOF
 
-          # --- ENGINE (GDScript Parser) ---
           cat > app/src/main/java/com/jsai/studio/EngineCore.java << 'EOF'
           package com.jsai.studio;
           import java.util.*;
@@ -104,6 +101,7 @@ jobs:
           public class EngineCore {
               public static List<Instance> root = new ArrayList<>();
               public static boolean isPlaying = false;
+              public static float mx = 0, my = 0;
               
               public static String compile(String r) {
                   return r.replace("пусть ", "local ")
@@ -113,16 +111,12 @@ jobs:
                           .replace("конец", "end")
                           .replace("если ", "if ")
                           .replace("тогда", "then")
-                          .replace("иначе", "else")
-                          .replace("я.", "self:")
-                          .replace("предок.", "parent:")
                           .replace("я:", "self:")
                           .replace("равно", "==");
               }
 
               public static void start() {
-                  isPlaying = true;
-                  process(root);
+                  isPlaying = true; process(root);
               }
               private static void process(List<Instance> list) {
                   for(Instance i : list) {
@@ -130,29 +124,29 @@ jobs:
                       if(i.type.equals("Script") && i.parent != null) {
                           Globals g = JsePlatform.standardGlobals();
                           g.set("self", CoerceJavaToLua.coerce(i.parent));
-                          g.set("parent", i.parent.parent != null ? CoerceJavaToLua.coerce(i.parent.parent) : LuaValue.NIL);
                           try {
                               g.load(compile(i.luaCode)).call();
                               i.parent.onUpdate = g.get("_process");
                               i.parent.onClick = g.get("_on_click");
-                              LuaValue ready = g.get("_ready");
-                              if(!ready.isnil()) ready.call();
                           } catch(Exception e) {}
                       }
                       process(i.children);
                   }
               }
               public static void stop() { isPlaying = false; resetR(root); }
-              private static void resetR(List<Instance> list) {
-                  for(Instance i : list) { i.reset(); resetR(i.children); }
-              }
+              private static void resetR(List<Instance> list) { for(Instance i : list) { i.reset(); resetR(i.children); } }
+              
               public static void update(float dt) {
                   if(!isPlaying) return;
                   updateR(root, dt);
               }
               private static void updateR(List<Instance> list, float dt) {
                   for(Instance i : list) {
-                      if(!i.onUpdate.isnil()) try { i.onUpdate.call(LuaValue.valueOf(dt)); } catch(Exception e) {}
+                      if(!i.onUpdate.isnil()) {
+                          Globals g = i.onUpdate.getfenv();
+                          if(g != null) { g.set("мышьХ", LuaValue.valueOf(mx)); g.set("мышьУ", LuaValue.valueOf(my)); }
+                          try { i.onUpdate.call(LuaValue.valueOf(dt)); } catch(Exception e) {}
+                      }
                       updateR(i.children, dt);
                   }
               }
@@ -173,27 +167,21 @@ jobs:
                   canvas.drawColor(Color.BLACK);
                   drawR(canvas, EngineCore.root);
                   if(EngineCore.isPlaying) { EngineCore.update(0.016f); }
-                  invalidate(); // Теперь обновляется всегда для плавности редактора
+                  invalidate();
               }
               private void drawR(Canvas canvas, java.util.List<Instance> list) {
-                  for(int idx=0; idx<list.size(); idx++) {
-                      Instance i = list.get(idx);
+                  for(Instance i : list) {
                       if(i.isDeleted) continue;
                       if(i.type.equals("Блок") || i.type.equals("Шар")) {
                           p.setColor(i.color);
-                          p.setStyle(Paint.Style.FILL);
-                          canvas.save();
-                          canvas.translate(i.x + (i.w*i.scale)/2, i.y + (i.h*i.scale)/2);
-                          canvas.rotate(i.rotation);
-                          if(i.type.equals("Блок")) canvas.drawRect(-i.w*i.scale/2, -i.h*i.scale/2, i.w*i.scale/2, i.h*i.scale/2, p);
-                          else canvas.drawCircle(0, 0, (i.w/2)*i.scale, p);
-                          if(!i.text.isEmpty()) { p.setColor(Color.WHITE); p.setTextSize(40); p.setTextAlign(Paint.Align.CENTER); canvas.drawText(i.text, 0, 15, p); }
-                          canvas.restore();
+                          if(i.type.equals("Блок")) canvas.drawRect(i.x, i.y, i.x+i.w*i.scale, i.y+i.h*i.scale, p);
+                          else canvas.drawCircle(i.x+i.w/2, i.y+i.h/2, (i.w/2)*i.scale, p);
                       }
                       drawR(canvas, i.children);
                   }
               }
               @Override public boolean onTouchEvent(MotionEvent e) {
+                  EngineCore.mx = e.getX(); EngineCore.my = e.getY();
                   if(e.getAction() == MotionEvent.ACTION_DOWN && EngineCore.isPlaying) checkClick(EngineCore.root, e.getX(), e.getY());
                   return true;
               }
@@ -240,7 +228,6 @@ jobs:
                       hideKB();
                       if(!EngineCore.isPlaying) { EngineCore.start(); ((Button)v).setText("Стоп"); }
                       else { EngineCore.stop(); ((Button)v).setText("Запуск"); }
-                      gameView.invalidate();
                   });
               }
 
@@ -250,7 +237,7 @@ jobs:
 
               void renderR(List<Instance> list, int ind) {
                   for(Instance i : list) {
-                      LinearLayout row = new LinearLayout(this); row.setPadding(ind * 35, 8, 8, 8);
+                      LinearLayout row = new LinearLayout(this); row.setPadding(ind * 30, 8, 8, 8);
                       if(i.type.equals("Folder")) {
                           TextView t = new TextView(this); t.setText(i.isOpen ? "[-] " : "[+] "); t.setTextColor(Color.WHITE);
                           t.setOnClickListener(v -> { i.isOpen = !i.isOpen; updateExp(); }); row.addView(t);
@@ -291,8 +278,7 @@ jobs:
                       });
                   }
                   addS("X", 0, 2000, i.x, v -> i.x = v); addS("Y", 0, 2000, i.y, v -> i.y = v);
-                  addS("Угол", 0, 360, i.rotation, v -> i.rotation = v);
-                  addS("Разм", 10, 1000, i.w, v -> { i.w = v; i.h = v; });
+                  addS("W", 10, 1000, i.w, v -> i.w = v); addS("H", 10, 1000, i.h, v -> i.h = v);
                   EditText col = new EditText(this); col.setHint("#HEX Цвет"); col.setTextColor(-1);
                   col.setOnEditorActionListener((v,a,e) -> { try { i.color = Color.parseColor(v.getText().toString()); hideKB(); } catch(Exception ex){} return true; });
                   props.addView(col);
