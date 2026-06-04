@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-aetheria-os:
-    name: Build AetheriaOS (Apps + Games)
+    name: Build AetheriaOS (VFS + Info Command)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -32,7 +32,7 @@ jobs:
         run: |
           mkdir -p aetheria_kernel/src
           
-          # 1. ШРИФТ (Исправленный ASCII)
+          # 1. ШРИФТ
           cat > aetheria_kernel/src/font.rs << 'EOF'
           pub fn get_char_bitmap(c: char) -> [u8; 8] {
               let idx = c as usize;
@@ -82,7 +82,7 @@ jobs:
               [0x00,0x00,0x7C,0x66,0x66,0x7C,0x60,0x60], [0x00,0x00,0x3E,0x66,0x66,0x3E,0x06,0x06],
               [0x00,0x00,0x7C,0x66,0x60,0x60,0x60,0x00], [0x00,0x00,0x3C,0x60,0x3C,0x06,0x3C,0x00],
               [0x30,0x30,0x7C,0x30,0x30,0x30,0x1C,0x00], [0x00,0x00,0x66,0x66,0x66,0x66,0x3E,0x00],
-              [0x00,0x00,0x66,0x66,0x66,0x3C,0x18,0x00], [0x00,0x00,0xC6,0xD6,0xD6,0xFE,0x6C,0x00],
+              [0x00,0x00,0x66,0x3C,0x18,0x3C,0x66,0x00], [0x00,0x00,0xC6,0xD6,0xD6,0xFE,0x6C,0x00],
               [0x00,0x00,0x66,0x3C,0x18,0x3C,0x66,0x00], [0x00,0x00,0x66,0x66,0x66,0x3E,0x06,0x3C],
               [0x00,0x00,0x7E,0x0C,0x18,0x30,0x7E,0x00], [0x0E,0x18,0x18,0x70,0x18,0x18,0x0E,0x00],
               [0x18,0x18,0x18,0x00,0x18,0x18,0x18,0x00], [0x70,0x18,0x18,0x0E,0x18,0x18,0x70,0x00],
@@ -90,7 +90,7 @@ jobs:
           ];
           EOF
           
-          # 2. ЯДРО (lib.rs)
+          # 2. ЯДРО С КОМАНДОЙ INFO
           cat > aetheria_kernel/src/lib.rs << 'EOF'
           #![no_std]
           mod font;
@@ -99,9 +99,14 @@ jobs:
           use core::str;
           
           #[panic_handler] fn panic(_info: &PanicInfo) -> ! { loop { core::hint::spin_loop(); } }
-          #[no_mangle] pub unsafe extern "C" fn memset(dest: *mut u8, c: i32, n: usize) -> *mut u8 { for i in 0..n { *dest.add(i) = c as u8; } dest }
-          #[no_mangle] pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 { for i in 0..n { *dest.add(i) = *src.add(i); } dest }
           
+          struct VFile { name: &'static str, content: &'static str }
+          const FILESYSTEM: [VFile; 3] = [
+              VFile { name: "readme.txt", content: "AetheriaOS v0.5 - Experimental Shell." },
+              VFile { name: "credits.txt", content: "Creators: Dmitry Gustenev & AI." },
+              VFile { name: "system.vfs", content: "Virtual RAM FileSystem mounted." },
+          ];
+
           fn draw_rect(fb: *mut u32, fb_w: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
               for iy in y..(y+h) {
                   for ix in x..(x+w) { unsafe { write_volatile(fb.add((iy * fb_w + ix) as usize), color); } }
@@ -123,109 +128,81 @@ jobs:
               let mut cx = x;
               for c in text.chars() { draw_char(fb, fb_w, cx, y, c, color, scale); cx += 8 * scale; }
           }
-          
-          fn run_snake(fb: *mut u32, kb: *mut u8, w: u32, h: u32) {
-              draw_rect(fb, w, 0, 0, w, h, 0xFF0D0D14);
-              let mut sx = [0i32; 256]; let mut sy = [0i32; 256];
-              let mut len = 3;
-              sx[0]=15; sy[0]=10; sx[1]=14; sy[1]=10; sx[2]=13; sy[2]=10;
-              let (mut dx, mut dy) = (1, 0);
-              let (mut ax, mut ay) = (30, 15);
-              let mut seed: u64 = 12345;
-              let mut over = false;
-              
-              loop {
-                  let key = unsafe { read_volatile(kb) };
-                  if key != 0 {
-                      unsafe { write_volatile(kb, 0); }
-                      let k = key as char;
-                      if (k=='w'||k=='W') && dy==0 { dx=0; dy=-1; }
-                      if (k=='s'||k=='S') && dy==0 { dx=0; dy=1; }
-                      if (k=='a'||k=='A') && dx==0 { dx=-1; dy=0; }
-                      if (k=='d'||k=='D') && dx==0 { dx=1; dy=0; }
-                      if k=='q'||k=='Q' { break; }
-                  }
-                  if !over {
-                      for i in (1..len).rev() { sx[i]=sx[i-1]; sy[i]=sy[i-1]; }
-                      sx[0]+=dx; sy[0]+=dy;
-                      if sx[0]<0 || sx[0]>=60 || sy[0]<2 || sy[0]>=34 { over=true; }
-                      if sx[0]==ax && sy[0]==ay {
-                          if len<256 { len+=1; }
-                          seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-                          ax = ((seed / 65536) % 58) as i32 + 1;
-                          seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-                          ay = ((seed / 65536) % 30) as i32 + 3;
-                      }
-                      draw_rect(fb, w, 0, 40, w, h-40, 0xFF0D0D14);
-                      draw_rect(fb, w, (ax as u32)*20, (ay as u32)*20, 20, 20, 0xFFF38BA8);
-                      for i in 0..len { draw_rect(fb, w, (sx[i] as u32)*20, (sy[i] as u32)*20, 20, 20, 0xFF4AF626); }
-                  } else {
-                      draw_text(fb, w, 400, 300, "GAME OVER! Press Q", 0xFFF38BA8, 4);
-                  }
-                  for _ in 0..6_000_000 { core::hint::spin_loop(); }
-              }
-          }
-
-          fn run_sysinfo(fb: *mut u32, kb: *mut u8, w: u32, h: u32) {
-              draw_rect(fb, w, 0, 0, w, h, 0xFF0D0D14);
-              draw_text(fb, w, 20, 20, "AETHERIA OS - SYSTEM MONITOR", 0xFF89B4FA, 3);
-              draw_text(fb, w, 20, 80, "Kernel       : Bare-Metal Rust 0.4", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 110, "Architecture : aarch64 (ARM64)", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 140, "Memory Mode  : Direct Framebuffer", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 170, "Resolution   : 1280x720 ARGB", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 200, "Graphics     : Active", 0xFF4AF626, 2);
-              draw_text(fb, w, 20, 280, "Press 'Q' to exit...", 0xFFF38BA8, 2);
-              loop {
-                  let key = unsafe { read_volatile(kb) };
-                  if key == b'q' || key == b'Q' { unsafe { write_volatile(kb, 0); } break; }
-              }
-          }
-
-          struct VFile { name: &'static str, content: &'static str }
-          const FILESYSTEM: [VFile; 2] = [
-              VFile { name: "readme.txt", content: "Welcome to AetheriaOS!" },
-              VFile { name: "system.log", content: "[INIT] CPU OK\n[INIT] VFS OK" },
-          ];
 
           #[no_mangle]
           #[link_section = ".text.entry"]
           pub extern "C" fn aetheria_main(fb_addr: *mut u32, kb_addr: *mut u8, width: u32, height: u32) -> ! {
-              let (bg, green, white, red) = (0xFF0D0D14, 0xFF4AF626, 0xFFFFFFFF, 0xFFF38BA8);
+              let bg = 0xFF0D0D14;
+              let white = 0xFFFFFFFF;
+              let green = 0xFF4AF626;
+              let red = 0xFFF38BA8;
+              
               let mut cursor_y = 20;
               let scale = 2;
               let (f_w, f_h) = (8*scale, 8*scale);
               
               draw_rect(fb_addr, width, 0, 0, width, height, bg);
-              draw_text(fb_addr, width, 20, cursor_y, "AetheriaOS v0.4 Terminal", green, scale);
+              draw_text(fb_addr, width, 20, cursor_y, "AetheriaOS v0.5 - Welcome", white, scale);
               cursor_y += f_h + 10;
               
               let prompt = "root@aetheria:~# ";
               let mut input_buf = [0u8; 64];
               let mut input_len = 0;
-              let mut tick = 0u64;
+              let mut tick: u32 = 0;
 
-              draw_text(fb_addr, width, 20, cursor_y, prompt, green, scale);
+              draw_text(fb_addr, width, 20, cursor_y, prompt, white, scale);
+              
               loop {
                   let key = unsafe { read_volatile(kb_addr) };
                   if key != 0 {
                       unsafe { write_volatile(kb_addr, 0); }
-                      if key == 10 {
+                      if key == 10 { // ENTER
                           cursor_y += f_h + 5;
-                          if let Ok(cmd) = str::from_utf8(&input_buf[..input_len]) {
-                              match cmd.trim() {
-                                  "help" => draw_text(fb_addr, width, 20, cursor_y, "Apps: sysinfo, snake, ls, clear", white, scale),
-                                  "snake" => { run_snake(fb_addr, kb_addr, width, height); draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; },
-                                  "sysinfo" => { run_sysinfo(fb_addr, kb_addr, width, height); draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; },
-                                  "ls" => { for f in FILESYSTEM.iter() { draw_text(fb_addr, width, 20, cursor_y, f.name, white, scale); cursor_y += f_h + 5; } },
+                          if let Ok(full_cmd) = str::from_utf8(&input_buf[..input_len]) {
+                              let trimmed = full_cmd.trim();
+                              let mut parts = trimmed.splitn(2, ' ');
+                              let cmd = parts.next().unwrap_or("");
+                              let arg = parts.next().unwrap_or("");
+
+                              match cmd {
+                                  "help" => { draw_text(fb_addr, width, 20, cursor_y, "ls, cat, info, clear, uname", white, scale); cursor_y += f_h + 5; },
+                                  "ls" => {
+                                      for f in FILESYSTEM.iter() {
+                                          draw_text(fb_addr, width, 20, cursor_y, f.name, green, scale);
+                                          cursor_y += f_h + 5;
+                                      }
+                                  },
+                                  "info" => {
+                                      draw_text(fb_addr, width, 20, cursor_y, "Creators: Dmitry Gustenev & AI", green, scale);
+                                      cursor_y += f_h + 5;
+                                      draw_text(fb_addr, width, 20, cursor_y, "Made with love!", red, scale);
+                                      cursor_y += f_h + 10;
+                                      draw_text(fb_addr, width, 20, cursor_y, "Thanks to LMArena (AI provider)", white, scale);
+                                      cursor_y += f_h + 5;
+                                      draw_text(fb_addr, width, 20, cursor_y, "Thanks to Chips for support!", white, scale);
+                                      cursor_y += f_h + 5;
+                                  },
+                                  "cat" => {
+                                      let mut found = false;
+                                      for f in FILESYSTEM.iter() {
+                                          if f.name == arg {
+                                              draw_text(fb_addr, width, 20, cursor_y, f.content, white, scale);
+                                              found = true; break;
+                                          }
+                                      }
+                                      if !found { draw_text(fb_addr, width, 20, cursor_y, "Not found", red, scale); }
+                                      cursor_y += f_h + 5;
+                                  },
                                   "clear" => { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; },
+                                  "uname" => { draw_text(fb_addr, width, 20, cursor_y, "AetheriaOS v0.5-aarch64", white, scale); cursor_y += f_h + 5; },
                                   "" => {},
-                                  _ => draw_text(fb_addr, width, 20, cursor_y, "Unknown command", red, scale),
+                                  _ => { draw_text(fb_addr, width, 20, cursor_y, "Unknown command", red, scale); cursor_y += f_h + 5; }
                               }
                           }
-                          input_len = 0; cursor_y += f_h + 5;
-                          if cursor_y > height - 40 { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; }
-                          draw_text(fb_addr, width, 20, cursor_y, prompt, green, scale);
-                      } else if key == 8 {
+                          input_len = 0;
+                          if cursor_y > height - 100 { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; }
+                          draw_text(fb_addr, width, 20, cursor_y, prompt, white, scale);
+                      } else if key == 8 { // BACKSPACE
                           if input_len > 0 {
                               input_len -= 1;
                               draw_rect(fb_addr, width, 20 + (prompt.len() as u32 + input_len as u32)*f_w, cursor_y, f_w, f_h, bg);
@@ -237,13 +214,15 @@ jobs:
                       }
                   }
                   let cursor_x = 20 + (prompt.len() as u32 + input_len as u32)*f_w;
-                  draw_rect(fb_addr, width, cursor_x, cursor_y + f_h - 2, f_w, 2, if (tick/1000)%2==0 { white } else { bg });
+                  let cursor_color = if (tick / 50) % 2 == 0 { white } else { bg };
+                  draw_rect(fb_addr, width, cursor_x, cursor_y + f_h - 4, f_w, 4, cursor_color);
                   tick = tick.wrapping_add(1);
+                  for _ in 0..100_000 { core::hint::spin_loop(); }
               }
           }
           EOF
 
-          # 3. LINKER & CARGO
+          # 3. BUILD
           cat > aetheria_kernel/linker.ld << 'EOF'
           ENTRY(aetheria_main);
           SECTIONS {
@@ -282,28 +261,44 @@ jobs:
           cat > app/src/main/java/com/aetheria/loader/MainActivity.java << 'EOF'
           package com.aetheria.loader;
           import android.app.Activity;
+          import android.content.Context;
           import android.os.Bundle;
           import android.graphics.*;
           import android.view.*;
+          import android.view.inputmethod.InputMethodManager;
           import java.nio.ByteBuffer;
+
           public class MainActivity extends Activity {
               static { System.loadLibrary("aetheria_loader"); }
               private native void startKernel(byte[] k, ByteBuffer fb, ByteBuffer kb, int w, int h);
               private ByteBuffer fb, kb; private Bitmap bmp;
+
               @Override protected void onCreate(Bundle b) {
                   super.onCreate(b);
                   SurfaceView sv = new SurfaceView(this); setContentView(sv);
                   fb = ByteBuffer.allocateDirect(1280*720*4); kb = ByteBuffer.allocateDirect(1);
                   bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
-                  sv.setFocusable(true); sv.requestFocus();
-                  sv.setOnKeyListener((v, kc, e) -> {
-                      if(e.getAction()==KeyEvent.ACTION_DOWN) {
-                          int c = e.getUnicodeChar();
-                          if(kc==KeyEvent.KEYCODE_DEL) c=8; if(kc==KeyEvent.KEYCODE_ENTER) c=10;
-                          if(c!=0) kb.put(0, (byte)c);
+                  sv.setFocusable(true); sv.setFocusableInTouchMode(true); sv.requestFocus();
+                  
+                  sv.setOnTouchListener((v, event) -> {
+                      if(event.getAction() == MotionEvent.ACTION_DOWN) {
+                          sv.requestFocus();
+                          InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                          imm.showSoftInput(sv, InputMethodManager.SHOW_FORCED);
                       }
                       return true;
                   });
+
+                  sv.setOnKeyListener((v, kc, e) -> {
+                      if(e.getAction() == KeyEvent.ACTION_DOWN) {
+                          int c = e.getUnicodeChar();
+                          if(kc == KeyEvent.KEYCODE_DEL) c = 8;
+                          if(kc == KeyEvent.KEYCODE_ENTER) c = 10;
+                          if(c != 0) kb.put(0, (byte)c);
+                      }
+                      return true;
+                  });
+
                   sv.getHolder().addCallback(new SurfaceHolder.Callback() {
                       public void surfaceCreated(SurfaceHolder h) {
                           new Thread(() -> {
@@ -322,6 +317,7 @@ jobs:
               }
           }
           EOF
+
           cat > app/src/main/cpp/loader.cpp << 'EOF'
           #include <jni.h>
           #include <sys/mman.h>
@@ -333,11 +329,12 @@ jobs:
               ((void(*)(void*, void*, int, int))m)(env->GetDirectBufferAddress(fb), env->GetDirectBufferAddress(kb), w, h);
           }
           EOF
+
           echo 'cmake_minimum_required(VERSION 3.22)' > app/src/main/cpp/CMakeLists.txt
           echo 'project(aetheria_loader)' >> app/src/main/cpp/CMakeLists.txt
           echo 'add_library(aetheria_loader SHARED loader.cpp)' >> app/src/main/cpp/CMakeLists.txt
           echo 'target_link_libraries(aetheria_loader log)' >> app/src/main/cpp/CMakeLists.txt
-          
+
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.aetheria.loader">
               <application android:label="AetheriaOS" android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
@@ -358,20 +355,15 @@ jobs:
           echo 'allprojects { repositories { google(); mavenCentral() } }' >> build.gradle
           echo 'include ":app"' > settings.gradle
 
-      - name: Build APK Fast
+      - name: Build APK
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
           export PATH="$PWD/gradle-8.5/bin:$PATH"
           gradle assembleDebug --no-daemon
 
-      - name: Package Release
-        run: |
-          mkdir -p AetheriaOS_Release
-          cp app/build/outputs/apk/debug/app-debug.apk AetheriaOS_Release/AetheriaOS.apk
-          
-      - name: Upload OS Package
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AetheriaOS-Interactive-Bundle
-          path: AetheriaOS_Release/
+          name: AetheriaOS-Release
+          path: app/build/outputs/apk/debug/app-debug.apk
