@@ -1,4 +1,4 @@
-name: AetheriaOS - HighRes Build
+name: AetheriaOS - Final Fix
 on:
   push:
     branches: [ main ]
@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-aetheria-os:
-    name: Build AetheriaOS (8x16 Font + Keyboard Fix)
+    name: Build AetheriaOS (Fixed Font Size)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -32,14 +32,14 @@ jobs:
         run: |
           mkdir -p aetheria_kernel/src
           
-          # 1. ВЫСОКОЕ РАЗРЕШЕНИЕ ШРИФТА (8x16 ПИКСЕЛЕЙ)
+          # 1. ИСПРАВЛЕННЫЙ ШРИФТ (РАЗМЕР 96)
           cat > aetheria_kernel/src/font.rs << 'EOF'
           pub fn get_char_bitmap(c: char) -> [u8; 16] {
               let idx = c as usize;
-              if idx >= 32 && idx <= 126 { FONT_DATA[idx - 32] } else { [0; 16] }
+              // Обрабатываем символы от пробела (32) до блока (127)
+              if idx >= 32 && idx <= 127 { FONT_DATA[idx - 32] } else { [0; 16] }
           }
-          // Классический шрифт 8x16
-          const FONT_DATA: [[u8; 16]; 95] = [
+          const FONT_DATA: [[u8; 16]; 96] = [
               [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // space
               [0,0,16,16,16,16,16,16,0,0,16,0,0,0,0,0], // !
               [0,36,36,36,0,0,0,0,0,0,0,0,0,0,0,0], // "
@@ -99,7 +99,7 @@ jobs:
               [0,0,102,102,60,24,60,102,102,0,0,0,0,0,0,0], // X
               [0,0,102,102,102,60,24,24,24,0,0,0,0,0,0,0], // Y
               [0,0,126,6,12,24,48,96,126,0,0,0,0,0,0,0], // Z
-              [0,0,60,48,48,48,48,48,60,0,0,0,0,0,0,0], // [ (as box)
+              [0,0,60,48,48,48,48,48,60,0,0,0,0,0,0,0], // [
               [0,64,32,16,8,4,2,0,0,0,0,0,0,0,0,0], // \
               [0,0,60,12,12,12,12,12,60,0,0,0,0,0,0,0], // ]
               [0,16,40,68,0,0,0,0,0,0,0,0,0,0,0,0], // ^
@@ -135,11 +135,11 @@ jobs:
               [24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24], // |
               [0,48,24,24,12,24,24,48,0,0,0,0,0,0,0,0], // }
               [0,0,0,0,118,173,0,0,0,0,0,0,0,0,0,0], // ~
-              [255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255]
+              [255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255] // Block (127)
           ];
           EOF
           
-          # 2. ЯДРО (ОТРИСОВКА 8x16)
+          # 2. ЯДРО
           cat > aetheria_kernel/src/lib.rs << 'EOF'
           #![no_std]
           mod font;
@@ -157,7 +157,7 @@ jobs:
           
           fn draw_char(fb: *mut u32, fb_w: u32, x: u32, y: u32, c: char, color: u32, scale: u32) {
               let bitmap = font::get_char_bitmap(c);
-              for row in 0..16 { // Цикл теперь по 16 строкам
+              for row in 0..16 {
                   for col in 0..8 {
                       if (bitmap[row] & (1 << (7 - col))) != 0 {
                           draw_rect(fb, fb_w, x + col * scale, y + (row as u32) * scale, scale, scale, color);
@@ -171,7 +171,6 @@ jobs:
               for c in text.chars() { draw_char(fb, fb_w, cx, y, c, color, scale); cx += 8 * scale; }
           }
           
-          // === ИГРА: SNAKE ===
           fn run_snake(fb: *mut u32, kb: *mut u8, w: u32, h: u32) {
               draw_rect(fb, w, 0, 0, w, h, 0xFF0D0D14);
               let mut sx = [0i32; 256]; let mut sy = [0i32; 256];
@@ -223,11 +222,11 @@ jobs:
               let red = 0xFFF38BA8;
               
               let mut cursor_y = 40;
-              let scale = 2; // При масштабе 2 шрифт будет 16x32 пикселя - очень четко
-              let f_h = 16 * scale + 8; 
+              let scale = 3; // Огромный четкий шрифт
+              let f_h = 16 * scale + 10; 
               
               draw_rect(fb_addr, width, 0, 0, width, height, bg);
-              draw_text(fb_addr, width, 40, cursor_y, "AetheriaOS v0.6 [High-Res Mode]", green, scale);
+              draw_text(fb_addr, width, 40, cursor_y, "AetheriaOS v0.6 [Fixed Font]", green, scale);
               cursor_y += f_h;
               
               let prompt = "root@aetheria:~# ";
@@ -245,15 +244,19 @@ jobs:
                           cursor_y += f_h;
                           if let Ok(cmd) = str::from_utf8(&input_buf[..input_len]) {
                               match cmd.trim() {
-                                  "help" => { draw_text(fb_addr, width, 40, cursor_y, "snake, sysinfo, info, clear", white, scale); cursor_y += f_h; },
+                                  "help" => { draw_text(fb_addr, width, 40, cursor_y, "snake, clear, info", white, scale); cursor_y += f_h; },
                                   "snake" => { run_snake(fb_addr, kb_addr, width, height); draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 40; },
                                   "clear" => { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 40; },
+                                  "info" => {
+                                      draw_text(fb_addr, width, 40, cursor_y, "Dmitry Gustenev & AI", white, scale); cursor_y += f_h;
+                                      draw_text(fb_addr, width, 40, cursor_y, "Thanks Chips & LMArena", white, scale); cursor_y += f_h;
+                                  },
                                   "" => {},
-                                  _ => { draw_text(fb_addr, width, 40, cursor_y, "Unknown Command", red, scale); cursor_y += f_h; }
+                                  _ => { draw_text(fb_addr, width, 40, cursor_y, "Error: Cmd not found", red, scale); cursor_y += f_h; }
                               }
                           }
                           input_len = 0;
-                          if cursor_y > height - 100 { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 40; }
+                          if cursor_y > height - 150 { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 40; }
                           draw_text(fb_addr, width, 40, cursor_y, prompt, white, scale);
                       } else if key == 8 { // BACKSPACE
                           if input_len > 0 {
@@ -270,13 +273,13 @@ jobs:
                   }
                   let cur_x = 40 + (prompt.len() as u32 + input_len as u32) * (8 * scale);
                   let cur_c = if (tick / 2000) % 2 == 0 { white } else { bg };
-                  draw_rect(fb_addr, width, cur_x, cursor_y + 16*scale - 4, 8*scale, 4, cur_c);
+                  draw_rect(fb_addr, width, cur_x, cursor_y + 16*scale - 6, 8*scale, 6, cur_c);
                   tick = tick.wrapping_add(1);
               }
           }
           EOF
 
-          # 3. BUILD
+          # 3. LINKER & CARGO
           cat > aetheria_kernel/linker.ld << 'EOF'
           ENTRY(aetheria_main);
           SECTIONS {
@@ -312,7 +315,7 @@ jobs:
           mkdir -p app/src/main/{java/com/aetheria/loader,cpp,res/values,res/raw}
           cp aetheria_kernel/kernel.bin app/src/main/res/raw/kernel_bin
           
-          # MainActivity.java (ФИКС КЛАВИАТУРЫ)
+          # MainActivity.java
           cat > app/src/main/java/com/aetheria/loader/MainActivity.java << 'EOF'
           package com.aetheria.loader;
           import android.app.Activity;
@@ -333,11 +336,11 @@ jobs:
                   bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
                   sv.setFocusable(true); sv.setFocusableInTouchMode(true); sv.requestFocus();
                   
-                  // НАДЕЖНЫЙ ВЫЗОВ КЛАВИАТУРЫ
+                  // ВЫЗОВ КЛАВИАТУРЫ
                   sv.setOnTouchListener((v, e) -> {
                       if(e.getAction() == MotionEvent.ACTION_DOWN) {
                           sv.requestFocus();
-                          InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                          InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                           imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0);
                       }
                       return true;
@@ -416,5 +419,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AetheriaOS-HighRes
+          name: AetheriaOS-FixedFont
           path: app/build/outputs/apk/debug/app-debug.apk
