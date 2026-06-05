@@ -1,4 +1,4 @@
-name: AetheriaOS - Pro Build
+name: AetheriaOS - HighRes Build
 on:
   push:
     branches: [ main ]
@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-aetheria-os:
-    name: Build AetheriaOS (Apps & Games)
+    name: Build AetheriaOS (8x16 Font + Keyboard Fix)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -32,65 +32,114 @@ jobs:
         run: |
           mkdir -p aetheria_kernel/src
           
-          # 1. ШРИФТ (УЛУЧШЕННЫЙ)
+          # 1. ВЫСОКОЕ РАЗРЕШЕНИЕ ШРИФТА (8x16 ПИКСЕЛЕЙ)
           cat > aetheria_kernel/src/font.rs << 'EOF'
-          pub fn get_char_bitmap(c: char) -> [u8; 8] {
+          pub fn get_char_bitmap(c: char) -> [u8; 16] {
               let idx = c as usize;
-              if idx >= 32 && idx <= 126 { FONT_DATA[idx - 32] } else { [0x00; 8] }
+              if idx >= 32 && idx <= 126 { FONT_DATA[idx - 32] } else { [0; 16] }
           }
-          const FONT_DATA: [[u8; 8]; 95] = [
-              [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], [0x18,0x3C,0x3C,0x18,0x18,0x00,0x18,0x00],
-              [0x66,0x66,0x24,0x00,0x00,0x00,0x00,0x00], [0x6C,0x6C,0xFE,0x6C,0xFE,0x6C,0x6C,0x00],
-              [0x18,0x3E,0x60,0x3C,0x06,0x7C,0x18,0x00], [0x00,0xC6,0xCC,0x18,0x30,0x66,0xC6,0x00],
-              [0x38,0x6C,0x38,0x76,0xDC,0xCC,0x76,0x00], [0x18,0x18,0x30,0x00,0x00,0x00,0x00,0x00],
-              [0x0C,0x18,0x30,0x30,0x30,0x18,0x0C,0x00], [0x30,0x18,0x0C,0x0C,0x0C,0x18,0x30,0x00],
-              [0x00,0x66,0x3C,0xFF,0x3C,0x66,0x00,0x00], [0x00,0x18,0x18,0x7E,0x18,0x18,0x00,0x00],
-              [0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x30], [0x00,0x00,0x00,0x7E,0x00,0x00,0x00,0x00],
-              [0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x00], [0x00,0x06,0x0C,0x18,0x30,0x60,0x00,0x00],
-              [0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00], [0x18,0x38,0x18,0x18,0x18,0x18,0x7E,0x00],
-              [0x3C,0x66,0x06,0x0C,0x30,0x60,0xFF,0x00], [0x3C,0x66,0x06,0x1C,0x06,0x66,0x3C,0x00],
-              [0x0C,0x1C,0x3C,0x6C,0xFF,0x0C,0x0C,0x00], [0xFF,0x60,0x7C,0x06,0x06,0x66,0x3C,0x00],
-              [0x3C,0x66,0x60,0x7C,0x66,0x66,0x3C,0x00], [0xFF,0x06,0x0C,0x18,0x30,0x30,0x30,0x00],
-              [0x3C,0x66,0x66,0x3C,0x66,0x66,0x3C,0x00], [0x3C,0x66,0x66,0x3E,0x06,0x66,0x3C,0x00],
-              [0x00,0x18,0x18,0x00,0x18,0x18,0x00,0x00], [0x00,0x18,0x18,0x00,0x18,0x18,0x30,0x00],
-              [0x00,0x0C,0x18,0x30,0x18,0x0C,0x00,0x00], [0x00,0x00,0x7E,0x00,0x7E,0x00,0x00,0x00],
-              [0x00,0x30,0x18,0x0C,0x18,0x30,0x00,0x00], [0x3C,0x66,0x06,0x0C,0x18,0x00,0x18,0x00],
-              [0x3C,0x66,0x6E,0x6E,0x60,0x66,0x3C,0x00], [0x3C,0x66,0x66,0x7E,0x66,0x66,0x66,0x00],
-              [0x7C,0x66,0x66,0x7C,0x66,0x66,0x7C,0x00], [0x3C,0x66,0x60,0x60,0x60,0x66,0x3C,0x00],
-              [0x78,0x6C,0x66,0x66,0x66,0x6C,0x78,0x00], [0x7E,0x60,0x60,0x78,0x60,0x60,0x7E,0x00],
-              [0x7E,0x60,0x60,0x78,0x60,0x60,0x60,0x00], [0x3C,0x66,0x60,0x6E,0x66,0x66,0x3E,0x00],
-              [0x66,0x66,0x66,0x7E,0x66,0x66,0x66,0x00], [0x3E,0x18,0x18,0x18,0x18,0x18,0x3E,0x00],
-              [0x0F,0x06,0x06,0x06,0x66,0x66,0x3C,0x00], [0x66,0x6C,0x78,0x70,0x78,0x6C,0x66,0x00],
-              [0x60,0x60,0x60,0x60,0x60,0x60,0x7E,0x00], [0x63,0x77,0x7F,0x6B,0x63,0x63,0x63,0x00],
-              [0x66,0x76,0x7E,0x7E,0x6E,0x66,0x66,0x00], [0x3C,0x66,0x66,0x66,0x66,0x66,0x3C,0x00],
-              [0x7C,0x66,0x66,0x7C,0x60,0x60,0x60,0x00], [0x3C,0x66,0x66,0x66,0x66,0x3C,0x0E,0x00],
-              [0x7C,0x66,0x66,0x7C,0x78,0x6C,0x66,0x00], [0x3C,0x66,0x60,0x3C,0x06,0x66,0x3C,0x00],
-              [0x7E,0x18,0x18,0x18,0x18,0x18,0x18,0x00], [0x66,0x66,0x66,0x66,0x66,0x66,0x3C,0x00],
-              [0x66,0x66,0x66,0x66,0x66,0x3C,0x18,0x00], [0x63,0x63,0x6B,0x7F,0x77,0x63,0x63,0x00],
-              [0x66,0x66,0x3C,0x18,0x3C,0x66,0x66,0x00], [0x66,0x66,0x66,0x3C,0x18,0x18,0x18,0x00],
-              [0x7E,0x06,0x0C,0x18,0x30,0x60,0x7E,0x00], [0x3C,0x30,0x30,0x30,0x30,0x30,0x3C,0x00],
-              [0x00,0x60,0x30,0x18,0x0C,0x06,0x00,0x00], [0x3C,0x0C,0x0C,0x0C,0x0C,0x0C,0x3C,0x00],
-              [0x18,0x3C,0x66,0x00,0x00,0x00,0x00,0x00], [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF],
-              [0x30,0x18,0x0C,0x00,0x00,0x00,0x00,0x00], [0x00,0x00,0x3C,0x06,0x3E,0x66,0x3E,0x00],
-              [0x60,0x60,0x7C,0x66,0x66,0x66,0x7C,0x00], [0x00,0x00,0x3C,0x60,0x60,0x60,0x3C,0x00],
-              [0x06,0x06,0x3E,0x66,0x66,0x66,0x3E,0x00], [0x00,0x00,0x3C,0x66,0x7E,0x60,0x3C,0x00],
-              [0x1C,0x30,0x7C,0x30,0x30,0x30,0x30,0x00], [0x00,0x00,0x3E,0x66,0x66,0x3E,0x06,0x3C],
-              [0x60,0x60,0x7C,0x66,0x66,0x66,0x66,0x00], [0x18,0x00,0x38,0x18,0x18,0x18,0x3C,0x00],
-              [0x0C,0x00,0x1C,0x0C,0x0C,0x0C,0x0C,0x38], [0x60,0x60,0x66,0x6C,0x78,0x6C,0x66,0x00],
-              [0x38,0x18,0x18,0x18,0x18,0x18,0x3C,0x00], [0x00,0x00,0x6C,0xFE,0xD6,0xD6,0xC6,0x00],
-              [0x00,0x00,0x7C,0x66,0x66,0x66,0x66,0x00], [0x00,0x00,0x3C,0x66,0x66,0x66,0x3C,0x00],
-              [0x00,0x00,0x7C,0x66,0x66,0x7C,0x60,0x60], [0x00,0x00,0x3E,0x66,0x66,0x3E,0x06,0x06],
-              [0x00,0x00,0x7C,0x66,0x60,0x60,0x60,0x00], [0x00,0x00,0x3C,0x60,0x3C,0x06,0x3C,0x00],
-              [0x30,0x30,0x7C,0x30,0x30,0x30,0x1C,0x00], [0x00,0x00,0x66,0x66,0x66,0x66,0x3E,0x00],
-              [0x00,0x00,0x66,0x3C,0x18,0x3C,0x66,0x00], [0x00,0x00,0xC6,0xD6,0xD6,0xFE,0x6C,0x00],
-              [0x00,0x00,0x66,0x3C,0x18,0x3C,0x66,0x00], [0x00,0x00,0x66,0x66,0x66,0x3E,0x06,0x3C],
-              [0x00,0x00,0x7E,0x0C,0x18,0x30,0x7E,0x00], [0x0E,0x18,0x18,0x70,0x18,0x18,0x0E,0x00],
-              [0x18,0x18,0x18,0x00,0x18,0x18,0x18,0x00], [0x70,0x18,0x18,0x0E,0x18,0x18,0x70,0x00],
-              [0x3A,0x6E,0x00,0x00,0x00,0x00,0x00,0x00]
+          // Классический шрифт 8x16
+          const FONT_DATA: [[u8; 16]; 95] = [
+              [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // space
+              [0,0,16,16,16,16,16,16,0,0,16,0,0,0,0,0], // !
+              [0,36,36,36,0,0,0,0,0,0,0,0,0,0,0,0], // "
+              [0,0,36,36,126,36,36,126,36,36,0,0,0,0,0,0], // #
+              [0,16,62,80,62,20,62,16,0,0,0,0,0,0,0,0], // $
+              [0,0,98,102,12,24,48,102,70,0,0,0,0,0,0,0], // %
+              [0,0,28,50,50,28,74,70,62,0,0,0,0,0,0,0], // &
+              [0,24,24,48,0,0,0,0,0,0,0,0,0,0,0,0], // '
+              [0,0,12,24,48,48,48,48,24,12,0,0,0,0,0,0], // (
+              [0,0,48,24,12,12,12,12,24,48,0,0,0,0,0,0], // )
+              [0,0,0,102,60,255,60,102,0,0,0,0,0,0,0,0], // *
+              [0,0,0,16,16,124,16,16,0,0,0,0,0,0,0,0], // +
+              [0,0,0,0,0,0,0,0,0,24,24,48,0,0,0,0], // ,
+              [0,0,0,0,0,124,0,0,0,0,0,0,0,0,0,0], // -
+              [0,0,0,0,0,0,0,0,0,24,24,0,0,0,0,0], // .
+              [0,0,2,6,12,24,48,96,64,0,0,0,0,0,0,0], // /
+              [0,0,60,102,110,118,102,102,60,0,0,0,0,0,0,0], // 0
+              [0,0,24,56,24,24,24,24,126,0,0,0,0,0,0,0], // 1
+              [0,0,60,102,6,12,24,48,126,0,0,0,0,0,0,0], // 2
+              [0,0,60,102,6,28,6,102,60,0,0,0,0,0,0,0], // 3
+              [0,0,12,28,60,108,255,12,12,0,0,0,0,0,0,0], // 4
+              [0,0,126,96,124,6,6,102,60,0,0,0,0,0,0,0], // 5
+              [0,0,60,102,96,124,102,102,60,0,0,0,0,0,0,0], // 6
+              [0,0,126,6,12,24,48,48,48,0,0,0,0,0,0,0], // 7
+              [0,0,60,102,102,60,102,102,60,0,0,0,0,0,0,0], // 8
+              [0,0,60,102,102,62,6,102,60,0,0,0,0,0,0,0], // 9
+              [0,0,0,24,24,0,24,24,0,0,0,0,0,0,0,0], // :
+              [0,0,0,24,24,0,24,24,48,0,0,0,0,0,0,0], // ;
+              [0,0,6,12,24,48,24,12,6,0,0,0,0,0,0,0], // <
+              [0,0,0,126,0,126,0,0,0,0,0,0,0,0,0,0], // =
+              [0,0,96,48,24,12,24,48,96,0,0,0,0,0,0,0], // >
+              [0,0,60,102,6,12,24,0,24,0,0,0,0,0,0,0], // ?
+              [0,0,60,102,110,110,96,62,0,0,0,0,0,0,0,0], // @
+              [0,0,24,60,102,102,126,102,102,0,0,0,0,0,0,0], // A
+              [0,0,124,102,102,124,102,102,124,0,0,0,0,0,0,0], // B
+              [0,0,60,102,96,96,96,102,60,0,0,0,0,0,0,0], // C
+              [0,0,120,108,102,102,102,108,120,0,0,0,0,0,0,0], // D
+              [0,0,126,96,96,120,96,96,126,0,0,0,0,0,0,0], // E
+              [0,0,126,96,96,120,96,96,96,0,0,0,0,0,0,0], // F
+              [0,0,60,102,96,110,102,102,62,0,0,0,0,0,0,0], // G
+              [0,0,102,102,102,126,102,102,102,0,0,0,0,0,0,0], // H
+              [0,0,60,24,24,24,24,24,60,0,0,0,0,0,0,0], // I
+              [0,0,30,12,12,12,12,108,56,0,0,0,0,0,0,0], // J
+              [0,0,102,108,120,112,120,108,102,0,0,0,0,0,0,0], // K
+              [0,0,96,96,96,96,96,96,126,0,0,0,0,0,0,0], // L
+              [0,0,102,231,255,219,102,102,102,0,0,0,0,0,0,0], // M
+              [0,0,102,118,126,126,110,102,102,0,0,0,0,0,0,0], // N
+              [0,0,60,102,102,102,102,102,60,0,0,0,0,0,0,0], // O
+              [0,0,124,102,102,124,96,96,96,0,0,0,0,0,0,0], // P
+              [0,0,60,102,102,102,102,108,60,12,0,0,0,0,0,0], // Q
+              [0,0,124,102,102,124,120,108,102,0,0,0,0,0,0,0], // R
+              [0,0,60,102,96,60,6,102,60,0,0,0,0,0,0,0], // S
+              [0,0,126,24,24,24,24,24,24,0,0,0,0,0,0,0], // T
+              [0,0,102,102,102,102,102,102,60,0,0,0,0,0,0,0], // U
+              [0,0,102,102,102,102,102,60,24,0,0,0,0,0,0,0], // V
+              [0,0,102,102,102,219,255,231,102,0,0,0,0,0,0,0], // W
+              [0,0,102,102,60,24,60,102,102,0,0,0,0,0,0,0], // X
+              [0,0,102,102,102,60,24,24,24,0,0,0,0,0,0,0], // Y
+              [0,0,126,6,12,24,48,96,126,0,0,0,0,0,0,0], // Z
+              [0,0,60,48,48,48,48,48,60,0,0,0,0,0,0,0], // [ (as box)
+              [0,64,32,16,8,4,2,0,0,0,0,0,0,0,0,0], // \
+              [0,0,60,12,12,12,12,12,60,0,0,0,0,0,0,0], // ]
+              [0,16,40,68,0,0,0,0,0,0,0,0,0,0,0,0], // ^
+              [0,0,0,0,0,0,0,0,0,0,0,0,255,0,0,0], // _
+              [24,24,12,0,0,0,0,0,0,0,0,0,0,0,0,0], // `
+              [0,0,0,0,60,6,62,102,62,0,0,0,0,0,0,0], // a
+              [0,96,96,96,124,102,102,102,124,0,0,0,0,0,0,0], // b
+              [0,0,0,0,60,96,96,102,60,0,0,0,0,0,0,0], // c
+              [0,6,6,6,62,102,102,102,62,0,0,0,0,0,0,0], // d
+              [0,0,0,0,60,102,126,96,60,0,0,0,0,0,0,0], // e
+              [0,28,48,48,124,48,48,48,48,0,0,0,0,0,0,0], // f
+              [0,0,0,0,62,102,102,62,6,102,60,0,0,0,0,0], // g
+              [0,96,96,96,124,102,102,102,102,0,0,0,0,0,0,0], // h
+              [0,24,0,24,24,24,24,24,60,0,0,0,0,0,0,0], // i
+              [0,12,0,12,12,12,12,12,108,56,0,0,0,0,0,0], // j
+              [0,96,96,108,120,112,120,108,102,0,0,0,0,0,0,0], // k
+              [0,48,48,48,48,48,48,48,60,0,0,0,0,0,0,0], // l
+              [0,0,0,0,108,219,219,219,219,0,0,0,0,0,0,0], // m
+              [0,0,0,0,124,102,102,102,102,0,0,0,0,0,0,0], // n
+              [0,0,0,0,60,102,102,102,60,0,0,0,0,0,0,0], // o
+              [0,0,0,0,124,102,102,124,96,96,96,0,0,0,0,0], // p
+              [0,0,0,0,62,102,102,62,6,6,6,0,0,0,0,0], // q
+              [0,0,0,0,110,120,96,96,96,0,0,0,0,0,0,0], // r
+              [0,0,0,0,62,96,60,6,124,0,0,0,0,0,0,0], // s
+              [0,48,48,124,48,48,48,48,30,0,0,0,0,0,0,0], // t
+              [0,0,0,0,102,102,102,102,62,0,0,0,0,0,0,0], // u
+              [0,0,0,0,102,102,102,60,24,0,0,0,0,0,0,0], // v
+              [0,0,0,0,102,102,219,255,102,0,0,0,0,0,0,0], // w
+              [0,0,0,0,102,60,24,60,102,0,0,0,0,0,0,0], // x
+              [0,0,0,0,102,102,102,62,6,102,60,0,0,0,0,0], // y
+              [0,0,0,0,126,12,24,48,126,0,0,0,0,0,0,0], // z
+              [0,12,24,24,48,24,24,12,0,0,0,0,0,0,0,0], // {
+              [24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24], // |
+              [0,48,24,24,12,24,24,48,0,0,0,0,0,0,0,0], // }
+              [0,0,0,0,118,173,0,0,0,0,0,0,0,0,0,0], // ~
+              [255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255]
           ];
           EOF
           
-          # 2. ЯДРО (lib.rs)
+          # 2. ЯДРО (ОТРИСОВКА 8x16)
           cat > aetheria_kernel/src/lib.rs << 'EOF'
           #![no_std]
           mod font;
@@ -108,9 +157,8 @@ jobs:
           
           fn draw_char(fb: *mut u32, fb_w: u32, x: u32, y: u32, c: char, color: u32, scale: u32) {
               let bitmap = font::get_char_bitmap(c);
-              for row in 0..8 {
+              for row in 0..16 { // Цикл теперь по 16 строкам
                   for col in 0..8 {
-                      // Исправлена зеркальность битов
                       if (bitmap[row] & (1 << (7 - col))) != 0 {
                           draw_rect(fb, fb_w, x + col * scale, y + (row as u32) * scale, scale, scale, color);
                       }
@@ -126,14 +174,11 @@ jobs:
           // === ИГРА: SNAKE ===
           fn run_snake(fb: *mut u32, kb: *mut u8, w: u32, h: u32) {
               draw_rect(fb, w, 0, 0, w, h, 0xFF0D0D14);
-              draw_text(fb, w, 20, 10, "AETHERIA SNAKE - W/A/S/D to move, Q to quit", 0xFF89B4FA, 2);
-              
               let mut sx = [0i32; 256]; let mut sy = [0i32; 256];
               let mut len = 3;
               sx[0]=15; sy[0]=10; sx[1]=14; sy[1]=10; sx[2]=13; sy[2]=10;
-              
-              let mut dx = 1; let mut dy = 0;
-              let mut ax = 30; let mut ay = 15;
+              let (mut dx, mut dy) = (1, 0);
+              let (mut ax, mut ay) = (30, 15);
               let mut seed: u64 = 12345;
               let mut over = false;
               
@@ -142,49 +187,30 @@ jobs:
                   if key != 0 {
                       unsafe { write_volatile(kb, 0); }
                       let k = key as char;
-                      if (k == 'w' || k == 'W') && dy == 0 { dx=0; dy=-1; }
-                      if (k == 's' || k == 'S') && dy == 0 { dx=0; dy=1; }
-                      if (k == 'a' || k == 'A') && dx == 0 { dx=-1; dy=0; }
-                      if (k == 'd' || k == 'D') && dx == 0 { dx=1; dy=0; }
-                      if k == 'q' || k == 'Q' { break; }
+                      if (k=='w'||k=='W') && dy==0 { dx=0; dy=-1; }
+                      if (k=='s'||k=='S') && dy==0 { dx=0; dy=1; }
+                      if (k=='a'||k=='A') && dx==0 { dx=-1; dy=0; }
+                      if (k=='d'||k=='D') && dx==0 { dx=1; dy=0; }
+                      if k=='q'||k=='Q' { break; }
                   }
-                  
                   if !over {
                       for i in (1..len).rev() { sx[i]=sx[i-1]; sy[i]=sy[i-1]; }
-                      sx[0] += dx; sy[0] += dy;
-                      
-                      if sx[0] < 0 || sx[0] >= 64 || sy[0] < 2 || sy[0] >= 36 { over = true; }
-                      for i in 1..len { if sx[0]==sx[i] && sy[0]==sy[i] { over = true; } }
-                      
-                      if sx[0] == ax && sy[0] == ay {
-                          if len < 256 { len += 1; }
-                          seed = (seed.wrapping_mul(1103515245).wrapping_add(12345)) % 2147483648;
-                          ax = (seed % 60) as i32 + 2;
-                          seed = (seed.wrapping_mul(1103515245).wrapping_add(12345)) % 2147483648;
-                          ay = (seed % 30) as i32 + 3;
+                      sx[0]+=dx; sy[0]+=dy;
+                      if sx[0]<0 || sx[0]>=60 || sy[0]<2 || sy[0]>=34 { over=true; }
+                      if sx[0]==ax && sy[0]==ay {
+                          if len<256 { len+=1; }
+                          seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                          ax = ((seed / 65536) % 58) as i32 + 1;
+                          seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                          ay = ((seed / 65536) % 30) as i32 + 3;
                       }
-                      
                       draw_rect(fb, w, 0, 40, w, h-40, 0xFF0D0D14);
-                      draw_rect(fb, w, (ax as u32)*20, (ay as u32)*20, 20, 20, 0xFFF38BA8); // Apple
-                      for i in 0..len { draw_rect(fb, w, (sx[i] as u32)*20, (sy[i] as u32)*20, 20, 20, 0xFF4AF626); } // Snake
+                      draw_rect(fb, w, (ax as u32)*20, (ay as u32)*20, 20, 20, 0xFFF38BA8);
+                      for i in 0..len { draw_rect(fb, w, (sx[i] as u32)*20, (sy[i] as u32)*20, 20, 20, 0xFF4AF626); }
                   } else {
                       draw_text(fb, w, 400, 300, "GAME OVER! Press Q", 0xFFF38BA8, 4);
                   }
                   for _ in 0..8_000_000 { core::hint::spin_loop(); }
-              }
-          }
-          
-          // === ПРИЛОЖЕНИЕ: SYSINFO ===
-          fn run_sysinfo(fb: *mut u32, kb: *mut u8, w: u32, h: u32) {
-              draw_rect(fb, w, 0, 0, w, h, 0xFF0D0D14);
-              draw_text(fb, w, 20, 20, "AETHERIA SYSTEM MONITOR", 0xFF89B4FA, 3);
-              draw_text(fb, w, 20, 80, "Kernel : Rust Bare-Metal 0.5", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 110, "Arch   : aarch64", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 140, "Memory : Direct Framebuffer", 0xFFFFFFFF, 2);
-              draw_text(fb, w, 20, 200, "Press Q to exit", 0xFFF38BA8, 2);
-              loop {
-                  let key = unsafe { read_volatile(kb) };
-                  if key == b'q' || key == b'Q' { unsafe { write_volatile(kb, 0); } break; }
               }
           }
 
@@ -196,12 +222,12 @@ jobs:
               let green = 0xFF4AF626;
               let red = 0xFFF38BA8;
               
-              let mut cursor_y = 20;
-              let scale = 3; // УВЕЛИЧЕННЫЙ ШРИФТ
-              let f_h = 8 * scale + 10; // Шаг строки
+              let mut cursor_y = 40;
+              let scale = 2; // При масштабе 2 шрифт будет 16x32 пикселя - очень четко
+              let f_h = 16 * scale + 8; 
               
               draw_rect(fb_addr, width, 0, 0, width, height, bg);
-              draw_text(fb_addr, width, 20, cursor_y, "AetheriaOS v0.5 Pro Terminal", green, scale);
+              draw_text(fb_addr, width, 40, cursor_y, "AetheriaOS v0.6 [High-Res Mode]", green, scale);
               cursor_y += f_h;
               
               let prompt = "root@aetheria:~# ";
@@ -209,7 +235,7 @@ jobs:
               let mut input_len = 0;
               let mut tick = 0u64;
 
-              draw_text(fb_addr, width, 20, cursor_y, prompt, white, scale);
+              draw_text(fb_addr, width, 40, cursor_y, prompt, white, scale);
               
               loop {
                   let key = unsafe { read_volatile(kb_addr) };
@@ -219,48 +245,38 @@ jobs:
                           cursor_y += f_h;
                           if let Ok(cmd) = str::from_utf8(&input_buf[..input_len]) {
                               match cmd.trim() {
-                                  "help" => {
-                                      draw_text(fb_addr, width, 20, cursor_y, "Apps: snake, sysinfo, info, clear", white, scale);
-                                      cursor_y += f_h;
-                                  },
-                                  "snake" => { run_snake(fb_addr, kb_addr, width, height); draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; },
-                                  "sysinfo" => { run_sysinfo(fb_addr, kb_addr, width, height); draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; },
-                                  "info" => {
-                                      draw_text(fb_addr, width, 20, cursor_y, "Creators: Dmitry Gustenev & AI", green, scale); cursor_y += f_h;
-                                      draw_text(fb_addr, width, 20, cursor_y, "Made with love!", red, scale); cursor_y += f_h;
-                                      draw_text(fb_addr, width, 20, cursor_y, "Thanks: LMArena, Chips", white, scale); cursor_y += f_h;
-                                  },
-                                  "clear" => { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; },
-                                  _ => { if input_len > 0 { draw_text(fb_addr, width, 20, cursor_y, "Unknown command", red, scale); cursor_y += f_h; } }
+                                  "help" => { draw_text(fb_addr, width, 40, cursor_y, "snake, sysinfo, info, clear", white, scale); cursor_y += f_h; },
+                                  "snake" => { run_snake(fb_addr, kb_addr, width, height); draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 40; },
+                                  "clear" => { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 40; },
+                                  "" => {},
+                                  _ => { draw_text(fb_addr, width, 40, cursor_y, "Unknown Command", red, scale); cursor_y += f_h; }
                               }
                           }
                           input_len = 0;
-                          if cursor_y > height - 100 { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 20; }
-                          draw_text(fb_addr, width, 20, cursor_y, prompt, white, scale);
+                          if cursor_y > height - 100 { draw_rect(fb_addr, width, 0, 0, width, height, bg); cursor_y = 40; }
+                          draw_text(fb_addr, width, 40, cursor_y, prompt, white, scale);
                       } else if key == 8 { // BACKSPACE
                           if input_len > 0 {
                               input_len -= 1;
-                              let cx = 20 + (prompt.len() as u32 + input_len as u32) * (8 * scale);
-                              draw_rect(fb_addr, width, cx, cursor_y, 8 * scale, 8 * scale, bg);
+                              let cx = 40 + (prompt.len() as u32 + input_len as u32) * (8 * scale);
+                              draw_rect(fb_addr, width, cx, cursor_y, 8 * scale, 16 * scale, bg);
                           }
                       } else if input_len < 64 && key >= 32 && key <= 126 {
                           input_buf[input_len] = key;
-                          let cx = 20 + (prompt.len() as u32 + input_len as u32) * (8 * scale);
+                          let cx = 40 + (prompt.len() as u32 + input_len as u32) * (8 * scale);
                           draw_char(fb_addr, width, cx, cursor_y, key as char, white, scale);
                           input_len += 1;
                       }
                   }
-                  
-                  // Спокойный курсор
-                  let cur_x = 20 + (prompt.len() as u32 + input_len as u32) * (8 * scale);
-                  let cur_c = if (tick / 1000) % 2 == 0 { white } else { bg };
-                  draw_rect(fb_addr, width, cur_x, cursor_y + 8*scale - 4, 8*scale, 4, cur_c);
+                  let cur_x = 40 + (prompt.len() as u32 + input_len as u32) * (8 * scale);
+                  let cur_c = if (tick / 2000) % 2 == 0 { white } else { bg };
+                  draw_rect(fb_addr, width, cur_x, cursor_y + 16*scale - 4, 8*scale, 4, cur_c);
                   tick = tick.wrapping_add(1);
               }
           }
           EOF
 
-          # 3. LINKER & CARGO
+          # 3. BUILD
           cat > aetheria_kernel/linker.ld << 'EOF'
           ENTRY(aetheria_main);
           SECTIONS {
@@ -291,15 +307,16 @@ jobs:
           $OBJCOPY -O binary kernel.elf kernel.bin
           cd ..
 
-      - name: Create Android Project
+      - name: Create Android Wrapper
         run: |
           mkdir -p app/src/main/{java/com/aetheria/loader,cpp,res/values,res/raw}
           cp aetheria_kernel/kernel.bin app/src/main/res/raw/kernel_bin
           
-          # MainActivity.java
+          # MainActivity.java (ФИКС КЛАВИАТУРЫ)
           cat > app/src/main/java/com/aetheria/loader/MainActivity.java << 'EOF'
           package com.aetheria.loader;
           import android.app.Activity;
+          import android.content.Context;
           import android.os.Bundle;
           import android.graphics.*;
           import android.view.*;
@@ -314,10 +331,15 @@ jobs:
                   SurfaceView sv = new SurfaceView(this); setContentView(sv);
                   fb = ByteBuffer.allocateDirect(1280*720*4); kb = ByteBuffer.allocateDirect(1);
                   bmp = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888);
-                  sv.setFocusable(true); sv.requestFocus();
+                  sv.setFocusable(true); sv.setFocusableInTouchMode(true); sv.requestFocus();
+                  
+                  // НАДЕЖНЫЙ ВЫЗОВ КЛАВИАТУРЫ
                   sv.setOnTouchListener((v, e) -> {
-                      InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-                      imm.showSoftInput(sv, InputMethodManager.SHOW_FORCED);
+                      if(e.getAction() == MotionEvent.ACTION_DOWN) {
+                          sv.requestFocus();
+                          InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                          imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0);
+                      }
                       return true;
                   });
                   sv.setOnKeyListener((v, kc, e) -> {
@@ -348,7 +370,6 @@ jobs:
           }
           EOF
 
-          # loader.cpp
           cat > app/src/main/cpp/loader.cpp << 'EOF'
           #include <jni.h>
           #include <sys/mman.h>
@@ -361,7 +382,6 @@ jobs:
           }
           EOF
 
-          # Build Configs
           echo 'cmake_minimum_required(VERSION 3.22)' > app/src/main/cpp/CMakeLists.txt
           echo 'project(aetheria_loader)' >> app/src/main/cpp/CMakeLists.txt
           echo 'add_library(aetheria_loader SHARED loader.cpp)' >> app/src/main/cpp/CMakeLists.txt
@@ -396,5 +416,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AetheriaOS-Pro-Build
+          name: AetheriaOS-HighRes
           path: app/build/outputs/apk/debug/app-debug.apk
