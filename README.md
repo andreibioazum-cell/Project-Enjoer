@@ -1,2 +1,2 @@
-# Project-Enjoer
-The platform is essentially like Roblox.
+# QWERTYLink
+It's a messenger, essentially like a telegram.
