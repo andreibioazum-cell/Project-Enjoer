@@ -16,7 +16,7 @@ jobs:
       with:
         ndk-version: r25c
 
-    # 2. Установка компилятора Odin (ИСПРАВЛЕНО: master вместо dev)
+    # 2. Установка компилятора Odin (ветка master - основная)
     - uses: LayTan/setup-odin@v1
       with:
         odin-version: master 
@@ -26,18 +26,19 @@ jobs:
       run: |
         TC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin
         GLUE=$ANDROID_NDK_ROOT/sources/android/native_app_glue
+        
+        # Системные библиотеки Android
         LDFLAGS="-landroid -llog -lGLESv2 -lEGL -lm -lc"
         
         mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a staging/assets
 
-        # Сборка для ARM64 (v8a)
-        # Odin -> .o -> Clang -> .so
-        odin build src -target:android_arm64 -build-mode:object -out:odin_arm64.o
+        # Сборка для ARM64 (ИСПРАВЛЕНО: target linux_arm64)
+        odin build src -target:linux_arm64 -build-mode:object -out:odin_arm64.o
         $TC/aarch64-linux-android21-clang odin_arm64.o $GLUE/android_native_app_glue.c \
           -I$GLUE -shared -fPIC -o staging/lib/arm64-v8a/libmain.so $LDFLAGS
 
-        # Сборка для ARM32 (v7a)
-        odin build src -target:android_arm32 -build-mode:object -out:odin_arm32.o
+        # Сборка для ARM32 (ИСПРАВЛЕНО: target linux_arm32)
+        odin build src -target:linux_arm32 -build-mode:object -out:odin_arm32.o
         $TC/armv7a-linux-androideabi21-clang odin_arm32.o $GLUE/android_native_app_glue.c \
           -I$GLUE -shared -fPIC -o staging/lib/armeabi-v7a/libmain.so $LDFLAGS
 
