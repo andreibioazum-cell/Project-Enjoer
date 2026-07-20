@@ -19,7 +19,7 @@ jobs:
     # 2. Установка компилятора Odin
     - uses: LayTan/setup-odin@v1
       with:
-        odin-version: dev # Рекомендуется dev-ветка для лучшей поддержки Android
+        odin-version: dev 
 
     # 3. Сборка (Odin компилирует пакет, Clang из NDK линкует всё в .so)
     - name: Build Odin Shared Libraries
@@ -34,7 +34,7 @@ jobs:
         mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a staging/assets
 
         # Сборка для ARM64 (v8a)
-        # Мы компилируем Odin в объектный файл, затем линкуем через Clang вместе с Glue
+        # Компилируем Odin в объектный файл (.o), затем линкуем через Clang с Glue
         odin build src -target:android_arm64 -build-mode:object -out:odin_arm64.o
         $TC/aarch64-linux-android21-clang odin_arm64.o $GLUE/android_native_app_glue.c \
           -I$GLUE -shared -fPIC -o staging/lib/arm64-v8a/libmain.so $LDFLAGS
@@ -62,8 +62,8 @@ jobs:
         keytool -genkey -v -keystore d.ks -storepass android -alias a -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=X"
         $BT/apksigner sign --ks d.ks --ks-pass pass:android --out CubicBattleX_Odin.apk aligned.apk
 
-    # 5. Выгрузка готового файла
-    - uses: upload-artifact@v4
+    # 5. Выгрузка готового файла (ИСПРАВЛЕНО: добавлен actions/)
+    - uses: actions/upload-artifact@v4
       with:
         name: CubicBattleX-Odin
         path: CubicBattleX_Odin.apk
