@@ -1,61 +1,57 @@
-name: Build Cubic Battle X (Odin Edition)
+name: Build Enjoer Messenger APK
 
 on: [push, workflow_dispatch]
 
 jobs:
-  build:
+  build-android:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
 
-    # 1. Установка Android SDK и NDK
+    # 1. Android SDK и NDK
     - uses: android-actions/setup-android@v3
-    - run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      with:
+        packages: "platforms;android-34 build-tools;34.0.0"
     - uses: nttld/setup-ndk@v1
       with:
         ndk-version: r25c
 
-    # 2. Установка компилятора Odin (ветка master - основная)
-    - uses: LayTan/setup-odin@v1
-      with:
-        odin-version: master 
-
-    # 3. Сборка библиотек
-    - name: Build Odin Shared Libraries
+    # 2. Нативные библиотеки (чистый C, без DimScript-генерации)
+    - name: Build native libraries
       run: |
+        set -e
         TC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin
-        GLUE=$ANDROID_NDK_ROOT/sources/android/native_app_glue
-        
-        # Системные библиотеки Android
-        LDFLAGS="-landroid -llog -lGLESv2 -lEGL -lm -lc"
-        
-        mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a staging/assets
+        for ABI in arm64-v8a armeabi-v7a; do
+          cmake -B build-$ABI \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=$ABI -DANDROID_PLATFORM=android-29 \
+            -DANDROID_NDK=$ANDROID_NDK_ROOT \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-$ABI -j
+          mkdir -p staging/lib/$ABI
+          cp build-$ABI/libds_game.so staging/lib/$ABI/
+        done
 
-        # Сборка для ARM64 (ИСПРАВЛЕНО: target linux_arm64)
-        odin build src -target:linux_arm64 -build-mode:object -out:odin_arm64.o
-        $TC/aarch64-linux-android21-clang odin_arm64.o $GLUE/android_native_app_glue.c \
-          -I$GLUE -shared -fPIC -o staging/lib/arm64-v8a/libmain.so $LDFLAGS
+    # 3. Ассеты (шрифт, звуки) + Java-активность в classes.dex
+    - name: Stage assets and activity
+      run: python3 stage_assets.py game/assets staging/assets
 
-        # Сборка для ARM32 (ИСПРАВЛЕНО: target linux_arm32)
-        odin build src -target:linux_arm32 -build-mode:object -out:odin_arm32.o
-        $TC/armv7a-linux-androideabi21-clang odin_arm32.o $GLUE/android_native_app_glue.c \
-          -I$GLUE -shared -fPIC -o staging/lib/armeabi-v7a/libmain.so $LDFLAGS
-
-    # 4. Упаковка APK
+    # 4. Упаковка и подпись APK
     - name: Package APK
       run: |
-        cp -r assets/* staging/assets/ 2>/dev/null || true
+        set -e
         BT=$ANDROID_HOME/build-tools/34.0.0
-        
-        $BT/aapt package -f -M AndroidManifest.xml -I $ANDROID_HOME/platforms/android-34/android.jar -F unsigned.apk staging/
+        $BT/aapt package -f -M game/AndroidManifest.xml \
+          -I $ANDROID_HOME/platforms/android-34/android.jar \
+          -F unsigned.apk staging/
         $BT/zipalign -v 4 unsigned.apk aligned.apk
-        
-        keytool -genkey -v -keystore d.ks -storepass android -alias a -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=X"
-        $BT/apksigner sign --ks d.ks --ks-pass pass:android --out CubicBattleX_Odin.apk aligned.apk
+        keytool -genkey -v -keystore d.ks -storepass android -alias a \
+          -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Enjoer"
+        $BT/apksigner sign --ks d.ks --storepass android --keypass android \
+          --out EnjoerMessenger.apk aligned.apk
 
-    # 5. Выгрузка
     - uses: actions/upload-artifact@v4
       with:
-        name: CubicBattleX-Odin
-        path: CubicBattleX_Odin.apk
+        name: Enjoer-Messenger-APK-Android10-14-arm64-arm32
+        path: EnjoerMessenger.apk
