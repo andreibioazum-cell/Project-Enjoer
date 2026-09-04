@@ -48,7 +48,7 @@ jobs:
         $BT/zipalign -v 4 unsigned.apk aligned.apk
         keytool -genkey -v -keystore d.ks -storepass android -alias a \
           -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Enjoer"
-        $BT/apksigner sign --ks d.ks --storepass android --keypass android \
+        $BT/apksigner sign --ks d.ks --ks-pass pass:android --key-pass pass:android \   ← ПРАВКА
           --out EnjoerMessenger.apk aligned.apk
 
     - uses: actions/upload-artifact@v4
