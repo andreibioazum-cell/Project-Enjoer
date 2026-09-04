@@ -1,0 +1,8 @@
+{
+  "name": "dimscript-language",
+  "version": "1.0.0",
+  "description": "DimScript language for Gig1.0",
+  "language": "DimScript",
+  "extensions": [".ds"],
+  "aliases": ["dimscript", "ds"]
+}
