@@ -1,13 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
-project(EnjoerMessenger C)
+project(Enjoer C)
 set(CMAKE_C_STANDARD 99)
 
 # Единственная целевая платформа — Android: библиотека libds_game.so, которую
-# забирает APK из game/AndroidManifest.xml. Вся логика мессенджера — чистый C
-# (messenger/*), без DimScript: генерация game/game.c больше не нужна.
+# забирает APK из game/AndroidManifest.xml. Игра — 3D-плейс на чистом C (rbx/*).
 if(NOT ANDROID)
     message(FATAL_ERROR
-        "Enjoer Messenger собирается только под Android. Запусти CMake через "
+        "Enjoer собирается только под Android. Запусти CMake через "
         "инструментальный файл NDK, например: cmake -B build "
         "-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake "
         "-DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29. "
@@ -20,6 +19,6 @@ add_library(ds_game SHARED
     ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
 target_include_directories(ds_game PRIVATE
     .
-    messenger
+    rbx
     ${ANDROID_NDK}/sources/android/native_app_glue)
 target_link_libraries(ds_game PRIVATE android log m)

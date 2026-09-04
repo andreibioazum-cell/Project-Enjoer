@@ -1,11 +1,10 @@
-/* Превью-сервер мессенджера для ПК: тот же самый C-код приложения и рендера,
- * но окно — браузер. Сервер отдаёт кадры (PNG) и принимает касания/клавиши.
- * Только для разработки; целевая сборка — Android (см. CMakeLists.txt). */
+/* Превью-сервер 3D-плейса для ПК: тот же C-код, окно — браузер.
+ * Кадры — сырой RGBA (быстрее PNG), касания и WASD приходят со страницы. */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 #include "runtime.h"
-#include "msg.h"
+#include "rbx/rbx.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -16,10 +15,6 @@
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#define STBI_WRITE_NO_STDIO
-#include "third_party/stb_image_write.h"
 
 void host_key_enter(void);
 
@@ -49,7 +44,6 @@ static void render_frame(void) {
     ds_graphics_end_frame();
 }
 
-/* ── маленький HTTP ────────────────────────────────────────────────────── */
 static int read_request(int fd, char *buf, int cap, int *body_off, int *body_len) {
     int total = 0;
     int header_end = -1;
@@ -142,8 +136,12 @@ static void handle_event(const char *body, int blen) {
         touch((float)atof(xs), (float)atof(ys), action, 0);
     } else if (strcmp(t, "key") == 0) {
         form_get(body, blen, "k", k, sizeof(k));
+        char ds[8];
+        form_get(body, blen, "d", ds, sizeof(ds));
+        int down = ds[0] ? atoi(ds) : 1;
         if (strcmp(k, "enter") == 0) host_key_enter();
         else if (strcmp(k, "backspace") == 0) keyboard_backspace();
+        else rbx_key(k, down);
     } else if (strcmp(t, "text") == 0) {
         form_get(body, blen, "s", s, sizeof(s));
         if (s[0]) keyboard_type(s);
@@ -153,35 +151,34 @@ static void handle_event(const char *body, int blen) {
 static const char *INDEX_HTML =
 "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">"
 "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-"<title>Enjoer Messenger — интерфейс на чистом C</title>"
+"<title>Enjoer — 3D плейс</title>"
 "<style>"
-"html,body{margin:0;height:100%;background:#0e1621;color:#dce3ea;"
+"html,body{margin:0;height:100%;background:#111216;color:#eceff1;"
 "font-family:system-ui,'Segoe UI',sans-serif;}"
 ".wrap{height:100%;display:flex;flex-direction:column;align-items:center;"
 "justify-content:center;gap:14px;padding:16px;box-sizing:border-box;}"
 "h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.3px;}"
-"h1 b{color:#2aabee;}"
+"h1 b{color:#e2231a;}"
 ".phone{border-radius:28px;overflow:hidden;box-shadow:0 24px 80px #0009,"
-"0 0 0 1px #ffffff14;height:min(92vh,936px);aspect-ratio:var(--ar);}"
-"canvas{width:100%;height:100%;display:block;touch-action:none;cursor:pointer;}"
-".hint{font-size:12px;color:#7d8b99;text-align:center;max-width:560px;line-height:1.5;}"
+"0 0 0 1px #ffffff14;height:min(92vh,900px);aspect-ratio:var(--ar);background:#000;}"
+"canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab;image-rendering:pixelated;}"
+".hint{font-size:12px;color:#90a4ae;text-align:center;max-width:560px;line-height:1.5;}"
 "kbd{background:#1c2733;border:1px solid #2c3947;border-radius:5px;padding:1px 6px;font-size:11px;}"
 "</style></head><body><div class=\"wrap\">"
-"<h1><b>Enjoer</b> Messenger — интерфейс мессенджера, целиком на C"
-" (рендер и шрифт из DimScript)</h1>"
-"<div class=\"phone\" style=\"--ar:0.4615\"><canvas id=\"c\" tabindex=\"0\"></canvas></div>"
-"<div class=\"hint\">Клик — касание, колёсико не нужно. Печатать можно прямо здесь:"
-" клавиатура браузера передаётся в приложение (<kbd>Enter</kbd> — отправить,"
-" <kbd>Backspace</kbd> — стереть). Откройте чат и напишите сообщение —"
-" собеседник «напечатает» и ответит.</div>"
+"<h1><b>Enjoer</b> — заходишь в игру, сразу 3D</h1>"
+"<div class=\"phone\" style=\"--ar:0.5\"><canvas id=\"c\" tabindex=\"0\"></canvas></div>"
+"<div class=\"hint\"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — ходить, "
+"<kbd>пробел</kbd> — прыжок, стрелки или перетаскивание — камера. "
+"Слева джойстик, справа прыжок. Собери монеты на радужном обби.</div>"
 "</div><script>"
 "const cv=document.getElementById('c'),ctx=cv.getContext('2d');"
-"let W=432,H=936;"
-"fetch('/info').then(r=>r.json()).then(j=>{W=j.w;H=j.h;cv.width=W;cv.height=H;loop();});"
-"async function loop(){try{const r=await fetch('/frame.png',{cache:'no-store'});"
-"const b=await r.blob();const bmp=await createImageBitmap(b);"
-"ctx.drawImage(bmp,0,0);bmp.close();}catch(e){}"
-"requestAnimationFrame(loop);}"
+"let W=400,H=800,img=null;"
+"fetch('/info').then(r=>r.json()).then(j=>{W=j.w;H=j.h;cv.width=W;cv.height=H;"
+"img=ctx.createImageData(W,H);loop();});"
+"async function loop(){try{const r=await fetch('/frame.rgba',{cache:'no-store'});"
+"const buf=new Uint8ClampedArray(await r.arrayBuffer());"
+"if(img&&buf.length>=W*H*4){img.data.set(buf.subarray(0,W*H*4));ctx.putImageData(img,0,0);}"
+"}catch(e){}requestAnimationFrame(loop);}"
 "function ev(body){fetch('/event',{method:'POST',body:new URLSearchParams(body)});}"
 "function xy(e){const r=cv.getBoundingClientRect();"
 "return [Math.round((e.clientX-r.left)*W/r.width),Math.round((e.clientY-r.top)*H/r.height)];}"
@@ -191,26 +188,24 @@ static const char *INDEX_HTML =
 "cv.addEventListener('pointermove',e=>{if(!down)return;const[x,y]=xy(e);ev({t:'move',x,y});});"
 "cv.addEventListener('pointerup',e=>{down=false;const[x,y]=xy(e);ev({t:'up',x,y});});"
 "cv.addEventListener('pointercancel',e=>{down=false;const[x,y]=xy(e);ev({t:'up',x,y});});"
+"const keys=new Set(['w','a','s','d','W','A','S','D',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown']);"
 "window.addEventListener('keydown',e=>{"
-"if(e.ctrlKey||e.metaKey||e.altKey)return;"
-"if(e.key==='Enter'){ev({t:'key',k:'enter'});e.preventDefault();return;}"
-"if(e.key==='Backspace'){ev({t:'key',k:'backspace'});e.preventDefault();return;}"
-"if(e.key.length===1){ev({t:'text',s:e.key});e.preventDefault();}});"
-"window.addEventListener('paste',e=>{const s=(e.clipboardData||window.clipboardData).getData('text');"
-"if(s){ev({t:'text',s:s.slice(0,300)});e.preventDefault();}});"
+"if(e.repeat||e.ctrlKey||e.metaKey||e.altKey)return;"
+"if(keys.has(e.key)){const k=e.key===' '?'space':e.key;ev({t:'key',k,d:'1'});e.preventDefault();return;}"
+"if(e.key==='Enter'){ev({t:'key',k:'enter'});e.preventDefault();}});"
+"window.addEventListener('keyup',e=>{"
+"if(keys.has(e.key)){const k=e.key===' '?'space':e.key;ev({t:'key',k,d:'0'});e.preventDefault();}});"
 "</script></body></html>";
 
 int main(int argc, char **argv) {
     int port = 8090;
-    int w = 432, h = 936;
+    int w = 400, h = 800;
     const char *assets = "game/assets";
-    const char *datapath = "data";
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--port") && i + 1 < argc) port = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--w") && i + 1 < argc) w = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--h") && i + 1 < argc) h = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--assets") && i + 1 < argc) assets = argv[++i];
-        else if (!strcmp(argv[i], "--data") && i + 1 < argc) datapath = argv[++i];
     }
     signal(SIGPIPE, SIG_IGN);
 
@@ -222,11 +217,10 @@ int main(int argc, char **argv) {
     frame.stride = w;
     if (!frame.pixels) { fprintf(stderr, "OOM\n"); return 1; }
 
-    msg_set_data_path(datapath);
     AAssetManager *am = host_asset_manager(assets);
     if (!ds_graphics_init(am)) { fprintf(stderr, "graphics init failed\n"); return 1; }
     init(am);
-    render_frame(); /* прогрев: атлас шрифта собирается на первом кадре */
+    render_frame();
 
     int srv = socket(AF_INET, SOCK_STREAM, 0);
     int one = 1;
@@ -241,7 +235,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     listen(srv, 16);
-    fprintf(stderr, "Enjoer Messenger preview: http://0.0.0.0:%d (%dx%d, assets=%s)\n",
+    fprintf(stderr, "Enjoer 3D preview: http://0.0.0.0:%d (%dx%d, assets=%s)\n",
             port, w, h, assets);
 
     static char reqbuf[16384];
@@ -265,19 +259,11 @@ int main(int argc, char **argv) {
             int n = snprintf(info, sizeof(info), "{\"w\":%d,\"h\":%d}", w, h);
             http_head(fd, 200, "application/json", n, 0);
             send_all(fd, info, (size_t)n);
-        } else if (strcmp(method, "GET") == 0 && strcmp(path, "/frame.png") == 0) {
+        } else if (strcmp(method, "GET") == 0 && strcmp(path, "/frame.rgba") == 0) {
             render_frame();
-            int png_len = 0;
-            void *png = stbi_write_png_to_mem(frame.pixels, frame.stride * 4,
-                                              frame.width, frame.height, 4, &png_len);
-            if (png) {
-                http_head(fd, 200, "image/png", png_len, 0);
-                send_all(fd, png, (size_t)png_len);
-                free(png);
-            } else {
-                http_head(fd, 500, "text/plain", 5, 0);
-                send_all(fd, "error", 5);
-            }
+            int bytes = frame.width * frame.height * 4;
+            http_head(fd, 200, "application/octet-stream", bytes, 0);
+            send_all(fd, frame.pixels, (size_t)bytes);
         } else if (strcmp(method, "POST") == 0 && strcmp(path, "/event") == 0) {
             handle_event(reqbuf + body_off, body_len);
             http_head(fd, 200, "text/plain", 2, 0);

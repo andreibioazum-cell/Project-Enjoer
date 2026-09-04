@@ -1,14 +1,12 @@
-/* Enjoer Messenger — главный цикл под Android (native activity).
- * Раньше здесь жил мост к сгенерированному из DimScript коду игры; теперь
- * хуки init/update/draw/touch/reset реализованы на чистом C в messenger/.
- * Механизм защищённых вызовов оставлен: если рантайм словит ошибку, вместо
- * падения выводится экран с текстом ошибки и консолью. */
+/* Enjoer — главный цикл под Android (native activity).
+ * Хуки init/update/draw/touch/reset — 3D-плейс в rbx/.
+ * Если рантайм словит ошибку, вместо падения — экран с текстом и консолью. */
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
 #include <android_native_app_glue.h>
 #include "runtime.h"
-#include "messenger/msg.h"
+#include "rbx/rbx.h"
 #include <stdio.h>
 #include <time.h>
 #include <android/input.h>
@@ -138,10 +136,8 @@ void android_main(struct android_app *app) {
     app->onAppCmd = handle_cmd;
     app->onInputEvent = handle_input;
     ds_sound_set_java_vm((void *)app->activity->vm);
-    /* Данные мессенджера (чаты/сообщения) пишем во внутреннее хранилище. */
-    msg_set_data_path(app->activity->internalDataPath);
     ds_set_activity(app->activity);
-    ds_log("Enjoer Messenger: Android, чистый C (рендер и шрифт из DimScript)");
+    ds_log("Enjoer: Android, 3D-плейс на чистом C");
     for (;;) {
         struct android_poll_source *source = NULL;
         int ident;
@@ -200,8 +196,5 @@ void android_main(struct android_app *app) {
 
 #include "graphics.c"
 #include "sound.c"
-#include "messenger/msg_ui.c"
-#include "messenger/msg_data.c"
-#include "messenger/msg_chats.c"
-#include "messenger/msg_chat.c"
-#include "messenger/msg_app.c"
+#include "rbx/rbx_render.c"
+#include "rbx/rbx_game.c"

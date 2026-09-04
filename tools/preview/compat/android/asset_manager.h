@@ -1,5 +1,5 @@
-/* Хост-замена <android/asset_manager.h> для превью-сборки мессенджера на
- * ПК. Тот же API, но читает файлы с диска из каталога ассетов. */
+/* Хост-замена <android/asset_manager.h> для превью на ПК.
+ * Тот же API, но читает файлы с диска из каталога ассетов. */
 #ifndef HOST_COMPAT_ASSET_MANAGER_H
 #define HOST_COMPAT_ASSET_MANAGER_H
 #include <stddef.h>
