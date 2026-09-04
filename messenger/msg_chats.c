@@ -1,5 +1,6 @@
 /* Экран «Список чатов»: шапка с поиском, строки чатов с аватарками,
- * счётчики непрочитанных, FAB-кнопка. Скролл с инерцией и фильтром поиска. */
+ * счётчики непрочитанных. Внизу — две кнопки: УРОВНИ слева и СКИНЫ справа.
+ * Скролл с инерцией и фильтром поиска. Два старых класса (Дима и Новости) убраны. */
 #include "msg.h"
 #include <math.h>
 #include <stdio.h>
@@ -7,8 +8,9 @@
 
 #define HEADER_H   200.0f   /* в дизайн-единицах (ширина 1080) */
 #define ROW_H      148.0f
-#define FAB_D      132.0f
 #define MARGIN      40.0f
+#define BTM_H      168.0f   /* высота нижней панели с двумя кнопками */
+#define BTN_H       96.0f
 
 typedef struct {
     double off;            /* смещение списка (0 = верх) */
@@ -17,12 +19,12 @@ typedef struct {
     float down_x, down_y;
     int moved;
     int press_row;         /* строка под пальцем */
-    int press_fab;
+    int press_levels;
+    int press_skins;
     int search_active;
     char search[128];
     int visible[MSG_MAX_CHATS];
     int visible_n;
-    double fab_scale;      /* анимация FAB */
 } ChatsState;
 
 static ChatsState cs;
@@ -30,7 +32,6 @@ static ChatsState cs;
 void chats_reset(void) {
     memset(&cs, 0, sizeof(cs));
     cs.press_row = -1;
-    cs.fab_scale = 1.0;
 }
 
 static float row_top(float u) { return HEADER_H * u; }
@@ -99,7 +100,7 @@ void chats_update(void) {
         cs.vel = 0;
     }
     double content = (double)cs.visible_n * ROW_H * msg_u();
-    double view = screen_h - HEADER_H * msg_u();
+    double view = screen_h - HEADER_H * msg_u() - BTM_H * msg_u();
     double max_off = content - view;
     if (max_off < 0) max_off = 0;
     /* мягкий возврат при перетягивании */
@@ -114,7 +115,6 @@ void chats_update(void) {
         snprintf(cs.search, sizeof(cs.search), "%s", keyboard_get_raw());
         if (keyboard_enter_pressed()) { cs.search_active = 0; keyboard_hide(); }
     }
-    cs.fab_scale = lerp(cs.fab_scale, cs.press_fab ? 0.90 : 1.0, 1.0 - pow(0.0001, dt));
 }
 
 /* ── отрисовка ─────────────────────────────────────────────────────────── */
@@ -220,7 +220,6 @@ static void draw_row(float u, float dx, int ci, float y) {
     } else {
         MsgMessage *m = &c->msgs[c->count - 1];
         if (c->group) {
-            /* в группах показываем автора до двоеточия */
             const char *colon = strchr(m->text, ':');
             if (colon && !m->out && colon - m->text < 24 && colon - m->text > 1) {
                 char author[28];
@@ -257,44 +256,127 @@ static void draw_row(float u, float dx, int ci, float y) {
     }
 }
 
+static void draw_bottom_bar(float u, float dx) {
+    float W = (float)screen_w, H = (float)screen_h;
+    float bar_top = H - BTM_H * u;
+    // фон панели
+    rect(dx, bar_top, W, BTM_H * u, C_WHITE);
+    rect(dx, bar_top, W, 2 * u, C_DIVIDER);
+    // размеры кнопок
+    float gap = MARGIN * u;
+    float btn_w = (W - gap * 3) * 0.5f;
+    float btn_h = BTN_H * u;
+    float by = bar_top + (BTM_H * u - btn_h) * 0.5f;
+    float left_x = dx + gap;
+    float right_x = dx + gap * 2 + btn_w;
+
+    // тень-подложка когда зажато чуть меньше
+    float lpress = cs.press_levels ? 1 : 0;
+    float rpress = cs.press_skins ? 1 : 0;
+
+    // левая кнопка "УРОВНИ" — светлая, с иконкой уровней
+    {
+        float sc = lpress ? 0.97f : 1.0f;
+        float w = btn_w * sc;
+        float h = btn_h * sc;
+        float x = left_x + (btn_w - w)*0.5f;
+        float y = by + (btn_h - h)*0.5f;
+        uint32_t bg = lpress ? 0xFFE9E9E9u : C_SEARCH_BG;
+        // лёгкая тень
+        roundrect(x, y + 3*u, w, h, h*0.5f, 0x1A000000u);
+        roundrect(x, y, w, h, h*0.5f, bg);
+        if (lpress) {
+            // обводка при нажатии
+            ring(x + w*0.5f, y + h*0.5f, h*0.5f - 1*u, 1.4f*u, 0x22000000u);
+        }
+        // иконка уровней: 3 горизонтальные полоски слева
+        float icx = x + 36*u;
+        float icy = y + h*0.5f;
+        float t = 5*u;
+        line(icx - 14*u, icy - 14*u, icx + 14*u, icy - 14*u, t, C_TEXT_SEC);
+        line(icx - 14*u, icy,        icx + 14*u, icy,        t, C_TEXT_SEC);
+        line(icx - 14*u, icy + 14*u, icx + 14*u, icy + 14*u, t, C_TEXT_SEC);
+        // текст
+        const char *lab = "УРОВНИ";
+        int tw = msg_text_w(lab, 0.48f);
+        float tx = x + w*0.5f + 10*u - tw*0.5f*0.48f; // чуть правее иконки
+        // центрируем с учётом иконки: вычисляем смещение
+        float content_w = 28*u + tw*0.48f;
+        float start = x + (w - content_w)*0.5f;
+        // перерисуем иконку и текст выровненно
+        // иконка уже, теперь текст
+        text_scaled(lab, start + 28*u, y + h*0.5f - text_height(lab)*0.48f*0.5f - text_ink_top(lab)*0.48f, C_TEXT_MAIN, 0.48f);
+    }
+    // правая кнопка "СКИНЫ" — акцентная синяя
+    {
+        float sc = rpress ? 0.97f : 1.0f;
+        float w = btn_w * sc;
+        float h = btn_h * sc;
+        float x = right_x + (btn_w - w)*0.5f;
+        float y = by + (btn_h - h)*0.5f;
+        uint32_t bg = rpress ? C_ACCENT_DK : C_ACCENT;
+        roundrect(x, y + 4*u, w, h, h*0.5f, 0x30000000u);
+        roundrect(x, y, w, h, h*0.5f, bg);
+        // иконка палитры: кружок + маленькая точка
+        float icx = x + 38*u;
+        float icy = y + h*0.5f;
+        // палитра упрощённо: кружок + блик
+        circle(icx, icy, 16*u, C_WHITE);
+        circle(icx + 5*u, icy - 5*u, 4*u, bg);
+        circle(icx - 6*u, icy - 2*u, 3*u, 0xFFFFD54Fu);
+        circle(icx + 2*u, icy + 7*u, 2.5f*u, 0xFFEF5350u);
+        const char *lab = "СКИНЫ";
+        int tw = msg_text_w(lab, 0.50f);
+        float content_w = 32*u + tw*0.50f;
+        float start = x + (w - content_w)*0.5f;
+        text_scaled(lab, start + 32*u, y + h*0.5f - text_height(lab)*0.50f*0.5f - text_ink_top(lab)*0.50f, C_WHITE, 0.50f);
+    }
+}
+
 void chats_draw(float dx) {
     float u = msg_u(), W = (float)screen_w, H = (float)screen_h;
     rect(dx, 0, W, H, C_WHITE);
     rebuild_filter();
 
     float top = row_top(u) - (float)cs.off;
+    float bottom_limit = H - BTM_H * u;
     for (int r = 0; r < cs.visible_n; r++) {
         float y = top + r * ROW_H * u;
-        if (y > H) break;
+        if (y > bottom_limit) break;
         if (y + ROW_H * u < HEADER_H * u) continue;
         draw_row(u, dx, cs.visible[r], y);
     }
     if (cs.visible_n == 0) {
         msg_draw_text_c(cs.search[0] ? "Ничего не найдено" : "Нет чатов",
-                        W * 0.5f + dx, H * 0.45f, 0.55f, C_TEXT_HINT);
+                        W * 0.5f + dx, H * 0.45f - 40*u, 0.55f, C_TEXT_HINT);
     }
 
     draw_header(u, dx);
-
-    /* FAB «новое сообщение» */
-    float fs = (float)cs.fab_scale;
-    float fx = dx + W - (MARGIN + FAB_D * 0.5f) * u;
-    float fy = H - (MARGIN + FAB_D * 0.5f) * u;
-    if (fs != 1.0f) {
-        circle(fx, fy, FAB_D * 0.5f * u * fs + 4 * u, 0x22000000u);
-    } else {
-        circle(fx, fy + 3 * u, FAB_D * 0.5f * u + 3 * u, 0x2A000000u);
-    }
-    circle(fx, fy, FAB_D * 0.5f * u * fs, cs.press_fab ? C_ACCENT_DK : C_ACCENT);
-    ico_pencil(fx, fy, 34 * u * fs, C_WHITE);
+    draw_bottom_bar(u, dx);
 }
 
 /* ── касания ───────────────────────────────────────────────────────────── */
-static float fab_dist(float x, float y) {
-    float u = msg_u();
-    float fx = (float)screen_w - (MARGIN + FAB_D * 0.5f) * u;
-    float fy = (float)screen_h - (MARGIN + FAB_D * 0.5f) * u;
-    return sqrtf((x - fx) * (x - fx) + (y - fy) * (y - fy));
+static int hit_left_btn(float x, float y, float u) {
+    float W = (float)screen_w, H = (float)screen_h;
+    float bar_top = H - BTM_H * u;
+    if (y < bar_top) return 0;
+    float gap = MARGIN * u;
+    float btn_w = (W - gap * 3) * 0.5f;
+    float btn_h = BTN_H * u;
+    float by = bar_top + (BTM_H * u - btn_h) * 0.5f;
+    float left_x = gap;
+    return x >= left_x && x <= left_x + btn_w && y >= by && y <= by + btn_h;
+}
+static int hit_right_btn(float x, float y, float u) {
+    float W = (float)screen_w, H = (float)screen_h;
+    float bar_top = H - BTM_H * u;
+    if (y < bar_top) return 0;
+    float gap = MARGIN * u;
+    float btn_w = (W - gap * 3) * 0.5f;
+    float btn_h = BTN_H * u;
+    float by = bar_top + (BTM_H * u - btn_h) * 0.5f;
+    float right_x = gap * 2 + btn_w;
+    return x >= right_x && x <= right_x + btn_w && y >= by && y <= by + btn_h;
 }
 
 int chats_touch(float x, float y, int action) {
@@ -303,16 +385,25 @@ int chats_touch(float x, float y, int action) {
     if (action == 0) { /* DOWN */
         cs.down_x = x; cs.down_y = y; cs.moved = 0; cs.vel = 0;
         cs.dragging = 0;
+        // проверка нижних кнопок в приоритете
+        if (hit_left_btn(x, y, u)) { cs.press_levels = 1; cs.press_row = -1; return 1; }
+        if (hit_right_btn(x, y, u)) { cs.press_skins = 1; cs.press_row = -1; return 1; }
+        // проверка бара низа — не скроллить если нажали бар
+        float H = (float)screen_h;
+        if (y > H - BTM_H * u) { cs.press_row = -1; return 1; }
         cs.press_row = row_at(y, u);
-        cs.press_fab = fab_dist(x, y) < FAB_D * 0.5f * u + 10 * u;
-        /* шапка: иконка поиска */
         return 1;
     }
     if (action == 2) { /* MOVE */
+        if (cs.press_levels || cs.press_skins) {
+            // если палец ушёл с кнопки — снять нажатие
+            if (cs.press_levels && !hit_left_btn(x, y, u)) cs.press_levels = 0;
+            if (cs.press_skins && !hit_right_btn(x, y, u)) cs.press_skins = 0;
+            return 1;
+        }
         if (!cs.dragging && fabsf(y - cs.down_y) > 12 * u && fabsf(y - cs.down_y) > fabsf(x - cs.down_x)) {
             cs.dragging = 1;
             cs.press_row = -1;
-            cs.press_fab = 0;
         }
         if (cs.dragging) {
             float step = cs.down_y - y;
@@ -325,23 +416,33 @@ int chats_touch(float x, float y, int action) {
         return 1;
     }
     if (action == 1) { /* UP */
-        int was_row = cs.press_row, was_fab = cs.press_fab;
+        int was_levels = cs.press_levels, was_skins = cs.press_skins, was_row = cs.press_row;
+        cs.press_levels = 0; cs.press_skins = 0;
         cs.press_row = -1;
-        cs.press_fab = 0;
         cs.dragging = 0;
+        if (was_levels && hit_left_btn(x, y, u)) {
+            levels_open();
+            return 1;
+        }
+        if (was_skins && hit_right_btn(x, y, u)) {
+            skins_open();
+            return 1;
+        }
+        if (was_levels || was_skins) return 1;
+        // тап на нижней панели вне кнопок — игнор
+        float H = (float)screen_h;
+        if (y > H - BTM_H * u) return 1;
         if (cs.moved) return 1;
         /* одиночные тапы */
         if (y < HEADER_H * u) {
             float px = MARGIN * u, pw = (float)screen_w - MARGIN * 2 * u;
             float ph = 68 * u, py = 116 * u;
             if (cs.search_active) {
-                /* назад из поиска */
                 if (x < 100 * u && y < 104 * u) {
                     cs.search_active = 0;
                     keyboard_hide();
                     return 1;
                 }
-                /* крестик очистки */
                 if (x > px + pw - 80 * u && y > py && y < py + ph && cs.search[0]) {
                     keyboard_clear();
                     cs.search[0] = '\0';
@@ -363,11 +464,6 @@ int chats_touch(float x, float y, int action) {
                 keyboard_show();
                 return 1;
             }
-            return 1;
-        }
-        if (was_fab && fab_dist(x, y) < FAB_D * 0.5f * u + 14 * u) {
-            /* «новое сообщение»: открываем первый чат как демо */
-            if (msg_chat_count > 0) chat_open(cs.search_active && cs.visible_n ? cs.visible[0] : 0);
             return 1;
         }
         if (was_row >= 0 && was_row < cs.visible_n) {

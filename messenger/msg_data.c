@@ -81,12 +81,6 @@ static const char *MARIA_REPLIES[] = {
     "Смотри не заспой мне концовку!",
     "Кстати, там новая серия вышла, глянь.",
 };
-static const char *DIMA_REPLIES[] = {
-    "Ну так что, го в настолки?",
-    "Я уже и пиццу заказал))",
-    "Не молчи!",
-    "Ау!",
-};
 static const char *BOT_REPLIES[] = {
     "Я бот-помощник: получил ваше сообщение и сразу отвечаю. Так работает автоответчик на C — без всякого скриптового движка.",
     "Принято! Если хочется проверить длинные пузыри — напишите что-нибудь подлиннее, переносы строк считаются автоматически.",
@@ -101,7 +95,6 @@ static const char *pick_reply(int ci) {
     if (ci == 0) { pool = ANDREY_REPLIES; n = (int)(sizeof(ANDREY_REPLIES)/sizeof(pool[0])); }
     else if (ci == 1) { pool = TEAM_REPLIES; n = (int)(sizeof(TEAM_REPLIES)/sizeof(pool[0])); }
     else if (ci == 2) { pool = MARIA_REPLIES; n = (int)(sizeof(MARIA_REPLIES)/sizeof(pool[0])); }
-    else if (ci == 3) { pool = DIMA_REPLIES; n = (int)(sizeof(DIMA_REPLIES)/sizeof(pool[0])); }
     else if (strcmp(c->name, "Бот-помощник") == 0) { pool = BOT_REPLIES; n = (int)(sizeof(BOT_REPLIES)/sizeof(pool[0])); }
     int pick = rand() % n;
     if (pick == c->reply_pick && n > 1) pick = (pick + 1) % n;
@@ -114,8 +107,8 @@ void msg_send(int ci, const char *text) {
     MsgChat *c = &msg_chats[ci];
     msg_chat_add(ci, text, 1, msg_wall(), c->saved ? 2 : 0);
     snd_play("send.wav");
-    /* «Избранное» и каналы не отвечают; остальным включаем автоответчик. */
-    if (!c->saved && strcmp(c->name, "Новости Enjoer") != 0) {
+    /* «Избранное» не отвечает; остальным включаем автоответчик. */
+    if (!c->saved) {
         c->reply_phase = 1;
         c->reply_t1 = msg_now() + frand(0.7, 1.6);
         c->reply_t2 = c->reply_t1 + frand(1.1, 2.4);
@@ -149,7 +142,6 @@ void msg_data_update(void) {
                 if (c->msgs[k].out && c->msgs[k].state < 2) c->msgs[k].state = 2;
             c->gen++;
             if (chat_is_open() && chat_current() == i) {
-                /* чат открыт — непрочитанных нет, просто мягкий звук */
                 snd_play("notify.wav");
             } else {
                 c->unread++;
@@ -165,7 +157,6 @@ const char *msg_last_seen(int ci) {
     MsgChat *c = &msg_chats[ci];
     if (c->saved) return "ваши заметки";
     if (c->reply_phase == 2) return "печатает…";
-    if (strcmp(c->name, "Новости Enjoer") == 0) return "2 481 подписчик";
     if (c->group) return "6 участников";
     if (c->online) return "в сети";
     return "был(а) недавно";
@@ -181,7 +172,7 @@ void msg_data_save(void) {
     data_path(path, sizeof(path));
     FILE *f = fopen(path, "w");
     if (!f) return;
-    fprintf(f, "ENJOER1\n");
+    fprintf(f, "ENJOER2\n");
     for (int i = 0; i < msg_chat_count; i++) {
         MsgChat *c = &msg_chats[i];
         fprintf(f, "C|%s|%d|%d|%d|%d|%d|%d\n", c->name, c->color, c->online,
@@ -208,7 +199,12 @@ static int msg_data_load(void) {
         while (L && (line[L-1] == '\n' || line[L-1] == '\r')) line[--L] = '\0';
         if (!L) continue;
         if (!ok) {
-            if (strcmp(line, "ENJOER1") != 0) break;
+            if (strcmp(line, "ENJOER2") != 0 && strcmp(line, "ENJOER1") != 0) break;
+            // миграция: если старый файл ENJOER1 с удалёнными классами — пересоздадим
+            if (strcmp(line, "ENJOER1") == 0) {
+                fclose(f);
+                return 0;
+            }
             ok = 1;
             continue;
         }
@@ -219,6 +215,8 @@ static int msg_data_load(void) {
             char name[128] = {0};
             if (sscanf(line + 2, "%127[^|]|%d|%d|%d|%d|%d|%d", name, &c->color,
                        &c->online, &c->saved, &c->group, &c->unread, &c->muted) == 7) {
+                // удалённые классы: пропускаем Дима Карпов и Новости Enjoer если вдруг остались в старом файле
+                if (strcmp(name, "Дима Карпов") == 0 || strcmp(name, "Новости Enjoer") == 0) continue;
                 snprintf(c->name, sizeof(c->name), "%s", name);
                 msg_chat_count++;
             }
@@ -238,7 +236,7 @@ static int msg_data_load(void) {
     return ok && msg_chat_count > 0;
 }
 
-/* ── демо-данные первого запуска ───────────────────────────────────────── */
+/* ── демо-данные первого запуска: убраны два класса (Дима Карпов и Новости Enjoer) ── */
 static void seed_chat(const char *name, int color, int online, int saved, int group) {
     if (msg_chat_count >= MSG_MAX_CHATS) return;
     MsgChat *c = &msg_chats[msg_chat_count++];
@@ -276,24 +274,14 @@ static void msg_data_seed(void) {
     msg_chat_add(2, "Без спойлеров! Там дальше неожиданный поворот", 0, now - 25.8*3600, 0);
     msg_chat_add(2, "Ладно, молчу)", 1, now - 25.7*3600, 2);
 
-    seed_chat("Дима Карпов", 1, 1, 0, 0);
-    msg_chat_add(3, "Го в настолки в субботу?", 0, now - 55*60, 0);
-    msg_chat_add(3, "Я собрал старую компанию, будет весело", 0, now - 54*60, 0);
-    msg_chat_add(3, "Ну что, ты в деле?", 0, now - 12*60, 0);
-    msg_chats[3].unread = 12;
-    msg_chats[3].muted = 1;
+    // два класса убраны: Дима Карпов и Новости Enjoer
 
     seed_chat("Избранное", 4, 0, 1, 0);
-    msg_chat_add(4, "Список дел: доделать рендер треугольников, собрать шрифты в атлас", 1, now - 2*86400, 2);
-    msg_chat_add(4, "Идея: тёмная тема для мессенджера", 1, now - 26*3600, 2);
-
-    seed_chat("Новости Enjoer", 5, 0, 0, 0);
-    msg_chat_add(5, "Вышло обновление 1.2: ускоренный рендер текста и новые аватарки", 0, now - 5*3600, 0);
-    msg_chat_add(5, "Скоро: пересылка сообщений и реакции", 0, now - 1*3600, 0);
-    msg_chats[5].unread = 1;
+    msg_chat_add(3, "Список дел: доделать рендер треугольников, собрать шрифты в атлас", 1, now - 2*86400, 2);
+    msg_chat_add(3, "Идея: тёмная тема для мессенджера", 1, now - 26*3600, 2);
 
     seed_chat("Бот-помощник", 3, 1, 0, 0);
-    msg_chat_add(6, "Привет! Напишите что-нибудь — я отвечу. Так работает демо-автоответчик.", 0, now - 20*3600, 0);
+    msg_chat_add(4, "Привет! Напишите что-нибудь — я отвечу. Так работает демо-автоответчик.", 0, now - 20*3600, 0);
 }
 
 void msg_data_init(void) {

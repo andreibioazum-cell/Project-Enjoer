@@ -118,4 +118,24 @@ void chat_update(void);
 void chat_draw(float dx);
 int chat_touch(float x, float y, int action);
 
+/* msg_levels.c — экран «Уровни» */
+void levels_reset(void);
+void levels_update(void);
+void levels_draw(float dx);
+int levels_touch(float x, float y, int action);
+void levels_open(void);
+int levels_is_open(void);
+int levels_wants_close(void);
+void levels_finish_close(void);
+
+/* msg_skins.c — экран «Скины» : показывает скины только внутри этого экрана */
+void skins_reset(void);
+void skins_update(void);
+void skins_draw(float dx);
+int skins_touch(float x, float y, int action);
+void skins_open(void);
+int skins_is_open(void);
+int skins_wants_close(void);
+void skins_finish_close(void);
+
 #endif

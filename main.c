@@ -204,4 +204,6 @@ void android_main(struct android_app *app) {
 #include "messenger/msg_data.c"
 #include "messenger/msg_chats.c"
 #include "messenger/msg_chat.c"
+#include "messenger/msg_levels.c"
+#include "messenger/msg_skins.c"
 #include "messenger/msg_app.c"
