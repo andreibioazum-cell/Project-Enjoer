@@ -33,7 +33,8 @@ struct Texture {
     uint32_t *pixels;
 };
 typedef enum {
-    DS_CMD_RECT, DS_CMD_ROUND, DS_CMD_CIRCLE, DS_CMD_RING, DS_CMD_LINE, DS_CMD_TEX, DS_CMD_TEXT, DS_CMD_TEX_TINT
+    DS_CMD_RECT, DS_CMD_ROUND, DS_CMD_CIRCLE, DS_CMD_RING, DS_CMD_LINE, DS_CMD_TEX, DS_CMD_TEXT, DS_CMD_TEX_TINT,
+    DS_CMD_TRI
 } DSCommand;
 typedef struct {
     DSCommand t;
@@ -46,6 +47,7 @@ typedef struct {
         struct { float x, y, a, sc; Texture *tx; } tx;
         struct { char *s; float x, y, sc; uint32_t c; } tt;
         struct { float x, y, a, sc; Texture *tx; uint32_t c; } tx2;
+        struct { float x1, y1, x2, y2, x3, y3; uint32_t c; } tr;
     } v;
 } DSCmd;
 static uint32_t pack_c(uint32_t c) {
@@ -160,6 +162,34 @@ static void render_ring(Buffer *b, float x, float y, float rad, float th, uint32
             int lr = il < rr ? il : rr, rl = ir > l ? ir : l;
             if (l < lr) paint_span(b->pixels + sy*b->stride + l, lr-l, c);
             if (rl < rr) paint_span(b->pixels + sy*b->stride + rl, rr-rl, c);
+        }
+    }
+}
+static void render_triangle(Buffer *b, float x1, float y1, float x2, float y2, float x3, float y3, uint32_t c) {
+    if (!b || !isfinite(x1+y1+x2+y2+x3+y3)) return;
+    float area = (x2-x1)*(y3-y1) - (y2-y1)*(x3-x1);
+    if (fabsf(area) < 0.0001f) return;
+    float minx = x1 < x2 ? x1 : x2; minx = minx < x3 ? minx : x3;
+    float maxx = x1 > x2 ? x1 : x2; maxx = maxx > x3 ? maxx : x3;
+    float miny = y1 < y2 ? y1 : y2; miny = miny < y3 ? miny : y3;
+    float maxy = y1 > y2 ? y1 : y2; maxy = maxy > y3 ? maxy : y3;
+    int left = cl_floor(floorf(minx), b->width);
+    int right = cl_ceil(ceilf(maxx), b->width);
+    int top = cl_floor(floorf(miny), b->height);
+    int bottom = cl_ceil(ceilf(maxy), b->height);
+    for (int py = top; py < bottom; py++) {
+        float fy = (float)py + 0.5f;
+        for (int px = left; px < right; px++) {
+            float fx = (float)px + 0.5f;
+            float w1 = ((x2-x1)*(fy-y1) - (y2-y1)*(fx-x1)) / area;
+            float w2 = ((x3-x2)*(fy-y2) - (y3-y2)*(fx-x2)) / area;
+            float w3 = 1.0f - w1 - w2;
+            /* Небольшой допуск (0.002 ≈ полпикселя при типичных размерах)
+             * закрывает щели между соседними треугольниками полигона. */
+            if (w1 >= -0.002f && w2 >= -0.002f && w3 >= -0.002f) {
+                uint32_t *pixel = &b->pixels[py*b->stride + px];
+                *pixel = blend(*pixel, c);
+            }
         }
     }
 }
@@ -468,6 +498,7 @@ static void flush(void) {
             case DS_CMD_CIRCLE: render_circle(cur_buf, c->v.ci.x, c->v.ci.y, c->v.ci.r, c->v.ci.c); break;
             case DS_CMD_RING:   render_ring(cur_buf, c->v.rg.x, c->v.rg.y, c->v.rg.r, c->v.rg.th, c->v.rg.c); break;
             case DS_CMD_LINE:   render_line(cur_buf, c->v.ln.x1, c->v.ln.y1, c->v.ln.x2, c->v.ln.y2, c->v.ln.th, c->v.ln.c); break;
+            case DS_CMD_TRI:    render_triangle(cur_buf, c->v.tr.x1, c->v.tr.y1, c->v.tr.x2, c->v.tr.y2, c->v.tr.x3, c->v.tr.y3, c->v.tr.c); break;
             case DS_CMD_TEX:    draw_tx(cur_buf, c->v.tx.tx, c->v.tx.x, c->v.tx.y, c->v.tx.a, c->v.tx.sc); break;
             case DS_CMD_TEX_TINT: draw_tx_tint(cur_buf, c->v.tx2.tx, c->v.tx2.x, c->v.tx2.y, c->v.tx2.a, c->v.tx2.sc, c->v.tx2.c); break;
             case DS_CMD_TEXT:
@@ -522,6 +553,11 @@ void line(float x1, float y1, float x2, float y2, float thickness, uint32_t c) {
     p->v.ln.x1=x1; p->v.ln.y1=y1; p->v.ln.x2=x2; p->v.ln.y2=y2;
     p->v.ln.th=thickness; p->v.ln.c=pack_c(c);
 }
+void tri(float x1, float y1, float x2, float y2, float x3, float y3, uint32_t c) {
+    DSCmd *p = push(DS_CMD_TRI); if (!p) return;
+    p->v.tr.x1=x1; p->v.tr.y1=y1; p->v.tr.x2=x2; p->v.tr.y2=y2;
+    p->v.tr.x3=x3; p->v.tr.y3=y3; p->v.tr.c=pack_c(c);
+}
 void tex(float x, float y, const char *name, float a, float s) {
     if (!frame_open) return;
     Texture *t = load_png(name); if (!t) return;
@@ -534,15 +570,9 @@ void tex_tint(float x, float y, const char *name, float a, float s, uint32_t c) 
     DSCmd *p = push(DS_CMD_TEX_TINT); if (!p) return;
     p->v.tx2.x=x; p->v.tx2.y=y; p->v.tx2.a=a; p->v.tx2.sc=s; p->v.tx2.tx=t; p->v.tx2.c=pack_c(c);
 }
-/* Весь текст в игре рисуется чисто белым (255,255,255). Скрипты по-прежнему
- * передают цвет, но из него остаётся только альфа — она нужна плавным
- * затуханиям подписей (fade_color в core/ui.ds, админский баннер, экран
- * предупреждения). RGB подменяется на белый, поэтому ни золотые/зелёные
- * надписи достижений, ни красные/голубые ники админов на экране не
- * появляются: одно правило на всю игру вместо правки каждого вызова. */
-static uint32_t text_force_white(uint32_t c) {
-    return (c & 0xff000000u) | 0x00ffffffu;
-}
+/* Раньше игра силой красила весь текст в белый. Мессенджеру нужны обычные
+ * цвета (тёмный текст на светлых пузырях, серые подписи, зелёные статусы),
+ * поэтому теперь цвет передаётся в рендер как есть. */
 void text_scaled(const char *s, float x, float y, uint32_t c, float sc) {
     if (!frame_open || !s || !ensure_font()) return;
     DSCmd *p = push(DS_CMD_TEXT); if (!p) return;
@@ -550,7 +580,7 @@ void text_scaled(const char *s, float x, float y, uint32_t c, float sc) {
      * must own text until the frame is flushed or cancelled. */
     p->v.tt.s = strdup_safe(s);
     if (!p->v.tt.s) { ds_runtime_error("out of memory copying renderer text"); return; }
-    p->v.tt.x=x; p->v.tt.y=y; p->v.tt.sc=sc; p->v.tt.c=pack_c(text_force_white(c));
+    p->v.tt.x=x; p->v.tt.y=y; p->v.tt.sc=sc; p->v.tt.c=pack_c(c);
 }
 void text(const char *s, float x, float y, uint32_t c) { text_scaled(s, x, y, c, 1.0f); }
 int text_ink_width(const char *s) {
@@ -592,6 +622,12 @@ int text_ink_height(const char *s) {
 }
 int text_width(const char *s) { return text_ink_width(s); }
 int text_height(const char *s) { return text_ink_height(s); }
+/* Шаг строки многострочного текста (тот самый, что использует '\n' внутри
+ * render_text_now). Мессенджеру нужен для точного расчёта высоты пузырей. */
+float text_line_height(void) {
+    if (!ensure_font()) return 24.0f;
+    return ds_font_lineh(font);
+}
 int text_ink_top(const char *s) {
     if (!s || !ensure_font()) return 0;
     const DSFontGlyph *ref = ds_font_glyph(font, 'S');

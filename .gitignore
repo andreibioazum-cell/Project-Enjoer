@@ -1,0 +1,6 @@
+# локальные данные превью и сборки — не в git
+/data/
+*.dat
+/build*/
+/preview
+/staging/
