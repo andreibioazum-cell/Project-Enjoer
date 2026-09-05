@@ -1,13 +1,12 @@
 /* Each touch owns just one control; camera, movement and editing coexist. */
 #include "rbx_internal.h"
 static int joy_id=-1,look_id=-1,jump_id=-1,flight_id=-1,slot_id=-1;
-static int action_id[ACTION_COUNT]={-1,-1},flight_tap,look_tap;
-static float jx,jy,look_x,look_y,look_start_x,look_start_y,flight_start_x,flight_start_y;
+static int action_id[ACTION_COUNT]={-1,-1},flight_tap;
+static float jx,jy,look_x,look_y,flight_start_x,flight_start_y;
 static float joy_x,joy_y,joy_r,jump_x,jump_y,jump_r,flight_x,flight_y,flight_w,flight_h,ui_scale;
 static int layout_w,layout_h;
-static double look_started;
 void rbx_input_reset(void) {
-    joy_id=look_id=jump_id=flight_id=slot_id=-1;jx=jy=0;flight_tap=look_tap=0;
+    joy_id=look_id=jump_id=flight_id=slot_id=-1;jx=jy=0;flight_tap=0;
     for (int a=0;a<ACTION_COUNT;a++) {action_id[a]=-1;rbx_action_cancel(a,1);}
     rbx_player_jump(0);
 }
@@ -76,13 +75,12 @@ void rbx_input_touch(float x,float y,int action,int id) {
         } else if (x<screen_w*.5f && hit_circle(x,y,joy_x,joy_y,joy_r*1.3f)) {
             if (joy_id<0) {joy_id=id;set_joy(x,y);}
         } else if (x>=screen_w*.5f && look_id<0) {
-            look_id=id;look_x=look_start_x=x;look_y=look_start_y=y;look_tap=1;look_started=app_now();
+            look_id=id;look_x=x;look_y=y;
         }
     } else if (action==2) {
         if (id==joy_id) set_joy(x,y);
         else if (id==look_id) {
             rbx_camera_look(x-look_x,y-look_y);look_x=x;look_y=y;
-            if(!hit_circle(x,y,look_start_x,look_start_y,8*ui_scale))look_tap=0;
         } else if (id==flight_id && !hit_circle(x,y,flight_start_x,flight_start_y,12*ui_scale)) flight_tap=0;
         for (int a=0;a<ACTION_COUNT;a++) if (id==action_id[a]) {
             float cx,cy,r;rbx_input_action_geom(a,&cx,&cy,&r);
@@ -91,8 +89,7 @@ void rbx_input_touch(float x,float y,int action,int id) {
     } else if (action==1 || action==4) {
         if (id==joy_id) {joy_id=-1;jx=jy=0;}
         if (id==look_id) {
-            if (action==1 && look_tap && app_now()-look_started<=.3 && hit_circle(x,y,look_start_x,look_start_y,8*ui_scale)) rbx_action_pulse(ACTION_BREAK);
-            look_id=-1;look_tap=0;
+            look_id=-1;
         }
         if (id==slot_id) slot_id=-1;
         if (id==jump_id) {jump_id=-1;rbx_player_jump(0);}

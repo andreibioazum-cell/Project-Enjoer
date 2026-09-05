@@ -38,7 +38,7 @@ void roundrect(float x,float y,float w,float h,float r,uint32_t c) {
 void ring(float x,float y,float r,float th,uint32_t c) {
     float jx,jy,jr; rbx_input_joy_geom(&jx,&jy,&jr);
     CHECK(c==0xFF000000u);
-    if (fabsf(x-jx)<.01f && fabsf(y-jy)<.01f) { CLOSE(r,jr); CHECK(th>=6); joy_rings++; }
+    if (fabsf(x-jx)<.01f && fabsf(y-jy)<.01f) { CLOSE(r,jr); CHECK(th>=2 && th<=6); joy_rings++; }
 }
 void circle(float x,float y,float r,uint32_t c) {
     float jr; rbx_input_joy_geom(NULL,NULL,&jr); (void)x;(void)y;

@@ -16,7 +16,8 @@ float rbx_fps(void) { return fps; }
 int rbx_render_scale(int width,int height) {
     if (width!=last_w || height!=last_h) {
         last_w=width;last_h=height;base_scale=1;
-        while (base_scale<4 && (double)(width/base_scale)*(height/base_scale)>1000000) base_scale++;
+        /* Размытие от апскейла заметно сильнее лагов: держим нативное разрешение до ~2.2 Мп (≈1920×1080), а не 1 Мп. */
+        while (base_scale<4 && (double)(width/base_scale)*(height/base_scale)>2200000) base_scale++;
         render_scale=base_scale;render_count=fast_windows=0;render_seconds=0;
     }
     return render_scale;
@@ -26,7 +27,8 @@ void rbx_render_time(double elapsed) {
     render_seconds+=elapsed;render_count++;
     if (render_count<30) return;
     double average=render_seconds/render_count;
-    if (average>.019 && render_scale<4) {render_scale++;fast_windows=0;}
+    /* Менее агрессивное снижение качества: не размываем мир из-за коротких просадок. */
+    if (average>.022 && render_scale<4) {render_scale++;fast_windows=0;}
     else if (average<.007 && render_scale>base_scale) {
         if (++fast_windows>=4) {render_scale--;fast_windows=0;}
     } else fast_windows=0;

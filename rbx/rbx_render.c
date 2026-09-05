@@ -229,10 +229,9 @@ static void span(int y, ScreenV a, ScreenV b, const Paint *paint) {
     float du=(b.u-a.u)*inv,dv=(b.v-a.v)*inv,u=a.u+offset*du,v=a.v+offset*dv;
     const float *ray=ray_length+y*rw;
     static const int offsets[6]={1364,1360,1344,1280,1024,0};
-    /* Local LOD, not one mip for a whole merged 16-block floor. The plane's
-     * projected compressed axis shrinks quadratically at grazing angles. */
-    for (int start=i0;start<i1;start+=16) {
-        int end=start+16<i1 ? start+16 : i1;
+    /* Мелкий шаг LOD (8 вместо 16) — меньше блочной пикселизации вдали. */
+    for (int start=i0;start<i1;start+=8) {
+        int end=start+8<i1 ? start+8 : i1;
         float mid=iz+diz*(end-start-1)*.5f;
         float pixels=foc*mid*fminf(1,paint->plane*mid);
         union {float f;uint32_t u;} bits={pixels};
@@ -343,10 +342,11 @@ void rbx3d_segment(float x,float y,float z,float x2,float y2,float z2,uint32_t c
     float ax,ay,bx,by;
     if (!project_v(a,&ax,&ay) || !project_v(b,&bx,&by)) return;
     int steps=(int)ceilf(fmaxf(fabsf(bx-ax),fabsf(by-ay)));if(steps<1)steps=1;
+    /* Увеличенный bias чтобы обводка не пропадала наполовину из-за z-fighting. */
     for (int i=0;i<=steps;i++) {
         float t=(float)i/steps,iz=(1-t)/a.z+t/b.z;
         int px=(int)floorf(ax+(bx-ax)*t),py=(int)floorf(ay+(by-ay)*t);
-        if (px>=0 && py>=0 && px<rw && py<rh && iz>=zbuf[py*rw+px]-iz*.002f)
+        if (px>=0 && py>=0 && px<rw && py<rh && iz+iz*.010f>=zbuf[py*rw+px])
             pix[py*rw+px]=pack(color);
     }
 }

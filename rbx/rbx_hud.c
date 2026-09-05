@@ -8,7 +8,7 @@ void rbx_hud_draw(void) {
     float u=fminf(screen_w/960.0f,screen_h/540.0f);
     if(u<=0)return;
     float cx,cy,r,jx,jy;rbx_input_joy_geom(&cx,&cy,&r);rbx_input_joy(&jx,&jy);
-    ring(cx,cy,r,7*u,0xff000000u);
+    ring(cx,cy,r,3*u,0xff000000u);
     circle(cx+jx*r*.56f,cy+jy*r*.56f,r*.38f,0xff000000u);
     float x,y,w,h;rbx_input_flight_geom(&x,&y,&w,&h);
     roundrect(x,y,w,h,7*u,0xffffffffu);centered("Полёт",x+w*.44f,y+9*u,.48f*u);
