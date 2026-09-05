@@ -25,7 +25,6 @@ static uint64_t monotonic_ns(void) {
 }
 
 static void protected_init(void *userdata) { init((AAssetManager *)userdata); }
-static void protected_reset(void *userdata) { (void)userdata; reset(); }
 static void protected_update(void *userdata) { (void)userdata; update(); }
 static void protected_draw(void *userdata) { draw((Buffer *)userdata); }
 typedef struct { float x; float y; int action; int id; } TouchCall;
@@ -53,8 +52,7 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             app_active = 0;
             ds_clear_runtime_error();
             ds_string_pool_reset();
-            if (!ds_call_protected(protected_reset, NULL, "reset")) { init_done = 0; return; }
-            ds_clear_runtime_error();
+            /* init() сам строит мир: не генерируем все чанки дважды. */
             if (!ds_call_protected(protected_init, app_assets, "init")) { init_done = 0; return; }
             app_active = 1;
             break;
@@ -140,6 +138,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             case AKEYCODE_A: game_key = "a"; break;
             case AKEYCODE_S: game_key = "s"; break;
             case AKEYCODE_D: game_key = "d"; break;
+            case AKEYCODE_F: game_key = "f"; break;
             case AKEYCODE_DPAD_LEFT: game_key = "ArrowLeft"; break;
             case AKEYCODE_DPAD_RIGHT: game_key = "ArrowRight"; break;
             case AKEYCODE_DPAD_UP: game_key = "ArrowUp"; break;

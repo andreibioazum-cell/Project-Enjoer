@@ -132,10 +132,10 @@ static void form_get(const char *body, int blen, const char *key, char *out, int
 static void handle_event(const char *body, int blen) {
     char t[16], k[16], s[1024], xs[32], ys[32], ids[32];
     form_get(body, blen, "t", t, sizeof(t));
-    if (strcmp(t, "down") == 0 || strcmp(t, "move") == 0 || strcmp(t, "up") == 0) {
+    if (strcmp(t, "down") == 0 || strcmp(t, "move") == 0 || strcmp(t, "up") == 0 || strcmp(t, "cancel-pointer") == 0) {
         form_get(body, blen, "x", xs, sizeof(xs));
         form_get(body, blen, "y", ys, sizeof(ys));
-        int action = strcmp(t, "down") == 0 ? 0 : strcmp(t, "up") == 0 ? 1 : 2;
+        int action = strcmp(t, "down") == 0 ? 0 : strcmp(t, "up") == 0 ? 1 : strcmp(t, "cancel-pointer") == 0 ? 4 : 2;
         form_get(body, blen, "id", ids, sizeof(ids));
         char *end;
         long id = ids[0] ? strtol(ids, &end, 10) : 0;
@@ -170,34 +170,23 @@ static void handle_events(const char *body, int len) {
 
 static const char *INDEX_HTML =
 "<!doctype html>\n"
-"<html lang=\"ru\">\n"
-"<head>\n"
-"<meta charset=\"utf-8\">\n"
-"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n"
-"<title>Enjoer — полёт от первого лица</title>\n"
+"<html lang=\"ru\"><head><meta charset=\"utf-8\">\n"
+"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">\n"
+"<title>Enjoer — блочный мир</title>\n"
 "<style>\n"
-"html,body{margin:0;height:100%;background:#111216;color:#eceff1;font-family:system-ui,'Segoe UI',sans-serif;overscroll-behavior:none;}\n"
-".wrap{height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;justify-items:center;gap:12px;padding:14px;box-sizing:border-box;}\n"
-"h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.3px;}\n"
-"h1 b{color:#e2231a;}\n"
-".phone{border-radius:24px;overflow:hidden;box-shadow:0 24px 80px #0009,0 0 0 1px #ffffff14;height:100%;max-height:900px;max-width:100%;aspect-ratio:var(--ar);background:#000;}\n"
-"canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab;user-select:none;}\n"
+"html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;overscroll-behavior:none;}\n"
+".game{position:fixed;inset:0;display:grid;place-items:center;}\n"
+"canvas{display:block;touch-action:none;user-select:none;outline:none;cursor:grab;}\n"
 "canvas:active{cursor:grabbing;}\n"
-".hint{font-size:12px;color:#90a4ae;text-align:center;max-width:560px;line-height:1.5;}\n"
-"kbd{background:#1c2733;border:1px solid #2c3947;border-radius:5px;padding:1px 5px;font-size:11px;}\n"
-"</style>\n"
-"</head>\n"
-"<body>\n"
-"<div class=\"wrap\">\n"
-"<h1><b>Enjoer</b> — полёт от первого лица</h1>\n"
-"<div class=\"phone\" style=\"--ar:0.5\"><canvas id=\"c\" tabindex=\"0\" aria-label=\"Игра Enjoer. Слева джойстик полёта, справа поворот камеры.\"></canvas></div>\n"
-"<div class=\"hint\"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — полёт; <kbd>пробел</kbd>/<kbd>Shift</kbd> — выше/ниже.<br>Слева чёрный джойстик. Свайп справа или стрелки — обзор.<br>Лети туда, куда смотришь. Отпусти джойстик, чтобы зависнуть.</div>\n"
-"</div>\n"
+"</style></head><body>\n"
+"<main class=\"game\"><canvas id=\"c\" tabindex=\"0\" aria-label=\"Блочный мир. WASD — движение, пробел — прыжок, F — переключить полёт. Слева джойстик, справа камера.\"></canvas></main>\n"
 "<script>\n"
 "const cv=document.getElementById('c'),ctx=cv.getContext('2d');\n"
-"let W=400,H=800,img=null;\n"
-"fetch('/info').then(r=>r.json()).then(j=>{\n"
-"  W=j.w;H=j.h;cv.width=W;cv.height=H;cv.parentElement.style.setProperty('--ar',W/H);\n"
+"let W=960,H=540,img=null;\n"
+"function fit(){const s=Math.min(innerWidth/W,innerHeight/H);cv.style.width=W*s+'px';cv.style.height=H*s+'px';}\n"
+"fetch('/info').then(r=>r.json()).then(async j=>{\n"
+"  W=j.w;H=j.h;cv.width=W;cv.height=H;fit();\n"
+"  await fetch('/event',{method:'POST',body:'t=cancel'});\n"
 "  img=ctx.createImageData(W,H);loop();\n"
 "});\n"
 "async function loop(){\n"
@@ -248,10 +237,11 @@ static const char *INDEX_HTML =
 "  ev({t:'up',id:e.pointerId,...xy(e)});\n"
 "}\n"
 "cv.addEventListener('pointerup',releasePointer);\n"
-"cv.addEventListener('pointercancel',releasePointer);\n"
-"cv.addEventListener('lostpointercapture',releasePointer);\n"
+"function cancelPointer(e){if(pointers.delete(e.pointerId))ev({t:'cancel-pointer',id:e.pointerId});}\n"
+"cv.addEventListener('pointercancel',cancelPointer);\n"
+"cv.addEventListener('lostpointercapture',cancelPointer);\n"
 "cv.addEventListener('contextmenu',e=>e.preventDefault());\n"
-"const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',Space:'space',ShiftLeft:'Shift',ShiftRight:'Shift',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',ArrowUp:'ArrowUp',ArrowDown:'ArrowDown'};\n"
+"const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyF:'f',Space:'space',ShiftLeft:'Shift',ShiftRight:'Shift',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',ArrowUp:'ArrowUp',ArrowDown:'ArrowDown'};\n"
 "window.addEventListener('keydown',e=>{\n"
 "  const k=keyMap[e.code];\n"
 "  if(!k||e.ctrlKey||e.metaKey||e.altKey)return;\n"
@@ -265,18 +255,18 @@ static const char *INDEX_HTML =
 "  if(![...pressed.values()].includes(k))ev({t:'key',k,d:0});\n"
 "});\n"
 "function releaseAll(){\n"
-"  for(const id of pointers){if(cv.hasPointerCapture(id))cv.releasePointerCapture(id);}\n"
-"  pointers.clear();pressed.clear();queue.length=0;ev({t:'cancel'});\n"
+"  const ids=[...pointers];pointers.clear();pressed.clear();queue.length=0;ev({t:'cancel'});\n"
+"  for(const id of ids){if(cv.hasPointerCapture(id))cv.releasePointerCapture(id);}\n"
 "}\n"
 "window.addEventListener('blur',releaseAll);\n"
+"window.addEventListener('resize',()=>{releaseAll();fit();});\n"
 "document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll();});\n"
 "</script>\n"
-"</body>\n"
-"</html>\n";
+"</body></html>\n";
 
 int main(int argc, char **argv) {
     int port = 8090;
-    int w = 400, h = 800;
+    int w = 960, h = 540;
     const char *assets = "game/assets";
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--port") && i + 1 < argc) port = atoi(argv[++i]);

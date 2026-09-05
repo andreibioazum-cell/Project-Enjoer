@@ -1,5 +1,5 @@
 /* Регрессии публичного API рендера; без Android, GPU и include .c. */
-#include "rbx/rbx_internal.h"
+#include "rbx/rbx_render_internal.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -26,9 +26,9 @@ static void check_padding(const Buffer *b) {
 
 static int channel(uint32_t p, int i) { return (p >> (i * 8)) & 255; }
 
-static void test_coin_fog(void) {
+static void test_color_fog(void) {
     Buffer b = make_buffer(320, 240, 7);
-    const float distances[] = {10, 27.9f, 28.12f, 28.2f, 40, 60, 80, 90, 100};
+    const float distances[] = {10, 27.9f, 28.12f, 28.2f, 40, 60, 64, 70, 76};
     const uint32_t colors[] = {0xFFFFD600u, 0xFFFF00FFu, 0xFFFFFFFFu, 0xFF0000FFu};
     const int fog[] = {110, 197, 247};
     for (int sc = 1; sc <= 3; sc++) {
@@ -40,7 +40,7 @@ static void test_coin_fog(void) {
                 rbx3d_box(0, 0, z, 4, 4, .12f, 0, colors[c]);
                 rbx3d_end();
                 uint32_t pixel = b.pixels[120 * b.stride + 160];
-                float t = fmaxf(0, fminf(1, (z - .12f - 28) / 62));
+                float t = fmaxf(0, fminf(1, (z - .12f - RBX_FOG_START) / (RBX_FOG_END - RBX_FOG_START)));
                 for (int ch = 0; ch < 3; ch++) {
                     int lit = (int)(((colors[c] >> (16 - ch * 8)) & 255) * .52f);
                     int expected = (int)(lit + (fog[ch] - lit) * t);
@@ -52,7 +52,7 @@ static void test_coin_fog(void) {
     }
     check_padding(&b);
     free(b.pixels);
-    puts("PASS coin fog: gold and bright colors stay bounded at all distances/scales");
+    puts("PASS fog: bright colors stay bounded at all distances/scales");
 }
 
 static void pattern(Buffer *b, int scale) {
@@ -193,10 +193,35 @@ static void test_clipping_and_camera(void) {
     puts("PASS near/frustum clipping, first-person pitch direction, invalid frame guard");
 }
 
+static void test_voxel_materials(void) {
+    for (int b = BLOCK_GRASS; b < BLOCK_COUNT; b++) for (int face = 0; face < 6; face++) {
+        const RbxMaterial *m = rbx_material(b, face);
+        CHECK(m);
+        for (int i = 0; i < 341; i++) CHECK(m->mip[i] < 16);
+        for (int i = 0; i < 16; i++) CHECK((m->palette[i] >> 24) == 255);
+    }
+    Buffer b = make_buffer(160, 120, 5);
+    CHECK(rbx3d_begin(&b, 1, .5f, .5f, -2, 0, 0, 72));
+    rbx3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
+    rbx3d_block_face(0, 0, 0, 3, BLOCK_STONE);
+    rbx3d_end();
+    uint32_t colors[16]; int count = 0;
+    for (int y = 48; y < 72; y++) for (int x = 68; x < 92; x++) {
+        uint32_t c = b.pixels[y * b.stride + x];
+        int found = 0;
+        for (int i = 0; i < count; i++) if (colors[i] == c) found = 1;
+        if (!found && count < 16) colors[count++] = c;
+    }
+    CHECK(count >= 3);
+    check_padding(&b); free(b.pixels);
+    puts("PASS voxel UV textures, bounded palettes and mip levels");
+}
+
 int main(void) {
-    test_coin_fog();
+    test_color_fog();
     test_upscale();
     test_perspective_depth();
     test_clipping_and_camera();
+    test_voxel_materials();
     return 0;
 }

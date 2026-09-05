@@ -36,6 +36,9 @@ add_library(ds_game SHARED
     sound/sound.c
     sound/sound_android.c
     rbx/rbx_render.c
+    rbx/rbx_shapes.c
+    rbx/rbx_material.c
+    rbx/rbx_terrain.c
     rbx/rbx_world.c
     rbx/rbx_player.c
     rbx/rbx_input.c

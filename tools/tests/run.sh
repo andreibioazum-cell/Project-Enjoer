@@ -12,9 +12,12 @@ else
     FLAGS="$FLAGS -O2"
 fi
 # Намеренное разбиение FLAGS на аргументы shell.
-$CC $FLAGS rbx/rbx_render.c tools/tests/render.c -lm -o "$DIR/render"
+$CC $FLAGS rbx/rbx_render.c rbx/rbx_shapes.c rbx/rbx_material.c tools/tests/render.c -lm -o "$DIR/render"
 "$DIR/render"
-$CC $FLAGS rbx/rbx_player.c rbx/rbx_input.c rbx/rbx_world.c \
+$CC $FLAGS rbx/rbx_player.c rbx/rbx_input.c rbx/rbx_world.c rbx/rbx_terrain.c \
     rbx/rbx_game.c rbx/rbx_scene.c rbx/rbx_hud.c tools/tests/controls.c \
     -lm -o "$DIR/controls"
 "$DIR/controls"
+
+$CC $FLAGS rbx/rbx_world.c rbx/rbx_terrain.c tools/tests/world.c -lm -o "$DIR/world"
+"$DIR/world"
