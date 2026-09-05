@@ -194,7 +194,3 @@ void android_main(struct android_app *app) {
     }
 }
 
-#include "graphics.c"
-#include "sound.c"
-#include "rbx/rbx_render.c"
-#include "rbx/rbx_game.c"

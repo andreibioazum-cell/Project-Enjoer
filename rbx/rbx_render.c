@@ -1,5 +1,5 @@
 /* Софтверный 3D: перспективные кубы с z-буфером, отсечением и туманом. */
-#include "rbx/rbx.h"
+#include "rbx_internal.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -209,9 +209,8 @@ static void draw_poly(V3 *w, int n, uint32_t packed, float shade) {
     if (n < 3) return;
     V3 view[8], clip[10];
     for (int i = 0; i < n; i++) {
-        if (!to_view(w[i].x, w[i].y, w[i].z, &view[i])) {
-            /* всё равно кладём — клип по near вырежет */
-        }
+        to_view(w[i].x, w[i].y, w[i].z, &view[i]);
+        /* всё равно кладём — клип по near вырежет */
     }
     int cn = clip_near(view, n, clip);
     if (cn < 3) return;
@@ -279,38 +278,55 @@ void rbx3d_box(float x, float y, float z, float hx, float hy, float hz, float ya
     }
 }
 
+/* Плавный (билинейный) апскейл внутреннего буфера в буфер кадра.
+ * Раньше пиксели просто дублировались блоками 2x2/3x3 — из-за этого вся
+ * картинка выглядела «квадратиками». Теперь, когда 3D рендерится в
+ * половинном разрешении (большие экраны), апскейл сглаженный. */
+static void upscale_smooth(void) {
+    int W = dst->width, H = dst->height, st = dst->stride;
+    float inv = 1.0f / (float)scale;
+    for (int y = 0; y < H; y++) {
+        float fy = ((float)y + 0.5f) * inv - 0.5f;
+        int y0 = (int)floorf(fy);
+        float ty = fy - (float)y0;
+        if (y0 < 0) { y0 = 0; ty = 0; }
+        int y1 = y0 + 1;
+        if (y0 >= rh) y0 = rh - 1;
+        if (y1 >= rh) y1 = rh - 1;
+        const uint32_t *row0 = pix + y0 * rw;
+        const uint32_t *row1 = pix + y1 * rw;
+        uint32_t *out = dst->pixels + y * st;
+        for (int x = 0; x < W; x++) {
+            float fx = ((float)x + 0.5f) * inv - 0.5f;
+            int x0 = (int)floorf(fx);
+            float tx = fx - (float)x0;
+            if (x0 < 0) { x0 = 0; tx = 0; }
+            int x1 = x0 + 1;
+            if (x0 >= rw) x0 = rw - 1;
+            if (x1 >= rw) x1 = rw - 1;
+            uint32_t c00 = row0[x0], c10 = row0[x1];
+            uint32_t c01 = row1[x0], c11 = row1[x1];
+            uint32_t r0 = c00 & 0xff, g0 = (c00 >> 8) & 0xff, b0 = (c00 >> 16) & 0xff;
+            uint32_t r1 = c10 & 0xff, g1 = (c10 >> 8) & 0xff, b1 = (c10 >> 16) & 0xff;
+            uint32_t r2 = c01 & 0xff, g2 = (c01 >> 8) & 0xff, b2 = (c01 >> 16) & 0xff;
+            uint32_t r3 = c11 & 0xff, g3 = (c11 >> 8) & 0xff, b3 = (c11 >> 16) & 0xff;
+            float top_r = r0 + (r1 - r0) * tx, top_g = g0 + (g1 - g0) * tx, top_b = b0 + (b1 - b0) * tx;
+            float bot_r = r2 + (r3 - r2) * tx, bot_g = g2 + (g3 - g2) * tx, bot_b = b2 + (b3 - b2) * tx;
+            uint32_t r = (uint32_t)(top_r + (bot_r - top_r) * ty + 0.5f);
+            uint32_t g = (uint32_t)(top_g + (bot_g - top_g) * ty + 0.5f);
+            uint32_t bl = (uint32_t)(top_b + (bot_b - top_b) * ty + 0.5f);
+            out[x] = r | (g << 8) | (bl << 16) | 0xff000000u;
+        }
+    }
+}
+
 void rbx3d_end(void) {
     if (!dst || !pix) return;
-    int W = dst->width, H = dst->height, st = dst->stride;
+    int H = dst->height, st = dst->stride;
     if (scale == 1) {
         for (int y = 0; y < rh && y < H; y++)
             memcpy(dst->pixels + y * st, pix + y * rw, (size_t)rw * 4);
         return;
     }
-    for (int y = 0; y < rh; y++) {
-        int dy = y * scale;
-        if (dy >= H) break;
-        uint32_t *src = pix + y * rw;
-        for (int srow = 0; srow < scale; srow++) {
-            int yy = dy + srow;
-            if (yy >= H) break;
-            uint32_t *out = dst->pixels + yy * st;
-            if (scale == 2) {
-                int x = 0, dw = rw * 2;
-                if (dw > W) dw = W;
-                for (int i = 0; i < rw && x + 1 < dw; i++, x += 2) {
-                    uint32_t c = src[i];
-                    out[x] = c;
-                    out[x + 1] = c;
-                }
-                if (x < dw && (x / 2) < rw) out[x] = src[x / 2];
-            } else {
-                for (int x = 0; x < rw; x++) {
-                    uint32_t c = src[x];
-                    int dx = x * scale;
-                    for (int k = 0; k < scale && dx + k < W; k++) out[dx + k] = c;
-                }
-            }
-        }
-    }
+    upscale_smooth();
 }

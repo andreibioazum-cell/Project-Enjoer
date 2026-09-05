@@ -46,7 +46,7 @@ def stage_assets(source: Path, destination: Path) -> list[Path]:
 def stage_sounds(source: Path, destination: Path) -> list[Path]:
     """Copy WAVs from *source* (game/sounds) into *destination* (assets/sounds).
 
-    The game opens sounds by name "sounds/<file>" (sound.c), so the folder is
+    The game opens sounds by name "sounds/<file>" (sound/sound.c), so the folder is
     staged next to the regular assets inside the APK. An absent folder is
     fine: the game just stays silent.
     """

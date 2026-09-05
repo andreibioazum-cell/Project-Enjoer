@@ -161,7 +161,7 @@ static const char *INDEX_HTML =
 "h1 b{color:#e2231a;}"
 ".phone{border-radius:28px;overflow:hidden;box-shadow:0 24px 80px #0009,"
 "0 0 0 1px #ffffff14;height:min(92vh,900px);aspect-ratio:var(--ar);background:#000;}"
-"canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab;image-rendering:pixelated;}"
+"canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab;}"
 ".hint{font-size:12px;color:#90a4ae;text-align:center;max-width:560px;line-height:1.5;}"
 "kbd{background:#1c2733;border:1px solid #2c3947;border-radius:5px;padding:1px 6px;font-size:11px;}"
 "</style></head><body><div class=\"wrap\">"
