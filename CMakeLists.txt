@@ -3,7 +3,14 @@ project(Enjoer C)
 set(CMAKE_C_STANDARD 99)
 
 # Единственная целевая платформа — Android: библиотека libds_game.so, которую
-# забирает APK из game/AndroidManifest.xml. Игра — 3D-плейс на чистом C (rbx/*).
+# забирает APK из game/AndroidManifest.xml. Игра — 3D-плейс на чистом C.
+#
+# Структура исходников (каждый файл — отдельная единица компиляции):
+#   main.c          вход под Android (native activity)
+#   core/           рантайм: консоль, ошибки, строки, массивы, клавиатура
+#   graphics/       2D-рендер: примитивы, текстуры, текст (+ ttf/)
+#   sound/          звук: микшер и вывод через AudioTrack
+#   rbx/            3D-плейс: рендер, мир, игрок, ввод, сцена, HUD
 if(NOT ANDROID)
     message(FATAL_ERROR
         "Enjoer собирается только под Android. Запусти CMake через "
@@ -15,7 +22,26 @@ endif()
 
 add_library(ds_game SHARED
     main.c
-    runtime.c
+    core/log.c
+    core/state.c
+    core/strings.c
+    core/arrays.c
+    core/keyboard_android.c
+    graphics/gfx_frame.c
+    graphics/gfx_draw.c
+    graphics/gfx_texture.c
+    graphics/gfx_text.c
+    graphics/ttf/ttf_outline.c
+    graphics/ttf/ttf_font.c
+    sound/sound.c
+    sound/sound_android.c
+    rbx/rbx_render.c
+    rbx/rbx_world.c
+    rbx/rbx_player.c
+    rbx/rbx_input.c
+    rbx/rbx_scene.c
+    rbx/rbx_hud.c
+    rbx/rbx_game.c
     ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
 target_include_directories(ds_game PRIVATE
     .
