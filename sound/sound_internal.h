@@ -5,7 +5,7 @@
 #ifndef SOUND_INTERNAL_H
 #define SOUND_INTERNAL_H
 
-#include "runtime.h"
+#include "engine.h"
 
 #define SND_RATE 44100
 

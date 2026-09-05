@@ -17,7 +17,7 @@
             android:name="com.cb4.GameActivity"
             android:label="Enjoer"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode"
-            android:screenOrientation="portrait"
+            android:screenOrientation="sensorLandscape"
             android:windowSoftInputMode="adjustResize|stateHidden"
             android:exported="true">
             <meta-data android:name="android.app.lib_name" android:value="ds_game" />

@@ -1,5 +1,5 @@
 /* graphics/gfx_text.c — текст: загрузка шрифта, команды, метрики,
- * растеризация глифов и экран ошибки с консолью.
+ * растеризация глифов и экран ошибки.
  *
  * Антипикселизация: глифы запекаются в атлас крупнее (48px вместо 32)
  * и при отрисовке сэмплируются билинейно, а не «ближайшим пикселем» —
@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static DSFont *font;
+static Font *font;
 static int font_tried;
 
 /* Высота, в которой запекается шрифтовой атлас. Раньше было 32 — при
@@ -23,21 +23,19 @@ int gfx_font_ensure(void) {
     if (font_tried) return 0;
     font_tried = 1;
     uint8_t *data = NULL; size_t sz = 0;
-    if (!gfx_open_asset("fonts/ChillRoundGothic_Heavy.ttf", &data, &sz)) {
-        ds_log_err("font not loaded: fonts/ChillRoundGothic_Heavy.ttf not found");
+    if (!asset_read(gfx_assets(), "fonts/ChillRoundGothic_Heavy.ttf", &data, &sz)) {
+        app_log_error("font not loaded: fonts/ChillRoundGothic_Heavy.ttf not found");
         return 0;
     }
-    font = ds_font_create(data, sz, GFX_FONT_PIXEL_HEIGHT);
+    font = font_create(data, sz, GFX_FONT_PIXEL_HEIGHT);
     free(data);
-    if (!font) { ds_log_err("font not loaded: could not parse TrueType font"); return 0; }
-    ds_log("font loaded: fonts/ChillRoundGothic_Heavy.ttf");
+    if (!font) { app_log_error("font not loaded: could not parse TrueType font"); return 0; }
+    app_log("font loaded: fonts/ChillRoundGothic_Heavy.ttf");
     return 1;
 }
 
-DSFont *gfx_font_get(void) { return font; }
-
 void gfx_font_release(void) {
-    ds_font_destroy(font); font = NULL; font_tried = 0;
+    font_destroy(font); font = NULL; font_tried = 0;
 }
 
 int gfx_utf8_decode(const char **c) {
@@ -52,14 +50,6 @@ int gfx_utf8_decode(const char **c) {
     *c = (const char *)p; return r;
 }
 
-static char *strdup_safe(const char *s) {
-    if (!s) { char *o = (char *)malloc(1); if (o) o[0] = '\0'; return o; }
-    size_t n = strlen(s) + 1;
-    char *o = (char *)malloc(n);
-    if (o) memcpy(o, s, n);
-    return o;
-}
-
 /* Билинейное сэмплирование альфа-атласа с ограничением рамкой глифа,
  * чтобы соседние глифы не «подтекали» на края. */
 static uint8_t atlas_sample(const uint8_t *al, int aw, int ah, float x, float y,
@@ -70,7 +60,8 @@ static uint8_t atlas_sample(const uint8_t *al, int aw, int ah, float x, float y,
     if (y > maxy) y = maxy;
     int x0 = (int)floorf(x), y0 = (int)floorf(y);
     int x1 = x0 + 1, y1 = y0 + 1;
-    if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
     if (x1 >= aw) x1 = aw - 1;
     if (y1 >= ah) y1 = ah - 1;
     float fx = x - (float)x0, fy = y - (float)y0;
@@ -79,34 +70,37 @@ static uint8_t atlas_sample(const uint8_t *al, int aw, int ah, float x, float y,
     float top = a00 + (a10 - a00) * fx;
     float bot = a01 + (a11 - a01) * fx;
     float v = top + (bot - top) * fy;
-    if (v < 0) v = 0; if (v > 255) v = 255;
+    if (v < 0) v = 0;
+    if (v > 255) v = 255;
     return (uint8_t)(v + 0.5f);
 }
 
 void gfx_render_text(Buffer *b, const char *s, float x, float y, uint32_t c, float sc) {
     if (!b || !font || !s || !isfinite(x+y+sc) || sc <= 0) return;
-    int aw = ds_font_aw(font), ah = ds_font_ah(font);
-    const uint8_t *al = ds_font_alpha(font);
-    float asc = ds_font_ascent(font), lb = 0;
-    const DSFontGlyph *ref = ds_font_glyph(font, 'S');
+    int aw = font_aw(font), ah = font_ah(font);
+    const uint8_t *al = font_alpha(font);
+    float asc = font_ascent(font), lb = 0;
+    const FontGlyph *ref = font_glyph(font, 'S');
     if (ref) { asc = ref->bearing_top; lb = ref->bearing_x; }
     float pen = x - lb*sc, base = y + asc*sc;
     float inv = 1.0f / sc;
     for (const char *cur = s; *cur;) {
         int cp = gfx_utf8_decode(&cur);
-        if (cp == '\n') { pen = x - lb*sc; base += ds_font_lineh(font)*sc; continue; }
-        const DSFontGlyph *g = ds_font_glyph(font, (uint32_t)cp);
+        if (cp == '\n') { pen = x - lb*sc; base += font_lineh(font)*sc; continue; }
+        const FontGlyph *g = font_glyph(font, (uint32_t)cp);
         if (!g || g->width <= 0 || g->height <= 0) { if (g) pen += g->advance * sc; continue; }
         float sx0 = g->u0*aw, sy0 = g->v0*ah;
         float sx1 = g->u1*aw, sy1 = g->v1*ah;
         int dw = (int)ceilf(g->width*sc), dh = (int)ceilf(g->height*sc);
         int dx = (int)floorf(pen + g->bearing_x*sc), dy = (int)floorf(base - g->bearing_top*sc);
         for (int yy = 0; yy < dh; yy++) {
-            int scr_y = dy + yy; if (scr_y < 0 || scr_y >= b->height) continue;
+            int scr_y = dy + yy;
+            if (scr_y < 0 || scr_y >= b->height) continue;
             /* центр экранного пикселя в координатах атласа */
             float fy = sy0 + ((float)yy + 0.5f) * inv - 0.5f;
             for (int xx = 0; xx < dw; xx++) {
-                int scr_x = dx + xx; if (scr_x < 0 || scr_x >= b->width) continue;
+                int scr_x = dx + xx;
+                if (scr_x < 0 || scr_x >= b->width) continue;
                 float fx = sx0 + ((float)xx + 0.5f) * inv - 0.5f;
                 uint8_t cov = atlas_sample(al, aw, ah, fx, fy, sx0, sy0, sx1 - 1.0f, sy1 - 1.0f);
                 if (cov) {
@@ -119,31 +113,20 @@ void gfx_render_text(Buffer *b, const char *s, float x, float y, uint32_t c, flo
     }
 }
 
-/* ── команды текста ──────────────────────────────────────────────────── */
-/* Раньше игра силой красила весь текст в белый. Мессенджеру нужны обычные
- * цвета (тёмный текст на светлых пузырях, серые подписи, зелёные статусы),
- * поэтому теперь цвет передаётся в рендер как есть. */
-void text_scaled(const char *s, float x, float y, uint32_t c, float sc) {
-    if (!gfx_frame_is_open() || !s || !gfx_font_ensure()) return;
-    GfxCmd *p = gfx_cmd_push(GFX_CMD_TEXT); if (!p) return;
-    /* Network and script strings can come from reused buffers; renderer commands
-     * must own text until the frame is flushed or cancelled. */
-    p->v.tt.s = strdup_safe(s);
-    if (!p->v.tt.s) { ds_runtime_error("out of memory copying renderer text"); return; }
-    p->v.tt.x=x; p->v.tt.y=y; p->v.tt.sc=sc; p->v.tt.c=gfx_pack(c);
+/* HUD strings are consumed immediately; no per-frame copies or queue. */
+void text_scaled(const char *s,float x,float y,uint32_t color,float scale) {
+    if (!s || !gfx_current_buffer() || !gfx_font_ensure()) return;
+    gfx_render_text(gfx_current_buffer(),s,x,y,gfx_pack(color),scale);
 }
 
-void text(const char *s, float x, float y, uint32_t c) { text_scaled(s, x, y, c, 1.0f); }
-
-/* ── метрики ─────────────────────────────────────────────────────────── */
-int text_ink_width(const char *s) {
+int text_width(const char *s) {
     if (!s || !gfx_font_ensure()) return 0;
-    const DSFontGlyph *ref = ds_font_glyph(font, 'S');
+    const FontGlyph *ref = font_glyph(font, 'S');
     float pen = -(ref ? ref->bearing_x : 0);
     int first = 1; float minL = 0, maxR = 0;
     for (const char *c = s; *c;) {
         int cp = gfx_utf8_decode(&c);
-        const DSFontGlyph *g = ds_font_glyph(font, (uint32_t)cp);
+        const FontGlyph *g = font_glyph(font, (uint32_t)cp);
         if (!g) continue;
         float dl = pen + g->bearing_x, dr = dl + g->width;
         if (first || dl < minL) minL = dl;
@@ -153,78 +136,12 @@ int text_ink_width(const char *s) {
     return first ? 0 : (int)(maxR - minL + 0.5f);
 }
 
-int text_ink_height(const char *s) {
-    if (!s || !gfx_font_ensure()) return 0;
-    const DSFontGlyph *ref = ds_font_glyph(font, 'S');
-    float base = ref ? ref->bearing_top : 0;
-    int first = 1; float minT = 0, maxB = 0;
-    for (const char *c = s; *c;) {
-        int cp = gfx_utf8_decode(&c);
-        const DSFontGlyph *g = ds_font_glyph(font, (uint32_t)cp);
-        if (!g) continue;
-        float dt = base - g->bearing_top, db = dt + g->height;
-        /* Нижние выносные элементы ('р','у','д','g','y' и т.п.) не должны
-         * раздувать высоту ink-бокса: иначе строка с ними центрируется выше
-         * строк без них, и текст «уезжает вверх» на часть выносного элемента.
-         * Обрезаем низ по базовой линии — она ровно в dt == base. */
-        if (db > base) db = base;
-        if (first || dt < minT) minT = dt;
-        if (first || db > maxB) maxB = db;
-        first = 0;
-    }
-    return first ? 0 : (int)(maxB - minT + 0.5f);
-}
-
-int text_width(const char *s) { return text_ink_width(s); }
-int text_height(const char *s) { return text_ink_height(s); }
-
-/* Шаг строки многострочного текста (тот самый, что использует '\n' внутри
- * gfx_render_text). Мессенджеру нужен для точного расчёта высоты пузырей. */
-float text_line_height(void) {
-    if (!gfx_font_ensure()) return 24.0f;
-    return ds_font_lineh(font);
-}
-
-int text_ink_top(const char *s) {
-    if (!s || !gfx_font_ensure()) return 0;
-    const DSFontGlyph *ref = ds_font_glyph(font, 'S');
-    float base = ref ? ref->bearing_top : 0;
-    int first = 1; float minT = 0;
-    for (const char *c = s; *c;) {
-        int cp = gfx_utf8_decode(&c);
-        const DSFontGlyph *g = ds_font_glyph(font, (uint32_t)cp);
-        if (!g) continue;
-        float dt = base - g->bearing_top;
-        if (first || dt < minT) minT = dt;
-        first = 0;
-    }
-    return first ? 0 : (int)floorf(minT);
-}
-
-/* ── экран ошибки рантайма ───────────────────────────────────────────── */
-void ds_graphics_error_screen(const char *m) {
-    Buffer *b = gfx_current_buffer();
+/* Recoverable engine error, not an interpreter console. */
+void gfx_error_screen(const char *message) {
+    Buffer *b=gfx_current_buffer();
     if (!b) return;
-    gfx_clear(b, gfx_pack(0xff1c0b10));
+    gfx_clear(b,gfx_pack(0xFF201A1Au));
     if (!font) return;
-    int y = 12;
-    gfx_render_text(b, "=== DIMSCRIPT ERROR ===", 16, y, gfx_pack(0xffffffff), 0.7f);
-    y += 30;
-    if (m && *m) {
-        gfx_render_text(b, m, 16, y, gfx_pack(0xffffb0b0), 0.6f);
-        y += 28;
-    }
-    y += 4;
-    gfx_render_text(b, "--- console (last lines) ---", 16, y, gfx_pack(0xff9aa0b0), 0.55f);
-    y += 24;
-    int n = console_count();
-    int start = n > 16 ? n - 16 : 0;
-    for (int i = start; i < n; i++) {
-        const char *line = console_line(i);
-        if (!line || !*line) { y += 19; continue; }
-        uint32_t col = console_type(i) ? gfx_pack(0xffff8a80) : gfx_pack(0xffc8d0dc);
-        gfx_render_text(b, line, 16, y, col, 0.55f);
-        y += 19;
-        if (y > b->height - 8) break;
-    }
+    gfx_render_text(b,"Enjoer — ошибка",16,16,gfx_pack(0xFFFFFFFFu),.7f);
+    if (message) gfx_render_text(b,message,16,56,gfx_pack(0xFFFFB0B0u),.45f);
 }

@@ -1,74 +1,47 @@
-/* core/state.c — глобальное состояние кадра и обработка ошибок рантайма.
- * Ошибка скрипта не роняет приложение: вместо падения — экран с текстом
- * и консолью (см. graphics/gfx_text.c, ds_graphics_error_screen). */
-#include "runtime.h"
+/* Platform state and recoverable C-engine failures. No interpreter. */
+#define _POSIX_C_SOURCE 200809L
+#include "engine.h"
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <time.h>
 
-#define DS_ERROR_MESSAGE_SIZE 1024
+int screen_w, screen_h;
+double dt;
+static jmp_buf error_jump;
+static int handler_active, failed;
+static char last_error[768], storage[512];
 
-/* Глобальное состояние кадра (объявлено в runtime.h). */
-Joy joy = {0};
-int screen_w = 0;
-int screen_h = 0;
-double dt = 0.0;
-int mouse_clicked = 0;
-double ds_mouse_x = 0.0;
-double ds_mouse_y = 0.0;
-
-static jmp_buf ds_error_jump;
-static int ds_error_handler_active = 0;
-static int ds_has_error = 0;
-static int ds_restart_requested = 0;
-static char ds_last_error[DS_ERROR_MESSAGE_SIZE] = {0};
-
-void ds_console_add(const char *line, int is_error); /* core/log.c */
-
-void ds_runtime_error(const char *format, ...) {
-    char tmp[512];
-    va_list args, copy;
-    va_start(args, format);
-    va_copy(copy, args);
-    vsnprintf(ds_last_error, sizeof(ds_last_error), format, copy);
-    va_end(copy);
-    __android_log_vprint(ANDROID_LOG_ERROR, "DimScript", format, args);
+void app_fail(const char *format, ...) {
+    va_list args;
+    va_start(args,format);
+    vsnprintf(last_error,sizeof(last_error),format,args);
     va_end(args);
-    va_start(args, format);
-    vsnprintf(tmp, sizeof(tmp), format, args);
-    va_end(args);
-    ds_console_add(tmp, 1);
-    ds_has_error = 1;
-    if (ds_error_handler_active) longjmp(ds_error_jump, 1);
+    app_log_error("%s",last_error);
+    failed=1;
+    if (handler_active) longjmp(error_jump,1);
 }
-
-int ds_call_protected(DSProtectedFunction function, void *userdata, const char *label) {
-    int jumped;
-    if (!function) {
-        if (label && *label) ds_runtime_error("cannot call an empty script hook '%s'", label);
-        else ds_runtime_error("cannot call an empty script hook");
-        return 0;
-    }
-    if (ds_error_handler_active) {
-        function(userdata);
-        return !ds_has_error;
-    }
-    ds_error_handler_active = 1;
-    jumped = setjmp(ds_error_jump);
-    if (jumped == 0) {
-        function(userdata);
-        ds_error_handler_active = 0;
-        return !ds_has_error;
-    }
-    ds_error_handler_active = 0;
-    if (label && *label && ds_last_error[0] == '\0') {
-        snprintf(ds_last_error, sizeof(ds_last_error), "script hook '%s' failed", label);
-    }
-    return 0;
+int app_call(AppCallback callback, void *arg, const char *label) {
+    if (!callback) { app_fail("Missing engine callback: %s",label ? label : "unknown"); return 0; }
+    if (handler_active) { callback(arg); return !failed; }
+    handler_active=1;
+    if (setjmp(error_jump)==0) callback(arg);
+    handler_active=0;
+    return !failed;
 }
-
-const char *ds_runtime_error_message(void) { return ds_last_error[0] ? ds_last_error : "unknown DimScript runtime error"; }
-int ds_script_has_error(void) { return ds_has_error; }
-void ds_clear_runtime_error(void) { ds_has_error = 0; ds_last_error[0] = '\0'; }
-void ds_request_script_restart(void) { ds_restart_requested = 1; }
-int ds_script_restart_requested(void) { return ds_restart_requested; }
-void ds_clear_script_restart(void) { ds_restart_requested = 0; }
+const char *app_error(void) { return last_error[0] ? last_error : "Unknown engine error"; }
+int app_failed(void) { return failed; }
+void app_clear_error(void) { failed=0; last_error[0]=0; }
+double app_now(void) {
+    struct timespec t;
+    if (clock_gettime(CLOCK_MONOTONIC,&t)!=0) return 0;
+    return t.tv_sec+t.tv_nsec*1e-9;
+}
+void app_set_storage(const char *directory) {
+    snprintf(storage,sizeof(storage),"%s",directory ? directory : "");
+}
+int app_save_path(char *out,size_t size,const char *name) {
+    if (!storage[0] || !out || !size || !name || strchr(name,'/') || strchr(name,'\\')) return 0;
+    int n=snprintf(out,size,"%s/%s",storage,name);
+    return n>0 && (size_t)n<size;
+}

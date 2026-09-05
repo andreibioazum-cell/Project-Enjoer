@@ -1,63 +1,49 @@
-/* rbx/rbx_hud.c — 2D-интерфейс поверх 3D: верхняя панель, джойстик,
- * кнопка прыжка, имена над головами, плашка «зашли». */
+/* Native-resolution HUD over the adaptive 3D buffer. */
 #include "rbx_internal.h"
 #include <stdio.h>
-
-static void text_c(const char *s, float cx, float cy, float sc, uint32_t col) {
-    int w = text_width(s);
-    text_scaled(s, cx - (w * sc) * 0.5f, cy, col, sc);
+static void centered(const char *s,float x,float y,float scale) {
+    text_scaled(s,x-text_width(s)*scale*.5f,y,0xff000000u,scale);
 }
-
 void rbx_hud_draw(void) {
-    float W = (float)screen_w;
-    float u = W / 420.0f;
-    if (u < 0.7f) u = 0.7f;
-
-    /* верхняя панель как у Roblox */
-    rect(0, 0, W, 50.0f * u, 0xE8232327u);
-    roundrect(10 * u, 9 * u, 32 * u, 32 * u, 7 * u, 0xFFE2231Au);
-    roundrect(17 * u, 16 * u, 18 * u, 18 * u, 4 * u, 0xFFFFFFFFu);
-    text_scaled("Obby Park", 50 * u, 14 * u, 0xFFFFFFFFu, 0.62f * u);
-
-    char buf[40];
-    snprintf(buf, sizeof(buf), "монеты  %d/%d", rbx_world_caught(), rbx_world_coin_count());
-    int tw = text_width(buf);
-    text_scaled(buf, W - tw * 0.55f * u - 14 * u, 16 * u, 0xFFFFF59Du, 0.55f * u);
-
-    /* джойстик */
-    float joy_cx, joy_cy, joy_r, jx, jy;
-    rbx_input_joy_geom(&joy_cx, &joy_cy, &joy_r);
-    rbx_input_joy(&jx, &jy);
-    ring(joy_cx, joy_cy, joy_r, 4.0f, 0x66FFFFFFu);
-    circle(joy_cx, joy_cy, joy_r, 0x33000000u);
-    circle(joy_cx + jx * (joy_r * 0.48f), joy_cy + jy * (joy_r * 0.48f), joy_r * 0.38f, 0xCCFFFFFFu);
-
-    /* прыжок */
-    float jmp_cx, jmp_cy, jmp_r;
-    rbx_input_jump_geom(&jmp_cx, &jmp_cy, &jmp_r);
-    circle(jmp_cx, jmp_cy, jmp_r, 0xCC43A047u);
-    ring(jmp_cx, jmp_cy, jmp_r, 3.0f, 0xAAFFFFFFu);
-    text_c("прыжок", jmp_cx, jmp_cy - 8 * u, 0.42f * u, 0xFFFFFFFFu);
-
-    /* имена над головами */
-    float px, py, pz, sx, sy;
-    rbx_player_pos(&px, &py, &pz, NULL, NULL);
-    if (rbx3d_project(px, py + 5.4f, pz, &sx, &sy))
-        text_c("Ты", sx, sy - 10, 0.45f * u, 0xFFFFFFFFu);
-    static const char *names[MAX_BOT] = { "Mila", "Rob", "Alex" };
-    const RbxBot *bots = rbx_world_bots();
-    for (int i = 0; i < MAX_BOT; i++) {
-        if (rbx3d_project(bots[i].x, bots[i].y + 5.4f, bots[i].z, &sx, &sy))
-            text_c(names[i], sx, sy - 8, 0.40f * u, 0xFFE0E0E0u);
+    float u=fminf(screen_w/960.0f,screen_h/540.0f);
+    if(u<=0)return;
+    float cx,cy,r,jx,jy;rbx_input_joy_geom(&cx,&cy,&r);rbx_input_joy(&jx,&jy);
+    ring(cx,cy,r,7*u,0xff000000u);
+    circle(cx+jx*r*.56f,cy+jy*r*.56f,r*.38f,0xff000000u);
+    float x,y,w,h;rbx_input_flight_geom(&x,&y,&w,&h);
+    roundrect(x,y,w,h,7*u,0xffffffffu);centered("Полёт",x+w*.44f,y+9*u,.48f*u);
+    if (rbx_player_flying()) {
+        line(x+w-28*u,y+23*u,x+w-23*u,y+28*u,3*u,0xff000000u);
+        line(x+w-23*u,y+28*u,x+w-14*u,y+15*u,3*u,0xff000000u);
+    } else ring(x+w-21*u,y+h*.5f,6*u,2*u,0xff000000u);
+    char label[32];
+    if(rbx_fps()<0) snprintf(label,sizeof(label),"FPS —");
+    else snprintf(label,sizeof(label),"FPS %.0f",rbx_fps());
+    float fs=.44f*u,fx=screen_w-18*u-text_width(label)*fs;
+    text_scaled(label,fx+u,22*u,0xaa000000u,fs);
+    text_scaled(label,fx,21*u,0xffffffffu,fs);
+    if (!rbx_player_flying()) {
+        rbx_input_jump_geom(&cx,&cy,&r);circle(cx,cy,r,0xffffffffu);
+        line(cx,cy-22*u,cx,cy+1*u,4*u,0xff000000u);
+        line(cx,cy-22*u,cx-10*u,cy-12*u,4*u,0xff000000u);
+        line(cx,cy-22*u,cx+10*u,cy-12*u,4*u,0xff000000u);
+        centered("Прыжок",cx,cy+9*u,.28f*u);
     }
-
-    /* короткая плашка «зашли» — мир уже 3D под ней */
-    if (rbx_join_t < 1.6) {
-        float a = rbx_join_t < 0.9 ? 1.0f : (float)((1.6 - rbx_join_t) / 0.7);
-        if (a < 0) a = 0;
-        uint32_t al = (uint32_t)(a * 200 + 20);
-        float bw = 260 * u, bh = 54 * u;
-        roundrect(W * 0.5f - bw * 0.5f, 64 * u, bw, bh, 12 * u, (al << 24) | 0x001A1A1Eu);
-        text_c("Зашли в Obby Park", W * 0.5f, 78 * u, 0.55f * u, 0xFFFFFFFFu);
+    for (int a=0;a<ACTION_COUNT;a++) {
+        rbx_input_action_geom(a,&cx,&cy,&r);circle(cx,cy,r,0xffffffffu);
+        line(cx-9*u,cy-6*u,cx+9*u,cy-6*u,3*u,0xff000000u);
+        if(a==ACTION_PLACE)line(cx,cy-15*u,cx,cy+3*u,3*u,0xff000000u);
+        centered(a==ACTION_BREAK ? "Ломать" : "Ставить",cx,cy+9*u,.23f*u);
     }
+    for (int i=0;i<HOTBAR_SLOTS;i++) {
+        float size;rbx_input_slot_geom(i,&x,&y,&size);
+        if(i==rbx_selected())roundrect(x-2*u,y-2*u,size+4*u,size+4*u,5*u,0xffffffffu);
+        roundrect(x,y,size,size,3*u,0xb3222929u);
+        image_draw(rbx_material_icon(rbx_slot_block(i)),x+3*u,y+3*u,size-6*u,size-6*u);
+        char number[2]={(char)('1'+i),0};
+        text_scaled(number,x+16*u,y+40*u,0xffffffffu,.20f*u);
+    }
+    float mx=screen_w*.5f,my=screen_h*.5f;
+    rect(mx-6*u,my-u,12*u,2*u,0xffffffffu);
+    rect(mx-u,my-6*u,2*u,12*u,0xffffffffu);
 }

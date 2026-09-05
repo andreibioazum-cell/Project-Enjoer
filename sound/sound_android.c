@@ -40,12 +40,12 @@ static void *snd_at_thread_fn(void *arg) {
     (void)arg;
     int attached = 0;
     JNIEnv *env = snd_jni_env(&attached);
-    if (!env) { ds_log_err("audio: thread cannot attach to JVM"); return NULL; }
+    if (!env) { app_log_error("audio: thread cannot attach to JVM"); return NULL; }
     while (snd_at_run) {
         /* write() в MODE_STREAM блокируется, когда буфер устройства полон, —
          * это и задаёт темп потоку, без sleep. */
         jint written = (*env)->CallIntMethod(env, snd_at_track, snd_at_write, snd_at_buf, 0, (jint)(AT_FRAMES * 2));
-        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); ds_log_err("audio: AudioTrack.write failed"); break; }
+        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); app_log_error("audio: AudioTrack.write failed"); break; }
         if (written < 0) break;
         /* Буфер уезжает в систему целиком, поэтому микшируем ПОСЛЕ write,
          * а первый блок заполнен заранее (в snd_backend_start). */
@@ -60,15 +60,15 @@ static void *snd_at_thread_fn(void *arg) {
 
 int snd_backend_start(void) {
     if (snd_at_track) return 1;
-    if (!snd_vm) { ds_log_err("audio: no JavaVM (ds_sound_set_java_vm not called)"); return 0; }
+    if (!snd_vm) { app_log_error("audio: no JavaVM (audio_set_java_vm not called)"); return 0; }
     int attached = 0;
     JNIEnv *env = snd_jni_env(&attached);
-    if (!env) { ds_log_err("audio: cannot attach to JVM"); return 0; }
+    if (!env) { app_log_error("audio: cannot attach to JVM"); return 0; }
     jobject track = NULL;
     do {
         if ((*env)->PushLocalFrame(env, 16) != 0) break;
         jclass atc = (*env)->FindClass(env, "android/media/AudioTrack");
-        if (!atc || (*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); ds_log_err("audio: AudioTrack class not found"); break; }
+        if (!atc || (*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); app_log_error("audio: AudioTrack class not found"); break; }
         /* STREAM_MUSIC=3, CHANNEL_OUT_STEREO=12, ENCODING_PCM_16BIT=2, MODE_STREAM=1 */
         jint minbuf = (*env)->CallStaticIntMethod(env, atc,
             (*env)->GetStaticMethodID(env, atc, "getMinBufferSize", "(III)I"),
@@ -79,15 +79,15 @@ int snd_backend_start(void) {
         track = (*env)->NewObject(env, atc,
             (*env)->GetMethodID(env, atc, "<init>", "(IIIIII)V"),
             (jint)3, (jint)SND_RATE, (jint)12, (jint)2, (jint)minbuf * AT_REFILL, (jint)1);
-        if (!track || (*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); ds_log_err("audio: AudioTrack create failed"); track = NULL; break; }
+        if (!track || (*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); app_log_error("audio: AudioTrack create failed"); track = NULL; break; }
         (*env)->CallVoidMethod(env, track, (*env)->GetMethodID(env, atc, "play", "()V"));
-        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); ds_log_err("audio: AudioTrack.play failed"); track = NULL; break; }
+        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); app_log_error("audio: AudioTrack.play failed"); track = NULL; break; }
         snd_at_write = (*env)->GetMethodID(env, atc, "write", "([SII)I");
         if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); track = NULL; break; }
         snd_at_track = (*env)->NewGlobalRef(env, track);
         snd_at_buf = (*env)->NewGlobalRef(env, (*env)->NewShortArray(env, AT_FRAMES * 2));
         if (!snd_at_track || !snd_at_buf) {
-            ds_log_err("audio: global refs failed");
+            app_log_error("audio: global refs failed");
             if (snd_at_track) { (*env)->DeleteGlobalRef(env, snd_at_track); snd_at_track = NULL; }
             if (snd_at_buf) { (*env)->DeleteGlobalRef(env, snd_at_buf); snd_at_buf = NULL; }
             snd_at_write = NULL;
@@ -98,13 +98,13 @@ int snd_backend_start(void) {
         (*env)->SetShortArrayRegion(env, snd_at_buf, 0, (jsize)(AT_FRAMES * 2), snd_at_mixbuf);
         snd_at_run = 1;
         if (pthread_create(&snd_at_thread, NULL, snd_at_thread_fn, NULL) != 0) {
-            ds_log_err("audio: cannot start audio thread");
+            app_log_error("audio: cannot start audio thread");
             snd_at_run = 0;
             (*env)->DeleteGlobalRef(env, snd_at_track); snd_at_track = NULL;
             (*env)->DeleteGlobalRef(env, snd_at_buf); snd_at_buf = NULL;
         } else {
             snd_at_thread_ok = 1;
-            ds_log("audio: AudioTrack started (minbuf %d bytes)", (int)minbuf);
+            app_log("audio: AudioTrack started (minbuf %d bytes)", (int)minbuf);
         }
     } while (0);
     if (track) (*env)->DeleteLocalRef(env, track);

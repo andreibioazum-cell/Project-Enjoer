@@ -75,25 +75,35 @@ void gfx_render_roundrect(Buffer *b, float x, float y, float w, float h, float r
     for (int row = t0; row < t1; row++) {
         float yi = (float)row + 0.5f - y, ins = 0;
         if (rad > 0) {
-            if (yi < rad) { float d = rad-yi; if (d > rad) d = rad; ins = rad - sqrtf(rad*rad - d*d); }
-            else if (yi > h - rad) { float d = yi-(h-rad); if (d > rad) d = rad; ins = rad - sqrtf(rad*rad - d*d); }
+            if (yi < rad) {
+                float d = fminf(rad,rad-yi);
+                ins = rad - sqrtf(rad*rad - d*d);
+            } else if (yi > h-rad) {
+                float d = fminf(rad,yi-(h-rad));
+                ins = rad - sqrtf(rad*rad - d*d);
+            }
         }
-        int s = (int)ceilf(x+ins); if (s < 0) s = 0;
-        int e = (int)ceilf(x+w-ins); if (e > b->width) e = b->width;
-        if (e > s) gfx_fill_span(b->pixels + row*b->stride + s, e-s, c);
+        int s = (int)ceilf(x+ins);
+        if (s < 0) s = 0;
+        int e = (int)ceilf(x+w-ins);
+        if (e > b->width) e = b->width;
+        if (e > s) gfx_paint_span(b->pixels + row*b->stride + s, e-s, c);
     }
 }
 
 void gfx_render_circle(Buffer *b, float x, float y, float rad, uint32_t c) {
     if (!b || !isfinite(x+y+rad) || rad <= 0) return;
-    int r = (int)ceilf(rad); if (r <= 0) return;
+    int r = (int)ceilf(rad);
+    if (r <= 0) return;
     int cx = (int)floorf(x+0.5f), cy = (int)floorf(y+0.5f);
     long long r2 = (long long)r*r;
     for (int dy = -r; dy <= r; dy++) {
-        int sy = cy+dy; if (sy < 0 || sy >= b->height) continue;
+        int sy = cy+dy;
+        if (sy < 0 || sy >= b->height) continue;
         int hw = (int)sqrt((double)(r2 - (long long)dy*dy));
         int l = cx-hw, rr = cx+hw+1;
-        if (l < 0) l = 0; if (rr > b->width) rr = b->width;
+        if (l < 0) l = 0;
+        if (rr > b->width) rr = b->width;
         if (l < rr) gfx_paint_span(b->pixels + sy*b->stride + l, rr-l, c);
     }
 }
@@ -105,12 +115,14 @@ void gfx_render_ring(Buffer *b, float x, float y, float rad, float th, uint32_t 
     int cx = (int)floorf(x+0.5f), cy = (int)floorf(y+0.5f);
     long long o2 = (long long)out*out, i2 = (long long)in*in;
     for (int dy = -out; dy <= out; dy++) {
-        int sy = cy+dy; if (sy < 0 || sy >= b->height) continue;
+        int sy = cy+dy;
+        if (sy < 0 || sy >= b->height) continue;
         int oh = (int)sqrt((double)(o2 - (long long)dy*dy));
         int ih = -1;
         if (abs(dy) <= in) ih = (int)sqrt((double)(i2 - (long long)dy*dy));
         int l = cx-oh, rr = cx+oh+1;
-        if (l < 0) l = 0; if (rr > b->width) rr = b->width;
+        if (l < 0) l = 0;
+        if (rr > b->width) rr = b->width;
         if (ih < 0) {
             if (l < rr) gfx_paint_span(b->pixels + sy*b->stride + l, rr-l, c);
         } else {
@@ -118,35 +130,6 @@ void gfx_render_ring(Buffer *b, float x, float y, float rad, float th, uint32_t 
             int lr = il < rr ? il : rr, rl = ir > l ? ir : l;
             if (l < lr) gfx_paint_span(b->pixels + sy*b->stride + l, lr-l, c);
             if (rl < rr) gfx_paint_span(b->pixels + sy*b->stride + rl, rr-rl, c);
-        }
-    }
-}
-
-void gfx_render_triangle(Buffer *b, float x1, float y1, float x2, float y2, float x3, float y3, uint32_t c) {
-    if (!b || !isfinite(x1+y1+x2+y2+x3+y3)) return;
-    float area = (x2-x1)*(y3-y1) - (y2-y1)*(x3-x1);
-    if (fabsf(area) < 0.0001f) return;
-    float minx = x1 < x2 ? x1 : x2; minx = minx < x3 ? minx : x3;
-    float maxx = x1 > x2 ? x1 : x2; maxx = maxx > x3 ? maxx : x3;
-    float miny = y1 < y2 ? y1 : y2; miny = miny < y3 ? miny : y3;
-    float maxy = y1 > y2 ? y1 : y2; maxy = maxy > y3 ? maxy : y3;
-    int left = gfx_cl_floor(floorf(minx), b->width);
-    int right = gfx_cl_ceil(ceilf(maxx), b->width);
-    int top = gfx_cl_floor(floorf(miny), b->height);
-    int bottom = gfx_cl_ceil(ceilf(maxy), b->height);
-    for (int py = top; py < bottom; py++) {
-        float fy = (float)py + 0.5f;
-        for (int px = left; px < right; px++) {
-            float fx = (float)px + 0.5f;
-            float w1 = ((x2-x1)*(fy-y1) - (y2-y1)*(fx-x1)) / area;
-            float w2 = ((x3-x2)*(fy-y2) - (y3-y2)*(fx-x2)) / area;
-            float w3 = 1.0f - w1 - w2;
-            /* Небольшой допуск (0.002 ≈ полпикселя при типичных размерах)
-             * закрывает щели между соседними треугольниками полигона. */
-            if (w1 >= -0.002f && w2 >= -0.002f && w3 >= -0.002f) {
-                uint32_t *pixel = &b->pixels[py*b->stride + px];
-                *pixel = gfx_blend(*pixel, c);
-            }
         }
     }
 }

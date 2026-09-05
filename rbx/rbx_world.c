@@ -1,194 +1,145 @@
-/* rbx/rbx_world.c — постройка мира (база, дом, обби, башня...),
- * монеты, боты-игроки и их обновление. */
-#include "rbx_internal.h"
-#include <math.h>
-#include <string.h>
+/* Bounded, nearest-first chunk streaming. Never rebuild an entire row on movement. */
+#include "rbx_world_internal.h"
+#include <limits.h>
 
-static RbxBox boxes[MAX_BOX];
-static int nbox;
-static RbxCoin coins[MAX_COIN];
-static int ncoin, ncaught;
-static RbxBot bots[MAX_BOT];
-
-static void add(float x, float y, float z, float hx, float hy, float hz, uint32_t col, int mat) {
-    if (nbox >= MAX_BOX) return;
-    RbxBox *b = &boxes[nbox++];
-    b->x = x; b->y = y; b->z = z;
-    b->hx = hx; b->hy = hy; b->hz = hz;
-    b->color = col; b->mat = mat;
+static RbxChunk chunks[CACHE_COUNT];
+static int center_x,center_z;
+static float draw_distance=32;
+static int wrap(int x) { int n=x%CACHE_SIDE;return n<0 ? n+CACHE_SIDE : n; }
+static RbxChunk *slot(int cx,int cz) { return &chunks[wrap(cz)*CACHE_SIDE+wrap(cx)]; }
+static int matches(const RbxChunk *c,int cx,int cz) { return c->valid && c->cx==cx && c->cz==cz; }
+static int base_block(int x,int y,int z) {
+    if (y<0) return BLOCK_STONE;
+    if (y>=WORLD_HEIGHT) return BLOCK_AIR;
+    int cx=rbx_floor_div(x,CHUNK_SIZE),cz=rbx_floor_div(z,CHUNK_SIZE);
+    RbxChunk *c=slot(cx,cz);
+    if (!matches(c,cx,cz)) return rbx_terrain_block(x,y,z);
+    return c->blocks[(y*CHUNK_SIZE+z-cz*CHUNK_SIZE)*CHUNK_SIZE+x-cx*CHUNK_SIZE];
 }
-
-static void coin_at(float x, float y, float z) {
-    if (ncoin >= MAX_COIN) return;
-    coins[ncoin].x = x; coins[ncoin].y = y; coins[ncoin].z = z; coins[ncoin].taken = 0;
-    ncoin++;
+int rbx_world_uniform(int x,int y,int z) {
+    const RbxEdit *e=rbx_edit_find(x,y,z);
+    if (!e) return base_block(x,y,z);
+    for (int i=1;i<8;i++) if (e->cells[i]!=e->cells[0]) return BLOCK_PARTIAL;
+    return e->cells[0];
 }
-
-static void tree(float x, float z) {
-    add(x, 1.15f, z, 0.38f, 1.15f, 0.38f, 0xFF6D4C41u, MAT_SOLID);
-    add(x, 3.15f, z, 1.55f, 1.05f, 1.55f, 0xFF2E7D32u, MAT_SOLID);
-    add(x, 4.55f, z, 1.05f, 0.75f, 1.05f, 0xFF43A047u, MAT_SOLID);
+int rbx_world_cell(int sx,int sy,int sz) {
+    int x=rbx_floor_div(sx,2),y=rbx_floor_div(sy,2),z=rbx_floor_div(sz,2);
+    const RbxEdit *e=rbx_edit_find(x,y,z);
+    return e ? e->cells[sx-x*2+(sy-y*2)*2+(sz-z*2)*4] : base_block(x,y,z);
 }
-
-void rbx_world_build(void) {
-    nbox = 0; ncoin = 0;
-    /* зелёная baseplate, как стартовый плейс (клетки, чтобы не рвать z) */
-    for (int i = -2; i < 2; i++) {
-        for (int j = -2; j < 2; j++) {
-            uint32_t c = ((i + j) & 1) ? 0xFF3D9E44u : 0xFF4CAF50u;
-            add(i * 16.0f + 8.0f, -0.5f, j * 16.0f + 8.0f, 8.0f, 0.5f, 8.0f, c, MAT_SOLID);
+int rbx_cell_solid(int sx,int sy,int sz) {
+    int b=rbx_world_cell(sx,sy,sz);return b!=BLOCK_AIR && b!=BLOCK_WATER;
+}
+static void invalidate(int cx,int cz) {
+    RbxChunk *c=slot(cx,cz);
+    if (matches(c,cx,cz)) c->dirty=1;
+}
+int rbx_world_set(int sx,int sy,int sz,int block) {
+    if (sy<2 || sy>=WORLD_HEIGHT*2 || block<0 || block>=BLOCK_COUNT ||
+        sx < -20000000 || sx>20000000 || sz < -20000000 || sz>20000000) return 0;
+    int x=rbx_floor_div(sx,2),y=rbx_floor_div(sy,2),z=rbx_floor_div(sz,2);
+    if (!rbx_edit_set(sx,sy,sz,block,base_block(x,y,z))) return 0;
+    int cx=rbx_floor_div(x,CHUNK_SIZE),cz=rbx_floor_div(z,CHUNK_SIZE);
+    invalidate(cx,cz);
+    int lx=sx-cx*CHUNK_SIZE*2,lz=sz-cz*CHUNK_SIZE*2;
+    if (lx==0) invalidate(cx-1,cz);
+    if (lx==CHUNK_SIZE*2-1) invalidate(cx+1,cz);
+    if (lz==0) invalidate(cx,cz-1);
+    if (lz==CHUNK_SIZE*2-1) invalidate(cx,cz+1);
+    return 1;
+}
+static RbxChunk *ensure_data(int cx,int cz) {
+    RbxChunk *c=slot(cx,cz);
+    if (!matches(c,cx,cz)) {
+        c->cx=cx;c->cz=cz;c->valid=1;c->ready=c->dirty=0;c->count=0;
+        rbx_terrain_chunk(cx,cz,c->blocks);
+    }
+    return c;
+}
+static void prepare(int cx,int cz) {
+    RbxChunk *c=ensure_data(cx,cz);
+    static const int d[4][2]={{1,0},{-1,0},{0,1},{0,-1}};
+    for (int i=0;i<4;i++) {
+        int x=cx+d[i][0],z=cz+d[i][1];
+        if (abs(x-center_x)<=CACHE_RADIUS && abs(z-center_z)<=CACHE_RADIUS) ensure_data(x,z);
+    }
+    rbx_chunk_mesh(c);
+}
+static int worker(void) {
+    /* Edited chunks take precedence over distant prefetch. */
+    RbxChunk *edit=NULL;int best=INT_MAX;
+    for (int i=0;i<CACHE_COUNT;i++) {
+        RbxChunk *c=&chunks[i];int dx=c->cx-center_x,dz=c->cz-center_z;
+        if (!c->valid || !c->dirty || abs(dx)>CACHE_RADIUS || abs(dz)>CACHE_RADIUS) continue;
+        int distance=dx*dx+dz*dz;
+        if (distance<best) {best=distance;edit=c;}
+    }
+    if (edit) { prepare(edit->cx,edit->cz);return 1; }
+    for (int ring=0;ring<=CACHE_RADIUS;ring++) for (int dz=-ring;dz<=ring;dz++) for (int dx=-ring;dx<=ring;dx++) {
+        if (abs(dx)!=ring && abs(dz)!=ring) continue;
+        int cx=center_x+dx,cz=center_z+dz;RbxChunk *c=slot(cx,cz);
+        if (!matches(c,cx,cz) || !c->ready) { prepare(cx,cz);return 1; }
+    }
+    return 0;
+}
+static float coverage(void) {
+    int ready_radius=0;
+    for (int r=0;r<=WORLD_RADIUS;r++) {
+        for (int z=-r;z<=r;z++) for (int x=-r;x<=r;x++) {
+            if (abs(x)!=r && abs(z)!=r) continue;
+            RbxChunk *c=slot(center_x+x,center_z+z);
+            if (!matches(c,center_x+x,center_z+z) || !c->ready) return fmaxf(12,ready_radius*CHUNK_SIZE);
         }
+        ready_radius=r;
     }
-
-    /* спавн */
-    add(0, 0.14f, 0, 4.2f, 0.14f, 4.2f, 0xFFBDBDBDu, MAT_SOLID);
-    add(0, 0.30f, 0, 1.15f, 0.04f, 1.15f, 0xFFFFD54Fu, MAT_SKIP);
-
-    /* дорожка к дому */
-    for (int i = 0; i < 7; i++)
-        add(-3.5f - i * 1.7f, 0.06f, 4.0f + i * 0.9f, 1.1f, 0.06f, 1.1f, 0xFFD7CCC8u, MAT_SOLID);
-
-    /* домик */
-    add(-18, 0.22f, 12, 5.0f, 0.22f, 5.0f, 0xFF8D6E63u, MAT_SOLID);
-    add(-18, 3.0f, 7.25f, 5.0f, 3.0f, 0.32f, 0xFFC62828u, MAT_SOLID);
-    add(-22.7f, 3.0f, 12, 0.32f, 3.0f, 5.0f, 0xFFD32F2Fu, MAT_SOLID);
-    add(-13.3f, 3.0f, 12, 0.32f, 3.0f, 5.0f, 0xFFD32F2Fu, MAT_SOLID);
-    add(-20.5f, 3.0f, 16.75f, 2.3f, 3.0f, 0.32f, 0xFFC62828u, MAT_SOLID);
-    add(-15.5f, 3.0f, 16.75f, 2.3f, 3.0f, 0.32f, 0xFFC62828u, MAT_SOLID);
-    add(-18, 5.35f, 16.75f, 1.3f, 0.7f, 0.32f, 0xFFB71C1Cu, MAT_SOLID);
-    add(-18, 6.45f, 12, 5.5f, 0.38f, 5.5f, 0xFF5D4037u, MAT_SOLID);
-    add(-18, 7.05f, 12, 4.0f, 0.32f, 4.0f, 0xFF4E342Eu, MAT_SOLID);
-    add(-18, 7.55f, 12, 2.2f, 0.28f, 2.2f, 0xFF3E2723u, MAT_SOLID);
-    add(-15.2f, 8.3f, 10.2f, 0.5f, 1.1f, 0.5f, 0xFF6D4C41u, MAT_SOLID);
-
-    /* радужный обби */
-    static const uint32_t rb[] = {
-        0xFFE53935u, 0xFFFB8C00u, 0xFFFDD835u, 0xFF43A047u,
-        0xFF1E88E5u, 0xFF8E24AAu, 0xFFEC407Au
-    };
-    for (int i = 0; i < 7; i++) {
-        float h = 0.45f + i * 1.55f;
-        float z = -5.0f + i * 5.4f;
-        add(16.0f, h, z, 2.15f, 0.38f, 2.15f, rb[i], MAT_SOLID);
-        if (i == 1 || i == 3 || i == 6) coin_at(16.0f, h + 1.6f, z);
-    }
-    add(16.0f, 11.4f, 34.0f, 3.4f, 0.45f, 3.4f, 0xFFFFD54Fu, MAT_SOLID);
-    coin_at(16.0f, 13.0f, 34.0f);
-
-    /* башня */
-    for (int i = 0; i < 6; i++) {
-        uint32_t c = (i & 1) ? 0xFF64B5F6u : 0xFF1E88E5u;
-        add(-14.0f, 1.4f + i * 2.8f, -18.0f, 2.3f, 1.4f, 2.3f, c, MAT_SOLID);
-        add(-14.0f, 2.75f + i * 2.8f, -18.0f, 3.0f, 0.18f, 3.0f, 0xFF1565C0u, MAT_SOLID);
-    }
-    coin_at(-14.0f, 18.2f, -18.0f);
-
-    /* деревья */
-    tree(8, -14); tree(-8, -12); tree(-24, 4); tree(24, 8); tree(10, 24); tree(-6, 22);
-
-    /* бассейн */
-    add(18, -0.05f, 18, 5.5f, 0.55f, 4.5f, 0xFF1E88E5u, MAT_WATER);
-    add(12.2f, 0.45f, 18, 0.4f, 0.5f, 4.9f, 0xFFBDBDBDu, MAT_SOLID);
-    add(23.8f, 0.45f, 18, 0.4f, 0.5f, 4.9f, 0xFFBDBDBDu, MAT_SOLID);
-    add(18, 0.45f, 13.2f, 6.0f, 0.5f, 0.4f, 0xFFBDBDBDu, MAT_SOLID);
-    add(18, 0.45f, 22.8f, 6.0f, 0.5f, 0.4f, 0xFFBDBDBDu, MAT_SOLID);
-
-    /* лава */
-    add(-22, -0.12f, -6, 4.0f, 0.4f, 4.0f, 0xFFFF5722u, MAT_LAVA);
-    add(-22, 0.18f, -6, 3.1f, 0.12f, 3.1f, 0xFFFFC107u, MAT_LAVA);
-
-    /* батут */
-    add(8, 0.22f, 9, 2.1f, 0.22f, 2.1f, 0xFF7E57C2u, MAT_BOUNCE);
-    add(8, 0.48f, 9, 1.65f, 0.12f, 1.65f, 0xFFE040FBu, MAT_BOUNCE);
-
-    /* ящики и горка-кубы */
-    add(5.5f, 0.7f, -8, 0.7f, 0.7f, 0.7f, 0xFF8D6E63u, MAT_SOLID);
-    add(6.6f, 0.5f, -7.2f, 0.5f, 0.5f, 0.5f, 0xFFA1887Fu, MAT_SOLID);
-    add(-5, 0.9f, 8, 0.9f, 0.9f, 0.9f, 0xFF5C6BC0u, MAT_SOLID);
-    add(-4.2f, 2.1f, 8.6f, 0.55f, 0.55f, 0.55f, 0xFF7986CBu, MAT_SOLID);
-
-    /* парящие платформы */
-    add(22, 6.2f, 2, 2.4f, 0.4f, 2.4f, 0xFF9CCC65u, MAT_SOLID);
-    add(26, 8.8f, -4, 2.0f, 0.35f, 2.0f, 0xFFAED581u, MAT_SOLID);
-    coin_at(26, 10.4f, -4);
-
-    /* монумент из кубов у спавна */
-    add(0, 1.1f, -8, 1.1f, 1.1f, 1.1f, 0xFFE2231Au, MAT_SOLID);
-    add(0, 2.5f, -8, 0.55f, 0.45f, 0.55f, 0xFFFFFFFFu, MAT_SKIP);
-
-    coin_at(-18, 2.2f, 12);
-    coin_at(8, 2.4f, 9);
-    coin_at(18, 1.6f, 18);
-
-    /* боты гуляют вокруг */
-    bots[0].nwp = 4;
-    bots[0].wp[0][0] = 4;  bots[0].wp[0][1] = 6;
-    bots[0].wp[1][0] = 10; bots[0].wp[1][1] = 2;
-    bots[0].wp[2][0] = 6;  bots[0].wp[2][1] = -6;
-    bots[0].wp[3][0] = -2; bots[0].wp[3][1] = 2;
-    bots[0].head = 0xFFFFCC80u; bots[0].torso = 0xFFE91E63u; bots[0].pants = 0xFF212121u;
-    bots[1].nwp = 3;
-    bots[1].wp[0][0] = -6; bots[1].wp[0][1] = -4;
-    bots[1].wp[1][0] = -12; bots[1].wp[1][1] = 2;
-    bots[1].wp[2][0] = -4; bots[1].wp[2][1] = 10;
-    bots[1].head = 0xFF8D6E63u; bots[1].torso = 0xFF00BCD4u; bots[1].pants = 0xFF37474Fu;
-    bots[2].nwp = 2;
-    bots[2].wp[0][0] = 12; bots[2].wp[0][1] = 12;
-    bots[2].wp[1][0] = 20; bots[2].wp[1][1] = 10;
-    bots[2].head = 0xFFFFF3E0u; bots[2].torso = 0xFFFF9800u; bots[2].pants = 0xFF4E342Eu;
-    for (int i = 0; i < MAX_BOT; i++) {
-        bots[i].x = bots[i].wp[0][0];
-        bots[i].z = bots[i].wp[0][1];
-        bots[i].y = 0;
-        bots[i].yaw = 0; bots[i].phase = (float)i;
-        bots[i].i = 0; bots[i].dir = 1;
-    }
+    return RBX_FOG_END;
 }
-
-const RbxBox *rbx_world_boxes(int *count) {
-    if (count) *count = nbox;
-    return boxes;
+void rbx_world_update(float x,float z) {
+    if (!isfinite(x+z) || fabsf(x)>10000000 || fabsf(z)>10000000) return;
+    center_x=(int)floorf(x/CHUNK_SIZE);center_z=(int)floorf(z/CHUNK_SIZE);
+    double start=app_now();
+    for (int jobs=0;jobs<2;jobs++) { if (!worker() || app_now()-start>.0025) break; }
+    float target=coverage(),d=(float)dt;
+    if (!isfinite(d) || d<0) d=0;
+    if (draw_distance>target) draw_distance=target; /* don't expose unmeshed edges */
+    else draw_distance=fminf(target,draw_distance+fminf(d,.05f)*40);
 }
-
-const RbxCoin *rbx_world_coins(int *count) {
-    if (count) *count = ncoin;
-    return coins;
+void rbx_world_build(uint32_t seed) {
+    rbx_terrain_seed(seed);rbx_edits_reset(seed);rbx_edits_load();
+    center_x=center_z=0;draw_distance=32;
+    for (int i=0;i<CACHE_COUNT;i++) chunks[i].valid=chunks[i].ready=chunks[i].dirty=chunks[i].count=0;
+    for (int z=-3;z<=3;z++) for (int x=-3;x<=3;x++) ensure_data(x,z);
+    for (int z=-2;z<=2;z++) for (int x=-2;x<=2;x++) prepare(x,z);
 }
-
-const RbxBot *rbx_world_bots(void) { return bots; }
-int rbx_world_caught(void) { return ncaught; }
-int rbx_world_coin_count(void) { return ncoin; }
-
-void rbx_world_collect_reset(void) { ncaught = 0; }
-
-void rbx_world_collect(float px, float py, float pz) {
-    for (int i = 0; i < ncoin; i++) {
-        if (coins[i].taken) continue;
-        float dx = px - coins[i].x, dy = (py + 2.5f) - coins[i].y, dz = pz - coins[i].z;
-        if (dx * dx + dy * dy + dz * dz < 2.8f) {
-            coins[i].taken = 1;
-            ncaught++;
-            snd_play("notify.wav");
+float rbx_world_distance(void) { return draw_distance; }
+void rbx_world_draw(void) {
+    for (int ring=0;ring<=WORLD_RADIUS;ring++) for (int dz=-ring;dz<=ring;dz++) for (int dx=-ring;dx<=ring;dx++) {
+        if (abs(dx)!=ring && abs(dz)!=ring) continue;
+        int cx=center_x+dx,cz=center_z+dz;RbxChunk *c=slot(cx,cz);
+        if (!matches(c,cx,cz) || !c->ready || !c->count) continue;
+        float ox=cx*CHUNK_SIZE,oz=cz*CHUNK_SIZE,hy=(c->max_y-c->min_y)*.25f;
+        if (!rbx3d_visible(ox+8,c->min_y*.5f+hy,oz+8,8,hy,8)) continue;
+        for (int i=0;i<c->count;i++) {
+            const RbxQuad *f=&c->quads[i];
+            rbx3d_surface(cx*CHUNK_SIZE*2+f->x,f->y,cz*CHUNK_SIZE*2+f->z,f->u,f->v,f->face,f->block);
         }
     }
 }
-
-void rbx_bots_update(float d) {
-    for (int i = 0; i < MAX_BOT; i++) {
-        RbxBot *b = &bots[i];
-        int ni = b->i + b->dir;
-        if (ni < 0 || ni >= b->nwp) { b->dir = -b->dir; ni = b->i + b->dir; }
-        float tx = b->wp[ni][0], tz = b->wp[ni][1];
-        float dx = tx - b->x, dz = tz - b->z;
-        float L = sqrtf(dx * dx + dz * dz);
-        float sp = 3.6f * d;
-        if (L < 0.3f) b->i = ni;
-        else {
-            b->x += dx / L * sp;
-            b->z += dz / L * sp;
-            b->yaw = atan2f(dx, dz);
-            b->phase += d * 8.0f;
-        }
-        b->y = 0;
+void rbx_world_stats(int *loaded,int *quads) {
+    int n=0,q=0;
+    for (int i=0;i<CACHE_COUNT;i++) {
+        RbxChunk *c=&chunks[i];
+        if (!c->valid || abs(c->cx-center_x)>CACHE_RADIUS || abs(c->cz-center_z)>CACHE_RADIUS) continue;
+        n++;if(c->ready)q+=c->count;
     }
+    if (loaded) *loaded=n;
+    if (quads) *quads=q;
+}
+int rbx_world_pending(void) {
+    int n=0;
+    for (int z=-CACHE_RADIUS;z<=CACHE_RADIUS;z++) for (int x=-CACHE_RADIUS;x<=CACHE_RADIUS;x++) {
+        RbxChunk *c=slot(center_x+x,center_z+z);
+        if (!matches(c,center_x+x,center_z+z) || !c->ready || c->dirty) n++;
+    }
+    return n;
 }
