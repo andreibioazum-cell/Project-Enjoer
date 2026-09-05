@@ -1,37 +1,49 @@
-/* Только управление: чистый белый прицел, чёрный стик без подложки,
- * белый переключатель полёта и прыжок только в режиме ходьбы. */
+/* Native-resolution HUD over the adaptive 3D buffer. */
 #include "rbx_internal.h"
-#include <math.h>
-
+#include <stdio.h>
 static void centered(const char *s,float x,float y,float scale) {
-    text_scaled(s,x-text_width(s)*scale*.5f,y,0xFF000000u,scale);
+    text_scaled(s,x-text_width(s)*scale*.5f,y,0xff000000u,scale);
 }
 void rbx_hud_draw(void) {
     float u=fminf(screen_w/960.0f,screen_h/540.0f);
-    float cx,cy,r,jx,jy;
-    rbx_input_joy_geom(&cx,&cy,&r); rbx_input_joy(&jx,&jy);
-    ring(cx,cy,r,7*u,0xFF000000u);
-    circle(cx+jx*r*.56f,cy+jy*r*.56f,r*.38f,0xFF000000u);
-
-    float x,y,w,h;
-    rbx_input_flight_geom(&x,&y,&w,&h);
-    roundrect(x,y,w,h,7*u,0xFFFFFFFFu);
-    centered("Полёт",x+w*.44f,y+9*u,.48f*u);
+    if(u<=0)return;
+    float cx,cy,r,jx,jy;rbx_input_joy_geom(&cx,&cy,&r);rbx_input_joy(&jx,&jy);
+    ring(cx,cy,r,7*u,0xff000000u);
+    circle(cx+jx*r*.56f,cy+jy*r*.56f,r*.38f,0xff000000u);
+    float x,y,w,h;rbx_input_flight_geom(&x,&y,&w,&h);
+    roundrect(x,y,w,h,7*u,0xffffffffu);centered("Полёт",x+w*.44f,y+9*u,.48f*u);
     if (rbx_player_flying()) {
-        line(x+w-28*u,y+23*u,x+w-23*u,y+28*u,3*u,0xFF000000u);
-        line(x+w-23*u,y+28*u,x+w-14*u,y+15*u,3*u,0xFF000000u);
-    } else ring(x+w-21*u,y+h*.5f,6*u,2*u,0xFF000000u);
-
+        line(x+w-28*u,y+23*u,x+w-23*u,y+28*u,3*u,0xff000000u);
+        line(x+w-23*u,y+28*u,x+w-14*u,y+15*u,3*u,0xff000000u);
+    } else ring(x+w-21*u,y+h*.5f,6*u,2*u,0xff000000u);
+    char label[32];
+    if(rbx_fps()<0) snprintf(label,sizeof(label),"FPS —");
+    else snprintf(label,sizeof(label),"FPS %.0f",rbx_fps());
+    float fs=.44f*u,fx=screen_w-18*u-text_width(label)*fs;
+    text_scaled(label,fx+u,22*u,0xaa000000u,fs);
+    text_scaled(label,fx,21*u,0xffffffffu,fs);
     if (!rbx_player_flying()) {
-        rbx_input_jump_geom(&cx,&cy,&r);
-        circle(cx,cy,r,0xFFFFFFFFu);
-        line(cx,cy-22*u,cx,cy+1*u,4*u,0xFF000000u);
-        line(cx,cy-22*u,cx-10*u,cy-12*u,4*u,0xFF000000u);
-        line(cx,cy-22*u,cx+10*u,cy-12*u,4*u,0xFF000000u);
+        rbx_input_jump_geom(&cx,&cy,&r);circle(cx,cy,r,0xffffffffu);
+        line(cx,cy-22*u,cx,cy+1*u,4*u,0xff000000u);
+        line(cx,cy-22*u,cx-10*u,cy-12*u,4*u,0xff000000u);
+        line(cx,cy-22*u,cx+10*u,cy-12*u,4*u,0xff000000u);
         centered("Прыжок",cx,cy+9*u,.28f*u);
     }
-    /* Без чёрной обводки, фона, счётчика монет и подсказок. */
+    for (int a=0;a<ACTION_COUNT;a++) {
+        rbx_input_action_geom(a,&cx,&cy,&r);circle(cx,cy,r,0xffffffffu);
+        line(cx-9*u,cy-6*u,cx+9*u,cy-6*u,3*u,0xff000000u);
+        if(a==ACTION_PLACE)line(cx,cy-15*u,cx,cy+3*u,3*u,0xff000000u);
+        centered(a==ACTION_BREAK ? "Ломать" : "Ставить",cx,cy+9*u,.23f*u);
+    }
+    for (int i=0;i<HOTBAR_SLOTS;i++) {
+        float size;rbx_input_slot_geom(i,&x,&y,&size);
+        if(i==rbx_selected())roundrect(x-2*u,y-2*u,size+4*u,size+4*u,5*u,0xffffffffu);
+        roundrect(x,y,size,size,3*u,0xb3222929u);
+        image_draw(rbx_material_icon(rbx_slot_block(i)),x+3*u,y+3*u,size-6*u,size-6*u);
+        char number[2]={(char)('1'+i),0};
+        text_scaled(number,x+16*u,y+40*u,0xffffffffu,.20f*u);
+    }
     float mx=screen_w*.5f,my=screen_h*.5f;
-    rect(mx-6*u,my-u,12*u,2*u,0xFFFFFFFFu);
-    rect(mx-u,my-6*u,2*u,12*u,0xFFFFFFFFu);
+    rect(mx-6*u,my-u,12*u,2*u,0xffffffffu);
+    rect(mx-u,my-6*u,2*u,12*u,0xffffffffu);
 }

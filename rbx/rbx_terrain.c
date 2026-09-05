@@ -63,7 +63,8 @@ static int ground_block(int x, int y, int z, int height) {
     return y >= height - 3 ? BLOCK_DIRT : BLOCK_STONE;
 }
 int rbx_terrain_block(int x, int y, int z) {
-    if (y >= WORLD_HEIGHT) return BLOCK_AIR;
+    if (y > 32 || y >= WORLD_HEIGHT) return BLOCK_AIR; /* max generated canopy; edits can build higher */
+    if (y < 0) return BLOCK_STONE;
     int b = ground_block(x, y, z, rbx_terrain_height(x, z));
     if (b != BLOCK_AIR) return b;
     int gx = floor_div(x, 8), gz = floor_div(z, 8), result = BLOCK_AIR;

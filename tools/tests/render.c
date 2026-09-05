@@ -6,10 +6,38 @@
 #include <stdlib.h>
 #include <string.h>
 
-int screen_w = 320, screen_h = 240;
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, #x); exit(1); } } while (0)
 #define PI 3.14159265358979323846f
 #define GUARD 0x12345678u
+
+/* Test-only oriented geometry: not shipped in the voxel game. */
+static const unsigned char corners[6][4][3] = {
+    {{0,1,0},{0,1,1},{1,1,1},{1,1,0}},
+    {{0,0,0},{1,0,0},{1,0,1},{0,0,1}},
+    {{0,0,1},{1,0,1},{1,1,1},{0,1,1}},
+    {{1,0,0},{0,0,0},{0,1,0},{1,1,0}},
+    {{1,0,0},{1,1,0},{1,1,1},{1,0,1}},
+    {{0,0,0},{0,0,1},{0,1,1},{0,1,0}}
+};
+static const int normals[6][3] = {{0,1,0},{0,-1,0},{0,0,1},{0,0,-1},{1,0,0},{-1,0,0}};
+
+static void test_box(float x, float y, float z, float hx, float hy, float hz, float yaw, uint32_t color) {
+    if (hx <= 0 || hy <= 0 || hz <= 0 || !isfinite(x + y + z + hx + hy + hz + yaw) ||
+        !rbx3d_visible(x, y, z, hx, hy, hz)) return;
+    float c = cosf(yaw), s = sinf(yaw);
+    for (int face = 0; face < 6; face++) {
+        RbxVertex w[4];
+        for (int i = 0; i < 4; i++) {
+            float lx = (corners[face][i][0] * 2 - 1) * hx;
+            float ly = (corners[face][i][1] * 2 - 1) * hy;
+            float lz = (corners[face][i][2] * 2 - 1) * hz;
+            w[i] = (RbxVertex){x + lx * c + lz * s, y + ly, z - lx * s + lz * c, 0, 0};
+        }
+        float nx = normals[face][0] * c + normals[face][2] * s;
+        float nz = -normals[face][0] * s + normals[face][2] * c;
+        rbx3d_polygon(w, 4, nx, normals[face][1], nz, color, NULL);
+    }
+}
 
 static Buffer make_buffer(int w, int h, int pad) {
     Buffer b = {NULL, w, h, w + pad};
@@ -28,7 +56,7 @@ static int channel(uint32_t p, int i) { return (p >> (i * 8)) & 255; }
 
 static void test_color_fog(void) {
     Buffer b = make_buffer(320, 240, 7);
-    const float distances[] = {10, 27.9f, 28.12f, 28.2f, 40, 60, 64, 70, 76};
+    const float distances[] = {10, 47.9f, 48.12f, 48.2f, 60, 80, 96, 100, 106};
     const uint32_t colors[] = {0xFFFFD600u, 0xFFFF00FFu, 0xFFFFFFFFu, 0xFF0000FFu};
     const int fog[] = {110, 197, 247};
     for (int sc = 1; sc <= 3; sc++) {
@@ -37,7 +65,7 @@ static void test_color_fog(void) {
                 float z = distances[i];
                 CHECK(rbx3d_begin(&b, sc, 0, 0, 0, 0, 0, 72));
                 rbx3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
-                rbx3d_box(0, 0, z, 4, 4, .12f, 0, colors[c]);
+                test_box(0, 0, z, 4, 4, .12f, 0, colors[c]);
                 rbx3d_end();
                 uint32_t pixel = b.pixels[120 * b.stride + 160];
                 float t = fmaxf(0, fminf(1, (z - .12f - RBX_FOG_START) / (RBX_FOG_END - RBX_FOG_START)));
@@ -60,7 +88,7 @@ static void pattern(Buffer *b, int scale) {
     rbx3d_sky(0xFFBBDDEFu, 0xFF284658u);
     const uint32_t colors[] = {0xFFFFFFFFu, 0xFF000000u, 0xFFFFD600u, 0xFF0000FFu};
     for (int i = 0; i < 4; i++)
-        rbx3d_box(-2.1f + i * 1.4f, 0, 6 + i * .3f, .55f, 1.4f, .3f, i * .31f, colors[i]);
+        test_box(-2.1f + i * 1.4f, 0, 6 + i * .3f, .55f, 1.4f, .3f, i * .31f, colors[i]);
     rbx3d_end();
 }
 
@@ -130,7 +158,7 @@ static int expected_object(float x, float y, int w, int h) {
 }
 
 static void draw_box(const Box *b) {
-    rbx3d_box(b->x, b->y, b->z, b->hx, b->hy, b->hz, b->yaw, b->color);
+    test_box(b->x, b->y, b->z, b->hx, b->hy, b->hz, b->yaw, b->color);
 }
 
 static void test_perspective_depth(void) {
@@ -165,30 +193,31 @@ static void test_clipping_and_camera(void) {
     Buffer out = make_buffer(160, 120, 5);
     CHECK(rbx3d_begin(&out, 1, 0, 0, 0, 0, 0, 72));
     rbx3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
-    rbx3d_box(0, 0, -5, 1, 1, 1, 0, 0xFFFFFFFFu);
-    rbx3d_box(0, 0, 130, 1, 1, 1, 0, 0xFFFFFFFFu);
-    rbx3d_box(1000, 0, 5, 1, 1, 1, 0, 0xFFFFFFFFu);
-    rbx3d_box(0, -1000, 5, 1, 1, 1, 0, 0xFFFFFFFFu);
+    test_box(0, 0, -5, 1, 1, 1, 0, 0xFFFFFFFFu);
+    test_box(0, 0, 130, 1, 1, 1, 0, 0xFFFFFFFFu);
+    test_box(1000, 0, 5, 1, 1, 1, 0, 0xFFFFFFFFu);
+    test_box(0, -1000, 5, 1, 1, 1, 0, 0xFFFFFFFFu);
     rbx3d_end();
     for (int y = 0; y < out.height; y++)
         for (int x = 0; x < out.width; x++) CHECK(out.pixels[y * out.stride + x] == 0xFFF7C56Eu);
     for (int i = 0; i < 120; i++) {
         CHECK(rbx3d_begin(&out, 1, 0, 0, 0, 0, (i - 60) * .024f, 72));
         rbx3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
-        rbx3d_box(0, 0, (i - 20) * .05f, .42f, .42f, .12f, i * .12f, 0xFFFFD600u);
-        rbx3d_box(0, -2, 0, 32, .5f, 32, 0, 0xFF4CAF50u);
+        test_box(0, 0, (i - 20) * .05f, .42f, .42f, .12f, i * .12f, 0xFFFFD600u);
+        test_box(0, -2, 0, 32, .5f, 32, 0, 0xFF4CAF50u);
         rbx3d_end();
         check_padding(&out);
     }
-    float yaw = .7f, pitch = .8f, sx, sy;
+    float yaw = .7f, pitch = .8f;
     CHECK(rbx3d_begin(&out, 1, 10, 6, -3, yaw, pitch, 72));
-    CHECK(rbx3d_project(10 + sinf(yaw) * cosf(pitch) * 20, 6 + sinf(pitch) * 20,
-                        -3 + cosf(yaw) * cosf(pitch) * 20, &sx, &sy));
-    CHECK(fabsf(sx - out.width * .5f) < .001f && fabsf(sy - out.height * .5f) < .001f);
+    rbx3d_sky(0xff000000u,0xff000000u);
+    test_box(10+sinf(yaw)*cosf(pitch)*20,6+sinf(pitch)*20,-3+cosf(yaw)*cosf(pitch)*20,.5f,.5f,.5f,0,0xffffffffu);
+    rbx3d_end();
+    CHECK(channel(out.pixels[60*out.stride+80],0)>100); /* gaze vector projects onto the crosshair */
     Buffer invalid = out; invalid.stride = out.width - 1;
     CHECK(!rbx3d_begin(&invalid, 1, 0, 0, 0, 0, 0, 72));
     rbx3d_end(); /* не пишет старый кадр после неудачного begin */
-    CHECK(!rbx3d_project(0, 0, 1, &sx, &sy));
+    CHECK(!rbx3d_visible(0,0,1,1,1,1));
     free(out.pixels);
     puts("PASS near/frustum clipping, first-person pitch direction, invalid frame guard");
 }
@@ -196,14 +225,19 @@ static void test_clipping_and_camera(void) {
 static void test_voxel_materials(void) {
     for (int b = BLOCK_GRASS; b < BLOCK_COUNT; b++) for (int face = 0; face < 6; face++) {
         const RbxMaterial *m = rbx_material(b, face);
-        CHECK(m);
-        for (int i = 0; i < 341; i++) CHECK(m->mip[i] < 16);
-        for (int i = 0; i < 16; i++) CHECK((m->palette[i] >> 24) == 255);
+        CHECK(m && m->image.width==32 && m->image.height==32);
+        for(int i=0;i<TEXTURE_SIZE*TEXTURE_SIZE;i++) {
+            uint32_t c=m->image.pixels[i];
+            uint32_t argb=0xff000000u|((c&255)<<16)|(c&0xff00)|((c>>16)&255);
+            CHECK(m->palette[m->mip[i]]==argb); /* actual PNG colors, not generated tiles */
+        }
+        for (int i = 0; i < MIP_TEXELS; i++) CHECK(m->mip[i] < m->colors);
+        for (int i = 0; i < m->colors; i++) CHECK((m->palette[i] >> 24) == 255);
     }
     Buffer b = make_buffer(160, 120, 5);
     CHECK(rbx3d_begin(&b, 1, .5f, .5f, -2, 0, 0, 72));
     rbx3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
-    rbx3d_block_face(0, 0, 0, 3, BLOCK_STONE);
+    rbx3d_surface(0,0,0,2,2,3,BLOCK_STONE);
     rbx3d_end();
     uint32_t colors[16]; int count = 0;
     for (int y = 48; y < 72; y++) for (int x = 68; x < 92; x++) {
@@ -217,11 +251,61 @@ static void test_voxel_materials(void) {
     puts("PASS voxel UV textures, bounded palettes and mip levels");
 }
 
+static void test_half_uv(void) {
+    Buffer whole=make_buffer(256,192,3),parts=make_buffer(256,192,3);
+    for(int negative=0;negative<2;negative++) for(int extent=1;extent<=2;extent++) {
+        int origin=negative ? -2 : 0;
+        for(int pass=0;pass<2;pass++) {
+            Buffer *b=pass ? &parts : &whole;
+            CHECK(rbx3d_begin(b,1,origin+extent*.5f,origin+extent*.5f,origin-2,0,0,72));
+            rbx3d_sky(0xff6ec5f7u,0xff6ec5f7u);
+            if(!pass)rbx3d_surface(origin*2,origin*2,origin*2,extent*2,extent*2,3,BLOCK_DIRT);
+            else for(int y=0;y<extent*2;y++) for(int x=0;x<extent*2;x++)
+                rbx3d_surface(origin*2+x,origin*2+y,origin*2,1,1,3,BLOCK_DIRT);
+            rbx3d_end();
+        }
+        int different=0;
+        for(int y=0;y<whole.height;y++)for(int x=0;x<whole.width;x++)
+            different+=whole.pixels[y*whole.stride+x]!=parts.pixels[y*parts.stride+x];
+        CHECK(different<20); /* only possible texel-boundary floating-point ties */
+        check_padding(&whole);check_padding(&parts);
+    }
+    free(whole.pixels);free(parts.pixels);
+    puts("PASS half-cell UV: four quarters reconstruct a PNG; merged faces repeat at full-block scale, including negative coordinates");
+}
+static void test_merged_fog(void) {
+    static RbxMaterial flat;
+    flat.colors=1;flat.palette[0]=0xff207010u;
+    Buffer a=make_buffer(160,120,5),b=make_buffer(160,120,5);
+    for(int pass=0;pass<2;pass++) {
+        Buffer *out=pass ? &b : &a;
+        CHECK(rbx3d_begin(out,1,0,3,0,0,0,72));rbx3d_sky(0xff6ec5f7u,0xff6ec5f7u);rbx3d_fog(3,12);
+        int step=pass ? 1 : 20;
+        for(int z=2;z<22;z+=step)for(int x=-10;x<10;x+=step) {
+            RbxVertex v[4]={{x,0,z,0,0},{x,0,z+step,0,step},{x+step,0,z+step,step,step},{x+step,0,z,step,0}};
+            rbx3d_polygon(v,4,0,1,0,0,&flat);
+        }
+        rbx3d_end();
+    }
+    int different=0;
+    for(int y=0;y<a.height;y++)for(int x=0;x<a.width;x++) {
+        uint32_t p=a.pixels[y*a.stride+x],q=b.pixels[y*b.stride+x];different+=p!=q;
+        for(int c=0;c<3;c++)CHECK(abs(channel(p,c)-channel(q,c))<=4);
+    }
+    CHECK(different<100);
+    CHECK(channel(a.pixels[85*a.stride+80],2)>channel(a.pixels[110*a.stride+80],2));
+    check_padding(&a);check_padding(&b);free(a.pixels);free(b.pixels);
+    puts("PASS per-pixel radial fog stays continuous across greedy / individual face boundaries");
+}
+
 int main(void) {
+    screen_w=320;screen_h=240;
+    CHECK(rbx_materials_load(host_asset_manager("game/assets")));
     test_color_fog();
     test_upscale();
     test_perspective_depth();
     test_clipping_and_camera();
     test_voxel_materials();
+    test_half_uv();test_merged_fog();
     return 0;
 }

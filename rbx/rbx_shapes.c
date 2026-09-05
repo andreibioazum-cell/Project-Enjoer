@@ -1,6 +1,5 @@
-/* Кубы и отдельные грани вокселей. Геометрия и UV не зависят от камеры. */
+/* World-aligned voxel surfaces; no legacy scene objects. */
 #include "rbx_render_internal.h"
-#include <math.h>
 
 static const unsigned char corners[6][4][3] = {
     {{0,1,0},{0,1,1},{1,1,1},{1,1,0}},
@@ -12,29 +11,17 @@ static const unsigned char corners[6][4][3] = {
 };
 static const int normals[6][3] = {{0,1,0},{0,-1,0},{0,0,1},{0,0,-1},{1,0,0},{-1,0,0}};
 
-void rbx3d_block_face(float x, float y, float z, int face, int block) {
-    if (face < 0 || face >= 6 || block <= BLOCK_AIR || block >= BLOCK_COUNT) return;
+void rbx3d_surface(int sx,int sy,int sz,int u,int v,int face,int block) {
+    if (face<0 || face>=6 || block<=BLOCK_AIR || block>=BLOCK_COUNT || u<=0 || v<=0) return;
+    int base[3]={sx,sy,sz},ua=face<4 ? 0 : 2,va=face<2 ? 2 : 1;
+    float phase_u=((base[ua]%2+2)%2)*.5f,phase_v=((base[va]%2+2)%2)*.5f;
     RbxVertex w[4];
-    for (int i = 0; i < 4; i++) {
-        float lx = corners[face][i][0], ly = corners[face][i][1], lz = corners[face][i][2];
-        w[i] = (RbxVertex){x + lx, y + ly, z + lz, face < 4 ? lx : lz, face < 2 ? lz : 1 - ly};
+    for (int i=0;i<4;i++) {
+        float p[3]={sx*.5f,sy*.5f,sz*.5f};
+        float du=corners[face][i][ua]*u*.5f,dv=corners[face][i][va]*v*.5f;
+        p[ua]+=du;p[va]+=dv;
+        /* World-aligned repeating UV: a half face uses a quarter of a PNG. */
+        w[i]=(RbxVertex){p[0],p[1],p[2],phase_u+du,face<2 ? phase_v+dv : -phase_v-dv};
     }
-    rbx3d_polygon(w, 4, normals[face][0], normals[face][1], normals[face][2], 0, rbx_material(block, face));
-}
-void rbx3d_box(float x, float y, float z, float hx, float hy, float hz, float yaw, uint32_t color) {
-    if (hx <= 0 || hy <= 0 || hz <= 0 || !isfinite(x + y + z + hx + hy + hz + yaw) ||
-        !rbx3d_visible(x, y, z, hx, hy, hz)) return;
-    float c = cosf(yaw), s = sinf(yaw);
-    for (int face = 0; face < 6; face++) {
-        RbxVertex w[4];
-        for (int i = 0; i < 4; i++) {
-            float lx = (corners[face][i][0] * 2 - 1) * hx;
-            float ly = (corners[face][i][1] * 2 - 1) * hy;
-            float lz = (corners[face][i][2] * 2 - 1) * hz;
-            w[i] = (RbxVertex){x + lx * c + lz * s, y + ly, z - lx * s + lz * c, 0, 0};
-        }
-        float nx = normals[face][0] * c + normals[face][2] * s;
-        float nz = -normals[face][0] * s + normals[face][2] * c;
-        rbx3d_polygon(w, 4, nx, normals[face][1], nz, color, NULL);
-    }
+    rbx3d_polygon(w,4,normals[face][0],normals[face][1],normals[face][2],0,rbx_material(block,face));
 }

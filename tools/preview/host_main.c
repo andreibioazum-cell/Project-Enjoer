@@ -1,15 +1,16 @@
 /* Превью-сервер 3D-плейса для ПК: тот же C-код, окно — браузер.
- * Кадры — сырой RGBA (быстрее PNG), касания и WASD приходят со страницы. */
+ * JPEG transport keeps remote input responsive; PNG assets stay lossless in the game. */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
-#include "runtime.h"
-#include "rbx/rbx.h"
+#include "engine.h"
+#include "rbx/rbx_internal.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <limits.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,10 +19,11 @@
 #include <time.h>
 #include <unistd.h>
 
-void host_key_enter(void);
-
 static Buffer frame;
 static uint64_t last_ns = 0;
+static volatile sig_atomic_t running=1;
+const unsigned char *preview_jpeg(const Buffer *frame,size_t *length);
+static void shutdown_signal(int signal_number) { (void)signal_number;running=0; }
 
 static uint64_t mono_ns(void) {
     struct timespec ts;
@@ -31,19 +33,18 @@ static uint64_t mono_ns(void) {
 
 static void tick(void) {
     uint64_t now = mono_ns();
-    double d = last_ns ? (double)(now - last_ns) / 1e9 : 0.016;
+    double d = last_ns ? (double)(now - last_ns) / 1e9 : 0;
     last_ns = now;
     if (d < 0) d = 0;
-    if (d > 0.05) d = 0.05;
     dt = d;
-    update();
+    game_update();
 }
 
 static void render_frame(void) {
     tick();
-    if (!ds_graphics_begin_frame(&frame)) return;
-    draw(&frame);
-    ds_graphics_end_frame();
+    if (!gfx_begin_frame(&frame)) return;
+    game_draw(&frame);
+    gfx_end_frame();
 }
 
 static int read_request(int fd, char *buf, int cap, int *body_off, int *body_len) {
@@ -130,7 +131,7 @@ static void form_get(const char *body, int blen, const char *key, char *out, int
 }
 
 static void handle_event(const char *body, int blen) {
-    char t[16], k[16], s[1024], xs[32], ys[32], ids[32];
+    char t[16], k[16], xs[32], ys[32], ids[32];
     form_get(body, blen, "t", t, sizeof(t));
     if (strcmp(t, "down") == 0 || strcmp(t, "move") == 0 || strcmp(t, "up") == 0 || strcmp(t, "cancel-pointer") == 0) {
         form_get(body, blen, "x", xs, sizeof(xs));
@@ -140,21 +141,18 @@ static void handle_event(const char *body, int blen) {
         char *end;
         long id = ids[0] ? strtol(ids, &end, 10) : 0;
         if (id < 0 || id > INT_MAX || (ids[0] && *end)) return;
-        touch((float)atof(xs), (float)atof(ys), action, (int)id);
+        game_touch((float)atof(xs), (float)atof(ys), action, (int)id);
     } else if (strcmp(t, "cancel") == 0) {
         rbx_cancel_input();
+        last_ns=0;game_save();
     } else if (strcmp(t, "key") == 0) {
         form_get(body, blen, "k", k, sizeof(k));
-        char ds[8];
-        form_get(body, blen, "d", ds, sizeof(ds));
-        int down = ds[0] ? atoi(ds) : 1;
-        if (strcmp(k, "enter") == 0) host_key_enter();
-        else if (strcmp(k, "backspace") == 0) keyboard_backspace();
-        else rbx_key(k, down);
-    } else if (strcmp(t, "text") == 0) {
-        form_get(body, blen, "s", s, sizeof(s));
-        if (s[0]) keyboard_type(s);
+        char down_text[8];
+        form_get(body, blen, "d", down_text, sizeof(down_text));
+        int down = down_text[0] ? atoi(down_text) : 1;
+        rbx_key(k, down);
     }
+
 }
 
 /* Пакет событий одного запроса применяется строго по порядку. */
@@ -168,114 +166,39 @@ static void handle_events(const char *body, int len) {
     }
 }
 
-static const char *INDEX_HTML =
-"<!doctype html>\n"
-"<html lang=\"ru\"><head><meta charset=\"utf-8\">\n"
-"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">\n"
-"<title>Enjoer — блочный мир</title>\n"
-"<style>\n"
-"html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;overscroll-behavior:none;}\n"
-".game{position:fixed;inset:0;display:grid;place-items:center;}\n"
-"canvas{display:block;touch-action:none;user-select:none;outline:none;cursor:grab;}\n"
-"canvas:active{cursor:grabbing;}\n"
-"</style></head><body>\n"
-"<main class=\"game\"><canvas id=\"c\" tabindex=\"0\" aria-label=\"Блочный мир. WASD — движение, пробел — прыжок, F — переключить полёт. Слева джойстик, справа камера.\"></canvas></main>\n"
-"<script>\n"
-"const cv=document.getElementById('c'),ctx=cv.getContext('2d');\n"
-"let W=960,H=540,img=null;\n"
-"function fit(){const s=Math.min(innerWidth/W,innerHeight/H);cv.style.width=W*s+'px';cv.style.height=H*s+'px';}\n"
-"fetch('/info').then(r=>r.json()).then(async j=>{\n"
-"  W=j.w;H=j.h;cv.width=W;cv.height=H;fit();\n"
-"  await fetch('/event',{method:'POST',body:'t=cancel'});\n"
-"  img=ctx.createImageData(W,H);loop();\n"
-"});\n"
-"async function loop(){\n"
-"  try{\n"
-"    if(!document.hidden){\n"
-"      const r=await fetch('/frame.rgba',{cache:'no-store'});\n"
-"      const buf=new Uint8ClampedArray(await r.arrayBuffer());\n"
-"      if(img&&buf.length>=W*H*4){img.data.set(buf.subarray(0,W*H*4));ctx.putImageData(img,0,0);}\n"
-"    }\n"
-"  }catch(e){}\n"
-"  requestAnimationFrame(loop);\n"
-"}\n"
-"// Порядок down/move/up сохраняется; лишние move не забивают сеть.\n"
-"const queue=[];\n"
-"let sending=false;\n"
-"function ev(body){\n"
-"  if(body.t==='move'){\n"
-"    for(let i=queue.length-1;i>=0&&queue[i].t==='move';i--){\n"
-"      if(queue[i].id===body.id){queue[i]=body;return;}\n"
-"    }\n"
-"  }\n"
-"  queue.push(body);flushEvents();\n"
-"}\n"
-"async function flushEvents(){\n"
-"  if(sending||!queue.length)return;\n"
-"  sending=true;\n"
-"  const batch=queue.splice(0,64);let retryDelay=16;\n"
-"  try{\n"
-"    await fetch('/event',{method:'POST',body:batch.map(b=>new URLSearchParams(b).toString()).join('\\n'),keepalive:true});\n"
-"  }catch(e){queue.length=0;queue.push({t:'cancel'});retryDelay=250;}\n"
-"  finally{sending=false;if(queue.length)setTimeout(flushEvents,retryDelay);}\n"
-"}\n"
-"function xy(e){\n"
-"  const r=cv.getBoundingClientRect();\n"
-"  return {x:Math.round((e.clientX-r.left)*W/r.width),y:Math.round((e.clientY-r.top)*H/r.height)};\n"
-"}\n"
-"const pointers=new Set(),pressed=new Map();\n"
-"cv.addEventListener('pointerdown',e=>{\n"
-"  if(e.pointerType==='mouse'&&e.button!==0)return;\n"
-"  cv.focus({preventScroll:true});pointers.add(e.pointerId);cv.setPointerCapture(e.pointerId);\n"
-"  ev({t:'down',id:e.pointerId,...xy(e)});e.preventDefault();\n"
-"});\n"
-"cv.addEventListener('pointermove',e=>{\n"
-"  if(pointers.has(e.pointerId))ev({t:'move',id:e.pointerId,...xy(e)});\n"
-"});\n"
-"function releasePointer(e){\n"
-"  if(!pointers.delete(e.pointerId))return;\n"
-"  ev({t:'up',id:e.pointerId,...xy(e)});\n"
-"}\n"
-"cv.addEventListener('pointerup',releasePointer);\n"
-"function cancelPointer(e){if(pointers.delete(e.pointerId))ev({t:'cancel-pointer',id:e.pointerId});}\n"
-"cv.addEventListener('pointercancel',cancelPointer);\n"
-"cv.addEventListener('lostpointercapture',cancelPointer);\n"
-"cv.addEventListener('contextmenu',e=>e.preventDefault());\n"
-"const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyF:'f',Space:'space',ShiftLeft:'Shift',ShiftRight:'Shift',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',ArrowUp:'ArrowUp',ArrowDown:'ArrowDown'};\n"
-"window.addEventListener('keydown',e=>{\n"
-"  const k=keyMap[e.code];\n"
-"  if(!k||e.ctrlKey||e.metaKey||e.altKey)return;\n"
-"  e.preventDefault();if(e.repeat||pressed.has(e.code))return;\n"
-"  const held=[...pressed.values()].includes(k);pressed.set(e.code,k);\n"
-"  if(!held)ev({t:'key',k,d:1});\n"
-"});\n"
-"window.addEventListener('keyup',e=>{\n"
-"  const k=pressed.get(e.code);if(!k)return;\n"
-"  pressed.delete(e.code);e.preventDefault();\n"
-"  if(![...pressed.values()].includes(k))ev({t:'key',k,d:0});\n"
-"});\n"
-"function releaseAll(){\n"
-"  const ids=[...pointers];pointers.clear();pressed.clear();queue.length=0;ev({t:'cancel'});\n"
-"  for(const id of ids){if(cv.hasPointerCapture(id))cv.releasePointerCapture(id);}\n"
-"}\n"
-"window.addEventListener('blur',releaseAll);\n"
-"window.addEventListener('resize',()=>{releaseAll();fit();});\n"
-"document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll();});\n"
-"</script>\n"
-"</body></html>\n";
+static char *read_html(void) {
+    FILE *f=fopen("tools/preview/index.html","rb");if(!f)return NULL;
+    if(fseek(f,0,SEEK_END)!=0){fclose(f);return NULL;}
+    long n=ftell(f);rewind(f);
+    if(n<1 || n>65536){fclose(f);return NULL;}
+    char *p=malloc((size_t)n+1);
+    if(!p){fclose(f);return NULL;}
+    if(fread(p,1,(size_t)n,f)!=(size_t)n){free(p);fclose(f);return NULL;}
+    p[n]=0;fclose(f);return p;
+}
 
 int main(int argc, char **argv) {
     int port = 8090;
     int w = 960, h = 540;
-    const char *assets = "game/assets";
+    const char *assets = "game/assets", *storage = "data";
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--port") && i + 1 < argc) port = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--w") && i + 1 < argc) w = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--h") && i + 1 < argc) h = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--storage") && i + 1 < argc) storage = argv[++i];
         else if (!strcmp(argv[i], "--assets") && i + 1 < argc) assets = argv[++i];
     }
+    if(w<64 || h<64 || w>4096 || h>4096 || port<1 || port>65535) {
+        fprintf(stderr,"Invalid preview size or port\n");return 1;
+    }
+    char *index_html=read_html();
+    if(!index_html){fprintf(stderr,"Run preview from the repository root (tools/preview/index.html required)\n");return 1;}
     signal(SIGPIPE, SIG_IGN);
+    struct sigaction sa={0};sa.sa_handler=shutdown_signal;sigemptyset(&sa.sa_mask);
+    sigaction(SIGTERM,&sa,NULL);sigaction(SIGINT,&sa,NULL);
 
+    mkdir(storage,0700);
+    app_set_storage(storage);
     screen_w = w;
     screen_h = h;
     frame.pixels = (uint32_t *)malloc((size_t)w * h * 4);
@@ -285,8 +208,9 @@ int main(int argc, char **argv) {
     if (!frame.pixels) { fprintf(stderr, "OOM\n"); return 1; }
 
     AAssetManager *am = host_asset_manager(assets);
-    if (!ds_graphics_init(am)) { fprintf(stderr, "graphics init failed\n"); return 1; }
-    init(am);
+    if (!gfx_init(am)) { fprintf(stderr, "graphics init failed\n"); return 1; }
+    game_init(am);
+    if(app_failed()){fprintf(stderr,"%s\n",app_error());return 1;}
     render_frame();
 
     int srv = socket(AF_INET, SOCK_STREAM, 0);
@@ -306,7 +230,7 @@ int main(int argc, char **argv) {
             port, w, h, assets);
 
     static char reqbuf[16384];
-    for (;;) {
+    while (running) {
         int fd = accept(srv, NULL, NULL);
         if (fd < 0) continue;
         struct timeval timeout = {5, 0};
@@ -322,13 +246,22 @@ int main(int argc, char **argv) {
         sscanf(reqbuf, "%7s %511s", method, path);
 
         if (strcmp(method, "GET") == 0 && strcmp(path, "/") == 0) {
-            http_head(fd, 200, "text/html; charset=utf-8", (int)strlen(INDEX_HTML), 0);
-            send_all(fd, INDEX_HTML, strlen(INDEX_HTML));
+            http_head(fd, 200, "text/html; charset=utf-8", (int)strlen(index_html), 0);
+            send_all(fd, index_html, strlen(index_html));
         } else if (strcmp(method, "GET") == 0 && strcmp(path, "/info") == 0) {
-            char info[64];
-            int n = snprintf(info, sizeof(info), "{\"w\":%d,\"h\":%d}", w, h);
+            float x,y,z;rbx_player_pos(&x,&y,&z);
+            RbxHit hit;char target[160]="null";
+            if(rbx_target(&hit))snprintf(target,sizeof(target),"{\"x\":%d,\"y\":%d,\"z\":%d,\"block\":%d}",hit.x,hit.y,hit.z,hit.block);
+            char info[512];
+            int n=snprintf(info,sizeof(info),"{\"w\":%d,\"h\":%d,\"fps\":%.1f,\"distance\":%.1f,\"pending\":%d,\"x\":%.4f,\"y\":%.4f,\"z\":%.4f,\"flying\":%d,\"selected\":%d,\"target\":%s}",
+                           w,h,rbx_fps(),rbx_world_distance(),rbx_world_pending(),x,y,z,rbx_player_flying(),rbx_selected(),target);
             http_head(fd, 200, "application/json", n, 0);
             send_all(fd, info, (size_t)n);
+        } else if (!strcmp(method,"GET") && !strcmp(path,"/frame.jpg")) {
+            render_frame();size_t bytes=0;
+            const unsigned char *jpeg=preview_jpeg(&frame,&bytes);
+            if(jpeg){http_head(fd,200,"image/jpeg",(int)bytes,0);send_all(fd,jpeg,bytes);}
+            else {http_head(fd,500,"text/plain",5,0);send_all(fd,"error",5);}
         } else if (strcmp(method, "GET") == 0 && strcmp(path, "/frame.rgba") == 0) {
             render_frame();
             int bytes = frame.width * frame.height * 4;
@@ -344,5 +277,6 @@ int main(int argc, char **argv) {
         }
         close(fd);
     }
+    game_save();gfx_shutdown();free(frame.pixels);free(index_html);close(srv);
     return 0;
 }

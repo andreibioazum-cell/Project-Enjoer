@@ -2,7 +2,7 @@
 #ifndef RBX_H
 #define RBX_H
 
-#include "runtime.h"
+#include "engine.h"
 
 void rbx_key(const char *name, int down);
 /* Сброс всех удержаний при потере фокуса/отмене жеста. */

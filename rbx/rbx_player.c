@@ -10,23 +10,26 @@
 #define PITCH_LIMIT 1.45f
 #define TAU 6.28318530718f
 
-static float px, py, pz, pvy, cyaw, cpitch, walk;
+static float px, py, pz, pvy, cyaw, cpitch;
 static int flying, grounded, touch_jump, jump_latch;
 static int k_w, k_a, k_s, k_d, k_space, k_sink, k_f;
 static int k_left, k_right, k_up, k_down;
 
 void rbx_player_spawn(void) {
     px = 8.5f; pz = 8.5f;
-    py = rbx_terrain_height(8, 8) + 1.002f;
-    pvy = walk = 0; flying = 0; grounded = 1; touch_jump = jump_latch = 0;
+    py = 1.002f;
+    for (int y=WORLD_HEIGHT*2-1;y>=0;y--) {
+        int occupied=0;
+        for (int z=16;z<=17;z++) for (int x=16;x<=17;x++) occupied |= rbx_cell_solid(x,y,z);
+        if (occupied) { py=(y+1)*.5f+.002f;break; }
+    }
+    pvy = 0; flying = 0; grounded = 1; touch_jump = jump_latch = 0;
     cyaw = .7f; cpitch = -.16f;
 }
-void rbx_player_pos(float *x, float *y, float *z, float *yaw, float *phase) {
+void rbx_player_pos(float *x, float *y, float *z) {
     if (x) *x = px;
     if (y) *y = py;
     if (z) *z = pz;
-    if (yaw) *yaw = cyaw;
-    if (phase) *phase = walk;
 }
 int rbx_player_flying(void) { return flying; }
 int rbx_player_grounded(void) { return grounded; }
@@ -73,26 +76,33 @@ void rbx_key_state(const char *name, int down) {
     else if (!strcmp(name,"ArrowRight")) k_right = d;
     else if (!strcmp(name,"ArrowUp")) k_up = d;
     else if (!strcmp(name,"ArrowDown")) k_down = d;
+    else if (!strcmp(name,"break") || !strcmp(name,"e") || !strcmp(name,"E")) rbx_action_hold(ACTION_BREAK,d,0);
+    else if (!strcmp(name,"place") || !strcmp(name,"r") || !strcmp(name,"R")) rbx_action_hold(ACTION_PLACE,d,0);
+    else if (name[0]>='1' && name[0]<='6' && !name[1]) { if(d)rbx_select(name[0]-'1'); }
     else if (!strcmp(name,"f") || !strcmp(name,"F")) { if (d && !k_f) rbx_player_toggle_flight(); k_f = d; }
 }
-static void move_axis(int axis, float delta) {
-    if (delta == 0) return;
-    float *pos = axis == 0 ? &px : axis == 1 ? &py : &pz;
-    *pos += delta;
-    const float r = RBX_PLAYER_RADIUS, h = RBX_PLAYER_HEIGHT, eps = .0001f;
-    int x0 = (int)floorf(px-r+eps), x1 = (int)floorf(px+r-eps);
-    int y0 = (int)floorf(py+eps), y1 = (int)floorf(py+h-eps);
-    int z0 = (int)floorf(pz-r+eps), z1 = (int)floorf(pz+r-eps);
-    for (int y = y0; y <= y1; y++) for (int z = z0; z <= z1; z++) for (int x = x0; x <= x1; x++) {
-        if (!rbx_world_solid(x,y,z)) continue;
-        if (px+r <= x+eps || px-r >= x+1-eps || py+h <= y+eps || py >= y+1-eps ||
-            pz+r <= z+eps || pz-r >= z+1-eps) continue;
-        if (axis == 0) px = delta > 0 ? x-r : x+1+r;
-        else if (axis == 2) pz = delta > 0 ? z-r : z+1+r;
+int rbx_player_overlaps(int sx,int sy,int sz) {
+    const float r=RBX_PLAYER_RADIUS,h=RBX_PLAYER_HEIGHT,eps=.0001f;
+    float x=sx*.5f,y=sy*.5f,z=sz*.5f;
+    return px+r>x+eps && px-r<x+.5f-eps && py+h>y+eps && py<y+.5f-eps &&
+           pz+r>z+eps && pz-r<z+.5f-eps;
+}
+static void move_axis(int axis,float delta) {
+    if (delta==0) return;
+    float *pos=axis==0 ? &px : axis==1 ? &py : &pz;
+    *pos+=delta;
+    const float r=RBX_PLAYER_RADIUS,h=RBX_PLAYER_HEIGHT,eps=.0001f;
+    int x0=(int)floorf((px-r+eps)*2),x1=(int)floorf((px+r-eps)*2);
+    int y0=(int)floorf((py+eps)*2),y1=(int)floorf((py+h-eps)*2);
+    int z0=(int)floorf((pz-r+eps)*2),z1=(int)floorf((pz+r-eps)*2);
+    for (int y=y0;y<=y1;y++) for (int z=z0;z<=z1;z++) for (int x=x0;x<=x1;x++) {
+        if (!rbx_cell_solid(x,y,z) || !rbx_player_overlaps(x,y,z)) continue;
+        if (axis==0) px=delta>0 ? x*.5f-r : (x+1)*.5f+r;
+        else if (axis==2) pz=delta>0 ? z*.5f-r : (z+1)*.5f+r;
         else {
-            py = delta > 0 ? y-h : y+1;
-            if (delta < 0) grounded = 1;
-            pvy = 0;
+            py=delta>0 ? y*.5f-h : (y+1)*.5f;
+            if (delta<0) grounded=1;
+            pvy=0;
         }
     }
 }
@@ -109,14 +119,14 @@ void rbx_player_update(float d) {
     float vz = cosf(cyaw)*cp*forward - sinf(cyaw)*side;
     float vy = flying ? sinf(cpitch)*forward + k_space-k_sink : 0;
     float length = sqrtf(vx*vx + vy*vy + vz*vz);
-    if (length > 1) { vx/=length; vy/=length; vz/=length; length=1; }
-    int water = rbx_world_block((int)floorf(px), (int)floorf(py+.6f), (int)floorf(pz)) == BLOCK_WATER;
+    if (length > 1) { vx/=length; vy/=length; vz/=length; }
+    int water = rbx_world_cell((int)floorf(px*2), (int)floorf((py+.6f)*2), (int)floorf(pz*2)) == BLOCK_WATER;
     float speed = flying ? FLY_SPEED : water ? 2.8f : WALK_SPEED;
     vx *= speed; vz *= speed;
     if (flying) pvy = vy*speed;
     else {
         int jump = k_space || touch_jump;
-        if (jump && !jump_latch && grounded) { pvy=JUMP_SPEED; grounded=0; snd_play("send.wav"); }
+        if (jump && !jump_latch && grounded) { pvy=JUMP_SPEED; grounded=0; snd_play("jump.wav"); }
         jump_latch = jump;
         pvy -= (water ? 6 : GRAVITY)*d;
         if (water && jump) pvy = 4.5f; /* плавание, не полёт над водой */
@@ -131,6 +141,5 @@ void rbx_player_update(float d) {
     for (int i=0; i<steps; i++) {
         move_axis(0,vx*step); move_axis(2,vz*step); move_axis(1,pvy*step);
     }
-    walk += d*8*length;
     if (py < -8 || !isfinite(px+py+pz)) { rbx_player_spawn(); rbx_cancel_input(); }
 }
