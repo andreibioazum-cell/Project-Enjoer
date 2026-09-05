@@ -121,7 +121,20 @@ void rbx_world_draw(void) {
         if (!rbx3d_visible(ox+8,c->min_y*.5f+hy,oz+8,8,hy,8)) continue;
         for (int i=0;i<c->count;i++) {
             const RbxQuad *f=&c->quads[i];
-            rbx3d_surface(cx*CHUNK_SIZE*2+f->x,f->y,cz*CHUNK_SIZE*2+f->z,f->u,f->v,f->face,f->block);
+            int sx=cx*CHUNK_SIZE*2+f->x, sy=f->y, sz=cz*CHUNK_SIZE*2+f->z;
+            float hx, hy, hz, cxq, cyq, czq;
+            if (f->face<2) {
+                hx=f->u*.25f; hz=f->v*.25f; hy=.02f;
+                cxq=sx*.5f+hx; cyq=sy*.5f; czq=sz*.5f+hz;
+            } else if (f->face<4) {
+                hx=f->u*.25f; hy=f->v*.25f; hz=.02f;
+                cxq=sx*.5f+hx; cyq=sy*.5f+hy; czq=sz*.5f;
+            } else {
+                hz=f->u*.25f; hy=f->v*.25f; hx=.02f;
+                cxq=sx*.5f; cyq=sy*.5f+hy; czq=sz*.5f+hz;
+            }
+            if (!rbx3d_visible(cxq,cyq,czq,hx,hy,hz)) continue;
+            rbx3d_surface(sx,sy,sz,f->u,f->v,f->face,f->block);
         }
     }
 }

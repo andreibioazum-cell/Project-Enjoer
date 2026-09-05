@@ -81,12 +81,14 @@ void rbx_actions_update(float d) {
 int rbx_target(RbxHit *hit) { if(hit && has_target)*hit=target;return has_target; }
 void rbx_target_draw(void) {
     if (!has_target || target.y<2) return;
-    float p[3]={target.x*.5f,target.y*.5f,target.z*.5f};
-    /* Depth-tested edges outline this one half cell, not its entire parent. */
+    /* Немного расширяем обводку outward чтобы не z-fighting с гранью блока. */
+    const float eps=.004f;
+    float p[3]={target.x*.5f - eps, target.y*.5f - eps, target.z*.5f - eps};
+    float size=.5f + 2*eps;
     for (int axis=0;axis<3;axis++) for (int a=0;a<2;a++) for (int b=0;b<2;b++) {
         float v[3]={p[0],p[1],p[2]},end[3];
-        v[(axis+1)%3]+=a*.5f;v[(axis+2)%3]+=b*.5f;
-        memcpy(end,v,sizeof(end));end[axis]+=.5f;
+        v[(axis+1)%3]+=a*size;v[(axis+2)%3]+=b*size;
+        memcpy(end,v,sizeof(end));end[axis]+=size;
         rbx3d_segment(v[0],v[1],v[2],end[0],end[1],end[2],0xffffffffu);
     }
 }
