@@ -1,26 +1,29 @@
-/* rbx/rbx_player.c — игрок: физика (AABB по осям), вода/лава/батут,
- * камера третьего лица, клавиатурные клавиши, прыжок. */
+/* rbx/rbx_player.c — полёт от первого лица. Джойстик/WASD двигают
+ * вдоль взгляда, без гравитации и инерции; стены остаются твёрдыми. */
 #include "rbx_internal.h"
 #include <math.h>
 #include <string.h>
 
-static float px, py, pz, pvy, pyaw, walk;
-static int on_ground, jumped;
+#define FLY_SPEED 13.5f
+#define PITCH_LIMIT 1.45f
+#define TAU 6.28318530718f
+
+static float px, py, pz, walk;
 static float cyaw, cpitch;
-static int k_w, k_a, k_s, k_d, k_sp, k_left, k_right, k_up, k_down;
+static int k_w, k_a, k_s, k_d, k_rise, k_sink;
+static int k_left, k_right, k_up, k_down;
 
 void rbx_player_spawn(void) {
     px = 0; py = 0.32f; pz = 1.2f;
-    pvy = 0; pyaw = 0.55f; walk = 0;
-    on_ground = 1;
-    cyaw = 0.48f; cpitch = -0.20f;
+    walk = 0;
+    cyaw = 0.48f; cpitch = -0.12f;
 }
 
 void rbx_player_pos(float *x, float *y, float *z, float *yaw, float *walk_out) {
     if (x) *x = px;
     if (y) *y = py;
     if (z) *z = pz;
-    if (yaw) *yaw = pyaw;
+    if (yaw) *yaw = cyaw;
     if (walk_out) *walk_out = walk;
 }
 
@@ -29,11 +32,22 @@ void rbx_camera_angles(float *yaw, float *pitch) {
     if (pitch) *pitch = cpitch;
 }
 
+static void clamp_angles(void) {
+    cyaw = remainderf(cyaw, TAU);
+    if (cpitch < -PITCH_LIMIT) cpitch = -PITCH_LIMIT;
+    if (cpitch > PITCH_LIMIT) cpitch = PITCH_LIMIT;
+}
+
 void rbx_camera_look(float dx, float dy) {
+    if (screen_w <= 0 || screen_h <= 0 || !isfinite(dx + dy)) return;
     cyaw += dx / (float)screen_w * 3.4f;
-    cpitch -= dy / (float)screen_h * 2.2f;
-    if (cpitch < -1.15f) cpitch = -1.15f;
-    if (cpitch > 0.55f) cpitch = 0.55f;
+    cpitch -= dy / (float)screen_h * 2.6f;
+    clamp_angles();
+}
+
+void rbx_key_reset(void) {
+    k_w = k_a = k_s = k_d = k_rise = k_sink = 0;
+    k_left = k_right = k_up = k_down = 0;
 }
 
 void rbx_key_state(const char *name, int down) {
@@ -47,133 +61,73 @@ void rbx_key_state(const char *name, int down) {
     else if (!strcmp(name, "ArrowRight")) k_right = d;
     else if (!strcmp(name, "ArrowUp")) k_up = d;
     else if (!strcmp(name, "ArrowDown")) k_down = d;
-    else if (!strcmp(name, "space") || !strcmp(name, " ")) k_sp = d;
+    else if (!strcmp(name, "space") || !strcmp(name, " ")) k_rise = d;
+    else if (!strcmp(name, "Shift")) k_sink = d;
 }
 
-void rbx_player_jump(void) {
-    if (on_ground && !jumped) {
-        pvy = 16.5f;
-        on_ground = 0;
-        jumped = 1;
-        snd_play("send.wav");
-    }
-}
-
-static int aabb(float ax, float ay, float az, float ahx, float ahy, float ahz, const RbxBox *b) {
-    return fabsf(ax - b->x) < ahx + b->hx &&
-           fabsf(ay - b->y) < ahy + b->hy &&
-           fabsf(az - b->z) < ahz + b->hz;
-}
-
-static void resolve_axis(int axis, float *px_, float *py_, float *pz_, float *pvy_, int *ground, int *lava, int *water, int *bounce) {
-    const float hx = 0.82f, hy = 2.45f, hz = 0.82f;
-    float cx = *px_, cy = *py_ + hy, cz = *pz_;
+/* Небольшие шаги не дают пролететь сквозь тонкую стену при просадке FPS. */
+static void move_axis(int axis, float delta) {
+    if (delta == 0) return;
+    const float hx = RBX_PLAYER_RADIUS, hy = RBX_PLAYER_HEIGHT * 0.5f, epsilon = .0001f;
+    float *pos = axis == 0 ? &px : axis == 1 ? &py : &pz;
+    *pos += delta;
     int count = 0;
     const RbxBox *boxes = rbx_world_boxes(&count);
     for (int i = 0; i < count; i++) {
         const RbxBox *b = &boxes[i];
-        if (b->mat == MAT_SKIP) continue;
-        if (b->mat == MAT_WATER) {
-            if (aabb(cx, cy, cz, hx, hy, hz, b)) *water = 1;
-            continue;
-        }
-        if (b->mat == MAT_LAVA) {
-            if (fabsf(*px_ - b->x) < b->hx && fabsf(*pz_ - b->z) < b->hz &&
-                *py_ < b->y + b->hy + 1.8f && *py_ > b->y - b->hy - 1.0f)
-                *lava = 1;
-            continue;
-        }
-        if (!aabb(cx, cy, cz, hx, hy, hz, b)) continue;
-        if (b->mat == MAT_BOUNCE && axis == 1) *bounce = 1;
-        if (axis == 0) {
-            float pen = hx + b->hx - fabsf(cx - b->x);
-            *px_ += (cx > b->x) ? pen : -pen;
-            cx = *px_;
-        } else if (axis == 2) {
-            float pen = hz + b->hz - fabsf(cz - b->z);
-            *pz_ += (cz > b->z) ? pen : -pen;
-            cz = *pz_;
-        } else {
-            float pen = hy + b->hy - fabsf(cy - b->y);
-            if (cy >= b->y) {
-                *py_ += pen;
-                if (*pvy_ < 0) *pvy_ = 0;
-                *ground = 1;
-            } else {
-                *py_ -= pen;
-                if (*pvy_ > 0) *pvy_ = 0;
-            }
-            cy = *py_ + hy;
-        }
+        if (b->mat == MAT_SKIP || b->mat == MAT_WATER || b->mat == MAT_LAVA) continue;
+        float cx = px, cy = py + hy, cz = pz;
+        /* Контакт с полом не считается проникновением по X/Z из-за float. */
+        if (fabsf(cx - b->x) >= hx + b->hx - epsilon || fabsf(cy - b->y) >= hy + b->hy - epsilon ||
+            fabsf(cz - b->z) >= hx + b->hz - epsilon) continue;
+        if (axis == 0) px = b->x + (delta > 0 ? -b->hx - hx : b->hx + hx);
+        else if (axis == 2) pz = b->z + (delta > 0 ? -b->hz - hx : b->hz + hx);
+        else py = delta > 0 ? b->y - b->hy - RBX_PLAYER_HEIGHT : b->y + b->hy;
     }
+}
+
+static int touching_lava(void) {
+    int count = 0;
+    const RbxBox *boxes = rbx_world_boxes(&count);
+    for (int i = 0; i < count; i++) {
+        const RbxBox *b = &boxes[i];
+        if (b->mat == MAT_LAVA && fabsf(px - b->x) < b->hx + RBX_PLAYER_RADIUS &&
+            fabsf(pz - b->z) < b->hz + RBX_PLAYER_RADIUS &&
+            py < b->y + b->hy && py + RBX_PLAYER_HEIGHT > b->y - b->hy) return 1;
+    }
+    return 0;
 }
 
 void rbx_player_update(float d) {
+    if (!isfinite(d) || d <= 0) return;
+    if (d > 0.05f) d = 0.05f;
     float jx, jy;
     rbx_input_joy(&jx, &jy);
+    cyaw += (k_right - k_left) * 1.7f * d;
+    cpitch += (k_up - k_down) * 1.1f * d;
+    clamp_angles();
 
-    if (k_left) cyaw -= 1.7f * d;
-    if (k_right) cyaw += 1.7f * d;
-    if (k_up) cpitch += 1.1f * d;
-    if (k_down) cpitch -= 1.1f * d;
-    if (cpitch < -1.15f) cpitch = -1.15f;
-    if (cpitch > 0.55f) cpitch = 0.55f;
+    float mx = jx + k_d - k_a, forward = -jy + k_w - k_s;
+    float fs = sinf(cyaw), fc = cosf(cyaw), cp = cosf(cpitch), sp = sinf(cpitch);
+    float vx = fs * cp * forward + fc * mx;
+    float vy = sp * forward + k_rise - k_sink;
+    float vz = fc * cp * forward - fs * mx;
+    float length = sqrtf(vx * vx + vy * vy + vz * vz);
+    if (length > 1) { vx /= length; vy /= length; vz /= length; length = 1; }
 
-    float mx = jx, mz = -jy;
-    if (k_w) mz += 1;
-    if (k_s) mz -= 1;
-    if (k_a) mx -= 1;
-    if (k_d) mx += 1;
-    float ml = sqrtf(mx * mx + mz * mz);
-    if (ml > 1.0f) { mx /= ml; mz /= ml; ml = 1; }
-
-    float fs = sinf(cyaw), fc = cosf(cyaw);
-    float wishx = fs * mz + fc * mx;
-    float wishz = fc * mz + (-fs) * mx;
-
-    int water = 0, lava = 0, bounce = 0;
-    float speed = water ? 6.0f : 13.5f;
-    /* water flag from previous frame roughly — resolve after move */
-
-    if (k_sp) rbx_player_jump();
-    else jumped = 0;
-
-    pvy += -48.0f * d;
-    if (pvy < -42.0f) pvy = -42.0f;
-    py += pvy * d;
-    on_ground = 0;
-    resolve_axis(1, &px, &py, &pz, &pvy, &on_ground, &lava, &water, &bounce);
-    if (water) {
-        pvy += 28.0f * d; /* выталкивание */
-        if (pvy > 4.0f) pvy = 4.0f;
-        if (pvy < -8.0f) pvy = -8.0f;
-        speed = 6.5f;
+    int steps = (int)ceilf(FLY_SPEED * d / 0.35f);
+    float step = FLY_SPEED * d / steps;
+    for (int i = 0; i < steps; i++) {
+        move_axis(1, vy * step);
+        move_axis(0, vx * step);
+        move_axis(2, vz * step);
+        if (touching_lava() || py < -12.0f) {
+            rbx_player_spawn();
+            rbx_cancel_input();
+            snd_play("notify.wav");
+            return;
+        }
+        rbx_world_collect(px, py, pz);
     }
-    if (bounce && pvy <= 0.5f) {
-        pvy = 24.0f;
-        on_ground = 0;
-        bounce = 0;
-    }
-
-    px += wishx * speed * d;
-    resolve_axis(0, &px, &py, &pz, &pvy, &on_ground, &lava, &water, &bounce);
-    pz += wishz * speed * d;
-    resolve_axis(2, &px, &py, &pz, &pvy, &on_ground, &lava, &water, &bounce);
-
-    if (ml > 0.15f) {
-        pyaw = atan2f(wishx, wishz);
-        walk += d * 9.0f * ml;
-    } else {
-        walk += d * 0.8f;
-    }
-
-    if (lava || py < -6.0f) {
-        rbx_player_spawn();
-        snd_play("notify.wav");
-    }
-
-    rbx_world_collect(px, py, pz);
+    walk += d * 9.0f * length;
 }
-
-/* тач-кнопка прыжка отпускает флаг */
-void rbx_player_jump_release(void) { jumped = 0; }

@@ -1,5 +1,5 @@
-/* rbx/rbx_scene.c — отрисовка 3D-сцены: камера от третьего лица,
- * мир, монеты, боты и «нуб» игрока.
+/* rbx/rbx_scene.c — отрисовка 3D-сцены: камера от первого лица,
+ * мир, монеты и боты (своё тело не закрывает обзор).
  *
  * Антипикселизация: 3D рендерится в полном разрешении, а на больших
  * экранах (где полный кадр софтверным рендером дорог) — в половинном
@@ -39,15 +39,8 @@ void rbx_scene_draw(Buffer *buffer) {
     rbx_player_pos(&px, &py, &pz, NULL, NULL);
     rbx_camera_angles(&cyaw, &cpitch);
 
-    float lookx = px, looky = py + 3.2f, lookz = pz;
-    float dist = 11.0f;
-    float cp = cosf(cpitch), sp = sinf(cpitch);
-    float camx = lookx - sinf(cyaw) * cp * dist;
-    float camy = looky - sp * dist;
-    float camz = lookz - cosf(cyaw) * cp * dist;
-    if (camy < 1.2f) camy = 1.2f;
-
-    if (!rbx3d_begin(buffer, render_scale(), camx, camy, camz, cyaw, cpitch, 72.0f)) return;
+    if (!rbx3d_begin(buffer, render_scale(), px, py + RBX_PLAYER_EYE_HEIGHT, pz,
+                     cyaw, cpitch, 72.0f)) return;
     rbx3d_sky(0xFF6EC5F7u, 0xFFB3E5FCu);
 
     int nbox = 0;
@@ -56,12 +49,13 @@ void rbx_scene_draw(Buffer *buffer) {
         const RbxBox *b = &boxes[i];
         rbx3d_box(b->x, b->y, b->z, b->hx, b->hy, b->hz, 0, b->color);
     }
-    float spin = (float)rbx_t_abs * 2.4f;
+    float spin = (float)fmod(rbx_t_abs * 2.4, 6.28318530718);
+    float bob_phase = (float)fmod(rbx_t_abs * 3.0, 6.28318530718);
     int ncoin = 0;
     const RbxCoin *coins = rbx_world_coins(&ncoin);
     for (int i = 0; i < ncoin; i++) {
         if (coins[i].taken) continue;
-        float bob = sinf((float)rbx_t_abs * 3.0f + i) * 0.25f;
+        float bob = sinf(bob_phase + i) * 0.25f;
         rbx3d_box(coins[i].x, coins[i].y + bob, coins[i].z, 0.42f, 0.42f, 0.12f, spin, 0xFFFFD600u);
     }
     const RbxBot *bots = rbx_world_bots();
@@ -69,9 +63,5 @@ void rbx_scene_draw(Buffer *buffer) {
         const RbxBot *b = &bots[i];
         avatar(b->x, b->y, b->z, b->yaw, b->phase, b->head, b->torso, b->pants, b->head);
     }
-    /* классический нуб */
-    float pyaw, walk;
-    rbx_player_pos(NULL, NULL, NULL, &pyaw, &walk);
-    avatar(px, py, pz, pyaw, walk, 0xFFF5CD30u, 0xFF0D69ACu, 0xFF4B974Bu, 0xFFF5CD30u);
     rbx3d_end();
 }

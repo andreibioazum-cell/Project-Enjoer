@@ -61,6 +61,7 @@ static void handle_cmd(struct android_app *app, int32_t command) {
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
         case APP_CMD_CONFIG_CHANGED:
+            rbx_cancel_input();
             /* adjustResize меняет поверхность, пока открыта клавиатура. */
             if (app->window) {
                 ANativeWindow_setBuffersGeometry(app->window, 0, 0, WINDOW_FORMAT_RGBA_8888);
@@ -70,6 +71,7 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             }
             break;
         case APP_CMD_TERM_WINDOW:
+            rbx_cancel_input();
             init_done = 0;
             app_active = 0;
             keyboard_hide();
@@ -77,7 +79,11 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             ds_sound_shutdown();
             break;
         case APP_CMD_GAINED_FOCUS: ds_sound_resume(); break;
-        case APP_CMD_LOST_FOCUS: ds_sound_pause(); break;
+        case APP_CMD_LOST_FOCUS:
+            rbx_cancel_input();
+            prev_frame_ns = 0;
+            ds_sound_pause();
+            break;
         default: break;
     }
 }
@@ -92,11 +98,14 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         size_t count, index, i;
         int raw, action;
         count = AMotionEvent_getPointerCount(event);
-        if (count == 0) return 0;
         raw = AMotionEvent_getAction(event);
         action = raw & AMOTION_EVENT_ACTION_MASK;
+        if (action == AMOTION_EVENT_ACTION_CANCEL) { rbx_cancel_input(); return 1; }
+        if (count == 0) return 0;
         if (action == AMOTION_EVENT_ACTION_POINTER_DOWN) action = AMOTION_EVENT_ACTION_DOWN;
         else if (action == AMOTION_EVENT_ACTION_POINTER_UP) action = AMOTION_EVENT_ACTION_UP;
+        if (action != AMOTION_EVENT_ACTION_DOWN && action != AMOTION_EVENT_ACTION_UP &&
+            action != AMOTION_EVENT_ACTION_MOVE) return 0;
         index = (size_t)((raw & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
         if (index >= count) index = 0;
         i = (action == AMOTION_EVENT_ACTION_MOVE) ? 0 : index;
@@ -125,6 +134,23 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         if (key == AKEYCODE_BACK && action == AKEY_EVENT_ACTION_UP) return 0;
         /* Когда текст ведёт системный EditText, клавиши должны дойти до него. */
         if (keyboard_uses_editor()) return 0;
+        const char *game_key = NULL;
+        switch (key) {
+            case AKEYCODE_W: game_key = "w"; break;
+            case AKEYCODE_A: game_key = "a"; break;
+            case AKEYCODE_S: game_key = "s"; break;
+            case AKEYCODE_D: game_key = "d"; break;
+            case AKEYCODE_DPAD_LEFT: game_key = "ArrowLeft"; break;
+            case AKEYCODE_DPAD_RIGHT: game_key = "ArrowRight"; break;
+            case AKEYCODE_DPAD_UP: game_key = "ArrowUp"; break;
+            case AKEYCODE_DPAD_DOWN: game_key = "ArrowDown"; break;
+            case AKEYCODE_SPACE: game_key = "space"; break;
+            case AKEYCODE_SHIFT_LEFT:
+            case AKEYCODE_SHIFT_RIGHT: game_key = "Shift"; break;
+            default: break;
+        }
+        if (game_key && app_active && (action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP))
+            rbx_key(game_key, action == AKEY_EVENT_ACTION_DOWN);
         return 1;
     }
     return 0;

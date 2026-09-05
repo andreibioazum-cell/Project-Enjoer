@@ -1,24 +1,28 @@
-/* rbx/rbx_input.c — сенсорный ввод: виртуальный джойстик слева,
- * кнопка прыжка справа, осмотр камеры перетаскиванием. */
+/* rbx/rbx_input.c — чёрный джойстик слева, свайп-обзор справа.
+ * Роль пальца закреплена до отпускания: полёт и обзор работают вместе. */
 #include "rbx_internal.h"
 #include <math.h>
-#include <string.h>
 
-static int p_on[MAX_PTR];
-static float p_x[MAX_PTR], p_y[MAX_PTR];
+/* Android/browser pointer ID — не индекс массива и может быть большим. */
 static int joy_id = -1, look_id = -1;
 static float jx, jy, look_lx, look_ly;
-static float joy_cx, joy_cy, joy_r, jmp_cx, jmp_cy, jmp_r;
+static float joy_cx, joy_cy, joy_r;
+static int layout_w, layout_h;
+
+void rbx_input_reset(void) {
+    joy_id = look_id = -1;
+    jx = jy = 0;
+}
 
 void rbx_input_layout(void) {
-    float s = (float)screen_w / 400.0f;
-    if (s < 0.75f) s = 0.75f;
+    if (screen_w == layout_w && screen_h == layout_h) return;
+    layout_w = screen_w; layout_h = screen_h;
+    rbx_input_reset(); /* поворот/resize не должен оставлять зажатый стик */
+    float s = fminf((float)screen_w / 400.0f, (float)screen_h / 600.0f);
+    if (s <= 0) { joy_r = 0; return; }
     joy_r = 64.0f * s;
     joy_cx = 86.0f * s;
     joy_cy = (float)screen_h - 90.0f * s;
-    jmp_r = 40.0f * s;
-    jmp_cx = (float)screen_w - 74.0f * s;
-    jmp_cy = (float)screen_h - 100.0f * s;
 }
 
 void rbx_input_joy(float *ox, float *oy) {
@@ -32,58 +36,44 @@ void rbx_input_joy_geom(float *cx, float *cy, float *r) {
     if (r) *r = joy_r;
 }
 
-void rbx_input_jump_geom(float *cx, float *cy, float *r) {
-    if (cx) *cx = jmp_cx;
-    if (cy) *cy = jmp_cy;
-    if (r) *r = jmp_r;
+static int hit_joy(float x, float y) {
+    float dx = x - joy_cx, dy = y - joy_cy;
+    return dx * dx + dy * dy <= joy_r * joy_r * 1.3f * 1.3f;
 }
 
-void rbx_input_reset(void) {
-    joy_id = look_id = -1;
-    jx = jy = 0;
-    memset(p_on, 0, sizeof(p_on));
-}
-
-static int hit_circ(float x, float y, float cx, float cy, float r) {
-    float dx = x - cx, dy = y - cy;
-    return dx * dx + dy * dy <= r * r;
+static void set_joy(float x, float y) {
+    float dx = (x - joy_cx) / joy_r, dy = (y - joy_cy) / joy_r;
+    float length = sqrtf(dx * dx + dy * dy);
+    const float deadzone = 0.10f;
+    if (length <= deadzone) { jx = jy = 0; return; }
+    float strength = (fminf(length, 1.0f) - deadzone) / (1.0f - deadzone);
+    jx = dx / length * strength;
+    jy = dy / length * strength;
 }
 
 void rbx_input_touch(float x, float y, int action, int pointer_id) {
-    int id = pointer_id;
-    if (id < 0 || id >= MAX_PTR) id = 0;
-    if (action == 0) { /* down */
-        p_on[id] = 1; p_x[id] = x; p_y[id] = y;
-        if (hit_circ(x, y, jmp_cx, jmp_cy, jmp_r * 1.25f)) {
-            rbx_player_jump();
-            return;
-        }
-        if (x < (float)screen_w * 0.46f && y > (float)screen_h * 0.55f && joy_id < 0) {
-            joy_id = id;
-            jx = (x - joy_cx) / joy_r;
-            jy = (y - joy_cy) / joy_r;
-            float L = sqrtf(jx * jx + jy * jy);
-            if (L > 1) { jx /= L; jy /= L; }
-        } else if (look_id < 0) {
-            look_id = id;
+    if (action == 3) { rbx_input_reset(); return; } /* Android ACTION_CANCEL */
+    if (pointer_id < 0 || !isfinite(x + y)) return;
+    rbx_input_layout();
+    if (joy_r <= 0) return;
+    if (action == 0) {
+        if (pointer_id == joy_id || pointer_id == look_id) return;
+        if (x < (float)screen_w * 0.5f && hit_joy(x, y) && joy_id < 0) {
+            joy_id = pointer_id;
+            set_joy(x, y);
+        } else if (x >= (float)screen_w * 0.5f && look_id < 0) {
+            look_id = pointer_id;
             look_lx = x; look_ly = y;
         }
-    } else if (action == 2) { /* move */
-        p_x[id] = x; p_y[id] = y;
-        if (id == joy_id) {
-            jx = (x - joy_cx) / joy_r;
-            jy = (y - joy_cy) / joy_r;
-            float L = sqrtf(jx * jx + jy * jy);
-            if (L > 1) { jx /= L; jy /= L; }
-        } else if (id == look_id) {
-            float dx = x - look_lx, dy = y - look_ly;
-            rbx_camera_look(dx, dy);
+    } else if (action == 2) {
+        if (pointer_id == joy_id) {
+            set_joy(x, y);
+        } else if (pointer_id == look_id) {
+            rbx_camera_look(x - look_lx, y - look_ly);
             look_lx = x; look_ly = y;
         }
-    } else if (action == 1) { /* up */
-        p_on[id] = 0;
-        if (id == joy_id) { joy_id = -1; jx = 0; jy = 0; }
-        if (id == look_id) look_id = -1;
-        rbx_player_jump_release();
+    } else if (action == 1) {
+        if (pointer_id == joy_id) { joy_id = -1; jx = jy = 0; }
+        if (pointer_id == look_id) look_id = -1;
     }
 }

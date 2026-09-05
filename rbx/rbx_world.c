@@ -159,12 +159,17 @@ const RbxBot *rbx_world_bots(void) { return bots; }
 int rbx_world_caught(void) { return ncaught; }
 int rbx_world_coin_count(void) { return ncoin; }
 
-void rbx_world_collect_reset(void) { ncaught = 0; }
+void rbx_world_collect_reset(void) {
+    ncaught = 0;
+    for (int i = 0; i < ncoin; i++) coins[i].taken = 0;
+}
 
 void rbx_world_collect(float px, float py, float pz) {
     for (int i = 0; i < ncoin; i++) {
         if (coins[i].taken) continue;
-        float dx = px - coins[i].x, dy = (py + 2.5f) - coins[i].y, dz = pz - coins[i].z;
+        /* В первом лице можно подлететь к монете и глазами, и телом. */
+        float closest_y = fmaxf(py + 0.5f, fminf(coins[i].y, py + RBX_PLAYER_EYE_HEIGHT));
+        float dx = px - coins[i].x, dy = closest_y - coins[i].y, dz = pz - coins[i].z;
         if (dx * dx + dy * dy + dz * dz < 2.8f) {
             coins[i].taken = 1;
             ncaught++;

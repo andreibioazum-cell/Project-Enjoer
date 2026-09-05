@@ -8,6 +8,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <limits.h>
+#include <sys/time.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,6 +64,7 @@ static int read_request(int fd, char *buf, int cap, int *body_off, int *body_len
     int clen = 0;
     char *cl = strcasestr(buf, "Content-Length:");
     if (cl && cl < buf + header_end) clen = atoi(cl + 15);
+    if (clen < 0 || clen > cap - 1 - header_end) return -1;
     while (total < header_end + clen && total < cap - 1) {
         int n = (int)recv(fd, buf + total, (size_t)(header_end + clen - total), 0);
         if (n <= 0) break;
@@ -127,13 +130,19 @@ static void form_get(const char *body, int blen, const char *key, char *out, int
 }
 
 static void handle_event(const char *body, int blen) {
-    char t[16], k[16], s[1024], xs[32], ys[32];
+    char t[16], k[16], s[1024], xs[32], ys[32], ids[32];
     form_get(body, blen, "t", t, sizeof(t));
     if (strcmp(t, "down") == 0 || strcmp(t, "move") == 0 || strcmp(t, "up") == 0) {
         form_get(body, blen, "x", xs, sizeof(xs));
         form_get(body, blen, "y", ys, sizeof(ys));
         int action = strcmp(t, "down") == 0 ? 0 : strcmp(t, "up") == 0 ? 1 : 2;
-        touch((float)atof(xs), (float)atof(ys), action, 0);
+        form_get(body, blen, "id", ids, sizeof(ids));
+        char *end;
+        long id = ids[0] ? strtol(ids, &end, 10) : 0;
+        if (id < 0 || id > INT_MAX || (ids[0] && *end)) return;
+        touch((float)atof(xs), (float)atof(ys), action, (int)id);
+    } else if (strcmp(t, "cancel") == 0) {
+        rbx_cancel_input();
     } else if (strcmp(t, "key") == 0) {
         form_get(body, blen, "k", k, sizeof(k));
         char ds[8];
@@ -148,54 +157,122 @@ static void handle_event(const char *body, int blen) {
     }
 }
 
+/* Пакет событий одного запроса применяется строго по порядку. */
+static void handle_events(const char *body, int len) {
+    while (len > 0) {
+        const char *nl = (const char *)memchr(body, '\n', (size_t)len);
+        int n = nl ? (int)(nl - body) : len;
+        if (n > 0) handle_event(body, n);
+        body += n; len -= n;
+        if (len > 0) { body++; len--; }
+    }
+}
+
 static const char *INDEX_HTML =
-"<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">"
-"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-"<title>Enjoer — 3D плейс</title>"
-"<style>"
-"html,body{margin:0;height:100%;background:#111216;color:#eceff1;"
-"font-family:system-ui,'Segoe UI',sans-serif;}"
-".wrap{height:100%;display:flex;flex-direction:column;align-items:center;"
-"justify-content:center;gap:14px;padding:16px;box-sizing:border-box;}"
-"h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.3px;}"
-"h1 b{color:#e2231a;}"
-".phone{border-radius:28px;overflow:hidden;box-shadow:0 24px 80px #0009,"
-"0 0 0 1px #ffffff14;height:min(92vh,900px);aspect-ratio:var(--ar);background:#000;}"
-"canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab;}"
-".hint{font-size:12px;color:#90a4ae;text-align:center;max-width:560px;line-height:1.5;}"
-"kbd{background:#1c2733;border:1px solid #2c3947;border-radius:5px;padding:1px 6px;font-size:11px;}"
-"</style></head><body><div class=\"wrap\">"
-"<h1><b>Enjoer</b> — заходишь в игру, сразу 3D</h1>"
-"<div class=\"phone\" style=\"--ar:0.5\"><canvas id=\"c\" tabindex=\"0\"></canvas></div>"
-"<div class=\"hint\"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — ходить, "
-"<kbd>пробел</kbd> — прыжок, стрелки или перетаскивание — камера. "
-"Слева джойстик, справа прыжок. Собери монеты на радужном обби.</div>"
-"</div><script>"
-"const cv=document.getElementById('c'),ctx=cv.getContext('2d');"
-"let W=400,H=800,img=null;"
-"fetch('/info').then(r=>r.json()).then(j=>{W=j.w;H=j.h;cv.width=W;cv.height=H;"
-"img=ctx.createImageData(W,H);loop();});"
-"async function loop(){try{const r=await fetch('/frame.rgba',{cache:'no-store'});"
-"const buf=new Uint8ClampedArray(await r.arrayBuffer());"
-"if(img&&buf.length>=W*H*4){img.data.set(buf.subarray(0,W*H*4));ctx.putImageData(img,0,0);}"
-"}catch(e){}requestAnimationFrame(loop);}"
-"function ev(body){fetch('/event',{method:'POST',body:new URLSearchParams(body)});}"
-"function xy(e){const r=cv.getBoundingClientRect();"
-"return [Math.round((e.clientX-r.left)*W/r.width),Math.round((e.clientY-r.top)*H/r.height)];}"
-"let down=false;"
-"cv.addEventListener('pointerdown',e=>{cv.focus();down=true;cv.setPointerCapture(e.pointerId);"
-"const[x,y]=xy(e);ev({t:'down',x,y});e.preventDefault();});"
-"cv.addEventListener('pointermove',e=>{if(!down)return;const[x,y]=xy(e);ev({t:'move',x,y});});"
-"cv.addEventListener('pointerup',e=>{down=false;const[x,y]=xy(e);ev({t:'up',x,y});});"
-"cv.addEventListener('pointercancel',e=>{down=false;const[x,y]=xy(e);ev({t:'up',x,y});});"
-"const keys=new Set(['w','a','s','d','W','A','S','D',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown']);"
-"window.addEventListener('keydown',e=>{"
-"if(e.repeat||e.ctrlKey||e.metaKey||e.altKey)return;"
-"if(keys.has(e.key)){const k=e.key===' '?'space':e.key;ev({t:'key',k,d:'1'});e.preventDefault();return;}"
-"if(e.key==='Enter'){ev({t:'key',k:'enter'});e.preventDefault();}});"
-"window.addEventListener('keyup',e=>{"
-"if(keys.has(e.key)){const k=e.key===' '?'space':e.key;ev({t:'key',k,d:'0'});e.preventDefault();}});"
-"</script></body></html>";
+"<!doctype html>\n"
+"<html lang=\"ru\">\n"
+"<head>\n"
+"<meta charset=\"utf-8\">\n"
+"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n"
+"<title>Enjoer — полёт от первого лица</title>\n"
+"<style>\n"
+"html,body{margin:0;height:100%;background:#111216;color:#eceff1;font-family:system-ui,'Segoe UI',sans-serif;overscroll-behavior:none;}\n"
+".wrap{height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;justify-items:center;gap:12px;padding:14px;box-sizing:border-box;}\n"
+"h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.3px;}\n"
+"h1 b{color:#e2231a;}\n"
+".phone{border-radius:24px;overflow:hidden;box-shadow:0 24px 80px #0009,0 0 0 1px #ffffff14;height:100%;max-height:900px;max-width:100%;aspect-ratio:var(--ar);background:#000;}\n"
+"canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab;user-select:none;}\n"
+"canvas:active{cursor:grabbing;}\n"
+".hint{font-size:12px;color:#90a4ae;text-align:center;max-width:560px;line-height:1.5;}\n"
+"kbd{background:#1c2733;border:1px solid #2c3947;border-radius:5px;padding:1px 5px;font-size:11px;}\n"
+"</style>\n"
+"</head>\n"
+"<body>\n"
+"<div class=\"wrap\">\n"
+"<h1><b>Enjoer</b> — полёт от первого лица</h1>\n"
+"<div class=\"phone\" style=\"--ar:0.5\"><canvas id=\"c\" tabindex=\"0\" aria-label=\"Игра Enjoer. Слева джойстик полёта, справа поворот камеры.\"></canvas></div>\n"
+"<div class=\"hint\"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — полёт; <kbd>пробел</kbd>/<kbd>Shift</kbd> — выше/ниже.<br>Слева чёрный джойстик. Свайп справа или стрелки — обзор.<br>Лети туда, куда смотришь. Отпусти джойстик, чтобы зависнуть.</div>\n"
+"</div>\n"
+"<script>\n"
+"const cv=document.getElementById('c'),ctx=cv.getContext('2d');\n"
+"let W=400,H=800,img=null;\n"
+"fetch('/info').then(r=>r.json()).then(j=>{\n"
+"  W=j.w;H=j.h;cv.width=W;cv.height=H;cv.parentElement.style.setProperty('--ar',W/H);\n"
+"  img=ctx.createImageData(W,H);loop();\n"
+"});\n"
+"async function loop(){\n"
+"  try{\n"
+"    if(!document.hidden){\n"
+"      const r=await fetch('/frame.rgba',{cache:'no-store'});\n"
+"      const buf=new Uint8ClampedArray(await r.arrayBuffer());\n"
+"      if(img&&buf.length>=W*H*4){img.data.set(buf.subarray(0,W*H*4));ctx.putImageData(img,0,0);}\n"
+"    }\n"
+"  }catch(e){}\n"
+"  requestAnimationFrame(loop);\n"
+"}\n"
+"// Порядок down/move/up сохраняется; лишние move не забивают сеть.\n"
+"const queue=[];\n"
+"let sending=false;\n"
+"function ev(body){\n"
+"  if(body.t==='move'){\n"
+"    for(let i=queue.length-1;i>=0&&queue[i].t==='move';i--){\n"
+"      if(queue[i].id===body.id){queue[i]=body;return;}\n"
+"    }\n"
+"  }\n"
+"  queue.push(body);flushEvents();\n"
+"}\n"
+"async function flushEvents(){\n"
+"  if(sending||!queue.length)return;\n"
+"  sending=true;\n"
+"  const batch=queue.splice(0,64);let retryDelay=16;\n"
+"  try{\n"
+"    await fetch('/event',{method:'POST',body:batch.map(b=>new URLSearchParams(b).toString()).join('\\n'),keepalive:true});\n"
+"  }catch(e){queue.length=0;queue.push({t:'cancel'});retryDelay=250;}\n"
+"  finally{sending=false;if(queue.length)setTimeout(flushEvents,retryDelay);}\n"
+"}\n"
+"function xy(e){\n"
+"  const r=cv.getBoundingClientRect();\n"
+"  return {x:Math.round((e.clientX-r.left)*W/r.width),y:Math.round((e.clientY-r.top)*H/r.height)};\n"
+"}\n"
+"const pointers=new Set(),pressed=new Map();\n"
+"cv.addEventListener('pointerdown',e=>{\n"
+"  if(e.pointerType==='mouse'&&e.button!==0)return;\n"
+"  cv.focus({preventScroll:true});pointers.add(e.pointerId);cv.setPointerCapture(e.pointerId);\n"
+"  ev({t:'down',id:e.pointerId,...xy(e)});e.preventDefault();\n"
+"});\n"
+"cv.addEventListener('pointermove',e=>{\n"
+"  if(pointers.has(e.pointerId))ev({t:'move',id:e.pointerId,...xy(e)});\n"
+"});\n"
+"function releasePointer(e){\n"
+"  if(!pointers.delete(e.pointerId))return;\n"
+"  ev({t:'up',id:e.pointerId,...xy(e)});\n"
+"}\n"
+"cv.addEventListener('pointerup',releasePointer);\n"
+"cv.addEventListener('pointercancel',releasePointer);\n"
+"cv.addEventListener('lostpointercapture',releasePointer);\n"
+"cv.addEventListener('contextmenu',e=>e.preventDefault());\n"
+"const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',Space:'space',ShiftLeft:'Shift',ShiftRight:'Shift',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',ArrowUp:'ArrowUp',ArrowDown:'ArrowDown'};\n"
+"window.addEventListener('keydown',e=>{\n"
+"  const k=keyMap[e.code];\n"
+"  if(!k||e.ctrlKey||e.metaKey||e.altKey)return;\n"
+"  e.preventDefault();if(e.repeat||pressed.has(e.code))return;\n"
+"  const held=[...pressed.values()].includes(k);pressed.set(e.code,k);\n"
+"  if(!held)ev({t:'key',k,d:1});\n"
+"});\n"
+"window.addEventListener('keyup',e=>{\n"
+"  const k=pressed.get(e.code);if(!k)return;\n"
+"  pressed.delete(e.code);e.preventDefault();\n"
+"  if(![...pressed.values()].includes(k))ev({t:'key',k,d:0});\n"
+"});\n"
+"function releaseAll(){\n"
+"  for(const id of pointers){if(cv.hasPointerCapture(id))cv.releasePointerCapture(id);}\n"
+"  pointers.clear();pressed.clear();queue.length=0;ev({t:'cancel'});\n"
+"}\n"
+"window.addEventListener('blur',releaseAll);\n"
+"document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll();});\n"
+"</script>\n"
+"</body>\n"
+"</html>\n";
 
 int main(int argc, char **argv) {
     int port = 8090;
@@ -242,6 +319,9 @@ int main(int argc, char **argv) {
     for (;;) {
         int fd = accept(srv, NULL, NULL);
         if (fd < 0) continue;
+        struct timeval timeout = {5, 0};
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
         int body_off = 0, body_len = 0;
         if (read_request(fd, reqbuf, sizeof(reqbuf), &body_off, &body_len) <= 0) {
@@ -265,7 +345,7 @@ int main(int argc, char **argv) {
             http_head(fd, 200, "application/octet-stream", bytes, 0);
             send_all(fd, frame.pixels, (size_t)bytes);
         } else if (strcmp(method, "POST") == 0 && strcmp(path, "/event") == 0) {
-            handle_event(reqbuf + body_off, body_len);
+            handle_events(reqbuf + body_off, body_len);
             http_head(fd, 200, "text/plain", 2, 0);
             send_all(fd, "ok", 2);
         } else {
