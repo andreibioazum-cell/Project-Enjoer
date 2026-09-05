@@ -12,7 +12,7 @@ static int scene_scale,drawn_faces,jump_labels,flight_labels,joy_rings,knobs,bac
 
 int rbx_materials_load(AAssetManager *assets) {(void)assets;return 1;}
 const Image *rbx_material_icon(int block) {static Image image;CHECK(block>0 && block<BLOCK_COUNT);return &image;}
-static int images,fps_labels,action_labels;
+static int images,fps_labels,action_labels,hotbar_labels;
 void image_draw(const Image *image,float x,float y,float w,float h) {CHECK(image && x>0 && y>0 && w>0 && w==h);images++;}
 void rbx3d_fog(float start,float end) {CHECK(start>=0 && end>start && end<=RBX_FOG_END);}
 void rbx3d_segment(float x,float y,float z,float a,float b,float c,uint32_t color) {
@@ -24,6 +24,12 @@ int rbx3d_begin(Buffer *b,int sc,float x,float y,float z,float yaw,float pitch,f
 void rbx3d_sky(uint32_t a,uint32_t b) { (void)a; (void)b; }
 void rbx3d_end(void) {}
 int rbx3d_visible(float x,float y,float z,float hx,float hy,float hz) { (void)x;(void)y;(void)z;(void)hx;(void)hy;(void)hz;return 1; }
+int rbx3d_box_visible(float x,float y,float z,float hx,float hy,float hz) {
+    (void)x;(void)y;(void)z; CHECK(isfinite(hx+hy+hz)); return 1;
+}
+int rbx3d_quad_visible(int x,int y,int z,int u,int v,int face) {
+    (void)x;(void)y;(void)z; CHECK(u>0 && v>0 && face>=0 && face<6); return 1;
+}
 void rbx3d_surface(int x,int y,int z,int u,int v,int face,int block) {
     (void)x;(void)y;(void)z; CHECK(u>0 && v>0); CHECK(face>=0&&face<6&&block>0&&block<BLOCK_COUNT); drawn_faces++;
 }
@@ -57,7 +63,9 @@ void text_scaled(const char *s,float x,float y,uint32_t c,float scale) {
     if(!strncmp(s,"FPS ",4)) {
         CHECK(x>screen_w*.8f && y<screen_h*.15f && (c==0xffffffffu || c==0xaa000000u));
         if(c==0xffffffffu)fps_labels++;
-    } else if(s[0]>='1' && s[0]<='6' && !s[1]) CHECK(c==0xffffffffu && y>screen_h*.9f);
+    } else if(s[0]>='1' && s[0]<=(char)('0'+HOTBAR_SLOTS) && !s[1]) {
+        CHECK(c==0xffffffffu && y>screen_h*.9f);hotbar_labels++;
+    }
     else {
         CHECK(c==0xff000000u);
         if(!strcmp(s,"Полёт"))flight_labels++;
@@ -159,8 +167,23 @@ static void test_voxel_collisions(void) {
 static void test_clean_hud_and_camera(void) {
     fresh();
     joy_rings=knobs=backgrounds=cross_rects=flight_labels=jump_labels=0;
+    images=hotbar_labels=0;
     rbx_hud_draw();
-    CHECK(images==6 && fps_labels==1 && action_labels==2);
+    CHECK(images==HOTBAR_SLOTS && hotbar_labels==HOTBAR_SLOTS && fps_labels==1 && action_labels==2);
+    /* Семь ячеек панели помещаются на экран и не перекрывают остальные органы. */
+    for(unsigned size_index=0;size_index<4;size_index++) {
+        const int sizes[][2]={{960,540},{2400,1080},{640,360},{800,600}};
+        screen_w=sizes[size_index][0];screen_h=sizes[size_index][1];rbx_input_layout();
+        for(int i=0;i<HOTBAR_SLOTS;i++) {
+            float x,y,slot_size;rbx_input_slot_geom(i,&x,&y,&slot_size);
+            CHECK(x>0 && y>0 && x+slot_size<screen_w && y+slot_size<screen_h);
+            float jx,jy,jr;rbx_input_joy_geom(&jx,&jy,&jr);CHECK(x>jx+jr*.5f);
+            float ax,ay,ar;rbx_input_action_geom(ACTION_BREAK,&ax,&ay,&ar);CHECK(x+slot_size<ax-ar*.5f);
+            rbx_input_action_geom(ACTION_PLACE,&ax,&ay,&ar);CHECK(x+slot_size<ax-ar*.5f);
+            float fx,fy,fw,fh;rbx_input_flight_geom(&fx,&fy,&fw,&fh);CHECK(y>fy+fh);
+        }
+    }
+    screen_w=960;screen_h=540;rbx_input_layout();
     CHECK(joy_rings==1&&knobs==1&&backgrounds==0&&cross_rects==2&&flight_labels==1&&jump_labels==1);
     tap_flight(100); rbx_hud_draw(); CHECK(jump_labels==1&&flight_labels==2);
     tap_flight(100); rbx_hud_draw(); CHECK(jump_labels==2&&flight_labels==3);

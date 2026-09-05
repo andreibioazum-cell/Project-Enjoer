@@ -40,6 +40,7 @@ add_library(enjoer SHARED
     rbx/rbx_world.c
     rbx/rbx_mesh.c
     rbx/rbx_edits.c
+    rbx/rbx_water.c
     rbx/rbx_interact.c
     rbx/rbx_perf.c
     rbx/rbx_player.c

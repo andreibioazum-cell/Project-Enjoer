@@ -1,4 +1,6 @@
-/* Bounded, nearest-first chunk streaming. Never rebuild an entire row on movement. */
+/* Bounded, nearest-first chunk streaming. Never rebuild an entire row on movement.
+ * Отрисовка идёт слоями: чанк → вертикальный слой → квад, поэтому скрытая
+ * толща породы и стенки глубокой шахты не перебираются и не растеризуются. */
 #include "rbx_world_internal.h"
 #include <limits.h>
 
@@ -19,13 +21,15 @@ static int base_block(int x,int y,int z) {
 int rbx_world_uniform(int x,int y,int z) {
     const RbxEdit *e=rbx_edit_find(x,y,z);
     if (!e) return base_block(x,y,z);
-    for (int i=1;i<8;i++) if (e->cells[i]!=e->cells[0]) return BLOCK_PARTIAL;
-    return e->cells[0];
+    /* Уровни воды внутри одного блока не делают его «частичным» для меша. */
+    int block=RBX_CELL_BLOCK(e->cells[0]);
+    for (int i=1;i<8;i++) if (RBX_CELL_BLOCK(e->cells[i])!=block) return BLOCK_PARTIAL;
+    return block;
 }
 int rbx_world_cell(int sx,int sy,int sz) {
     int x=rbx_floor_div(sx,2),y=rbx_floor_div(sy,2),z=rbx_floor_div(sz,2);
     const RbxEdit *e=rbx_edit_find(x,y,z);
-    return e ? e->cells[sx-x*2+(sy-y*2)*2+(sz-z*2)*4] : base_block(x,y,z);
+    return e ? RBX_CELL_BLOCK(e->cells[sx-x*2+(sy-y*2)*2+(sz-z*2)*4]) : base_block(x,y,z);
 }
 int rbx_cell_solid(int sx,int sy,int sz) {
     int b=rbx_world_cell(sx,sy,sz);return b!=BLOCK_AIR && b!=BLOCK_WATER;
@@ -34,11 +38,12 @@ static void invalidate(int cx,int cz) {
     RbxChunk *c=slot(cx,cz);
     if (matches(c,cx,cz)) c->dirty=1;
 }
-int rbx_world_set(int sx,int sy,int sz,int block) {
-    if (sy<2 || sy>=WORLD_HEIGHT*2 || block<0 || block>=BLOCK_COUNT ||
+int rbx_world_set_value(int sx,int sy,int sz,int value) {
+    if (sy<2 || sy>=WORLD_HEIGHT*2 || value<0 || value>255 ||
+        RBX_CELL_BLOCK(value)>=BLOCK_COUNT || RBX_CELL_LEVEL(value)>WATER_MAX_FLOW ||
         sx < -20000000 || sx>20000000 || sz < -20000000 || sz>20000000) return 0;
     int x=rbx_floor_div(sx,2),y=rbx_floor_div(sy,2),z=rbx_floor_div(sz,2);
-    if (!rbx_edit_set(sx,sy,sz,block,base_block(x,y,z))) return 0;
+    if (!rbx_edit_set_cell(sx,sy,sz,value,base_block(x,y,z))) return 0;
     int cx=rbx_floor_div(x,CHUNK_SIZE),cz=rbx_floor_div(z,CHUNK_SIZE);
     invalidate(cx,cz);
     int lx=sx-cx*CHUNK_SIZE*2,lz=sz-cz*CHUNK_SIZE*2;
@@ -48,10 +53,18 @@ int rbx_world_set(int sx,int sy,int sz,int block) {
     if (lz==CHUNK_SIZE*2-1) invalidate(cx,cz+1);
     return 1;
 }
+int rbx_world_set(int sx,int sy,int sz,int block) {
+    if (block<0 || block>=BLOCK_COUNT) return 0;
+    if (!rbx_world_set_value(sx,sy,sz,RBX_CELL_VALUE(block,0))) return 0;
+    /* Любая правка может пустить воду или, наоборот, оставить её без питания. */
+    rbx_water_touch(sx,sy,sz);
+    return 1;
+}
 static RbxChunk *ensure_data(int cx,int cz) {
     RbxChunk *c=slot(cx,cz);
     if (!matches(c,cx,cz)) {
         c->cx=cx;c->cz=cz;c->valid=1;c->ready=c->dirty=0;c->count=0;
+        for (int s=0;s<=SLABS;s++) c->slab[s]=0;
         rbx_terrain_chunk(cx,cz,c->blocks);
     }
     return c;
@@ -98,6 +111,8 @@ void rbx_world_update(float x,float z) {
     if (!isfinite(x+z) || fabsf(x)>10000000 || fabsf(z)>10000000) return;
     center_x=(int)floorf(x/CHUNK_SIZE);center_z=(int)floorf(z/CHUNK_SIZE);
     double start=app_now();
+    /* Вода пересчитывается до мешинга: затронутые чанки попадают в очередь грязных. */
+    rbx_water_update(.0015);
     for (int jobs=0;jobs<2;jobs++) { if (!worker() || app_now()-start>.0025) break; }
     float target=coverage(),d=(float)dt;
     if (!isfinite(d) || d<0) d=0;
@@ -105,39 +120,49 @@ void rbx_world_update(float x,float z) {
     else draw_distance=fminf(target,draw_distance+fminf(d,.05f)*40);
 }
 void rbx_world_build(uint32_t seed) {
-    rbx_terrain_seed(seed);rbx_edits_reset(seed);rbx_edits_load();
+    rbx_terrain_seed(seed);rbx_edits_reset(seed);rbx_water_reset();rbx_edits_load();
     center_x=center_z=0;draw_distance=32;
-    for (int i=0;i<CACHE_COUNT;i++) chunks[i].valid=chunks[i].ready=chunks[i].dirty=chunks[i].count=0;
+    for (int i=0;i<CACHE_COUNT;i++) {
+        chunks[i].valid=chunks[i].ready=chunks[i].dirty=chunks[i].count=0;
+        for (int s=0;s<=SLABS;s++) chunks[i].slab[s]=0;
+    }
     for (int z=-3;z<=3;z++) for (int x=-3;x<=3;x++) ensure_data(x,z);
     for (int z=-2;z<=2;z++) for (int x=-2;x<=2;x++) prepare(x,z);
 }
 float rbx_world_distance(void) { return draw_distance; }
-void rbx_world_draw(void) {
+static void draw_cache(int culled) {
     for (int ring=0;ring<=WORLD_RADIUS;ring++) for (int dz=-ring;dz<=ring;dz++) for (int dx=-ring;dx<=ring;dx++) {
         if (abs(dx)!=ring && abs(dz)!=ring) continue;
         int cx=center_x+dx,cz=center_z+dz;RbxChunk *c=slot(cx,cz);
         if (!matches(c,cx,cz) || !c->ready || !c->count) continue;
-        float ox=cx*CHUNK_SIZE,oz=cz*CHUNK_SIZE,hy=(c->max_y-c->min_y)*.25f;
-        if (!rbx3d_visible(ox+8,c->min_y*.5f+hy,oz+8,8,hy,8)) continue;
-        for (int i=0;i<c->count;i++) {
-            const RbxQuad *f=&c->quads[i];
-            int sx=cx*CHUNK_SIZE*2+f->x, sy=f->y, sz=cz*CHUNK_SIZE*2+f->z;
-            float hx, hy, hz, cxq, cyq, czq;
-            if (f->face<2) {
-                hx=f->u*.25f; hz=f->v*.25f; hy=.02f;
-                cxq=sx*.5f+hx; cyq=sy*.5f; czq=sz*.5f+hz;
-            } else if (f->face<4) {
-                hx=f->u*.25f; hy=f->v*.25f; hz=.02f;
-                cxq=sx*.5f+hx; cyq=sy*.5f+hy; czq=sz*.5f;
-            } else {
-                hz=f->u*.25f; hy=f->v*.25f; hx=.02f;
-                cxq=sx*.5f; cyq=sy*.5f+hy; czq=sz*.5f+hz;
+        float ox=cx*CHUNK_SIZE,oz=cz*CHUNK_SIZE;
+        float top=c->max_y*.5f,bottom=c->min_y*.5f;
+        /* Чанк целиком: один тест параллелепипеда вместо тысяч тестов квадов. */
+        if (culled && !rbx3d_box_visible(ox+8,(top+bottom)*.5f,oz+8,8,(top-bottom)*.5f,8)) continue;
+        int base_x=cx*CHUNK_SIZE*2,base_z=cz*CHUNK_SIZE*2;
+        for (int s=0;s<SLABS;s++) {
+            int from=c->slab[s],to=c->slab[s+1];
+            if (from>=to) continue; /* пустой слой — ни одного квада не перебираем */
+            if (culled) {
+                int low=s*SLAB_CELLS,high=low+SLAB_CELLS;
+                if (c->min_y>low) low=c->min_y;
+                if (c->max_y<high) high=c->max_y;
+                float y0=low*.5f,y1=high*.5f;
+                if (!rbx3d_box_visible(ox+8,(y0+y1)*.5f,oz+8,8,(y1-y0)*.5f,8)) continue;
             }
-            if (!rbx3d_visible(cxq,cyq,czq,hx,hy,hz)) continue;
-            rbx3d_surface(sx,sy,sz,f->u,f->v,f->face,f->block);
+            for (int i=from;i<to;i++) {
+                const RbxQuad *f=&c->quads[i];
+                int sx=base_x+f->x,sz=base_z+f->z;
+                /* Задняя грань и квады вне пирамиды отсекаются до постройки вершин. */
+                if (culled && !rbx3d_quad_visible(sx,f->y,sz,f->u,f->v,f->face)) continue;
+                rbx3d_surface(sx,f->y,sz,f->u,f->v,f->face,f->block);
+            }
         }
     }
 }
+void rbx_world_draw(void) { draw_cache(1); }
+/* Эталон для проверки отсечения: те же квады без тестов видимости. */
+void rbx_world_draw_all(void) { draw_cache(0); }
 void rbx_world_stats(int *loaded,int *quads) {
     int n=0,q=0;
     for (int i=0;i<CACHE_COUNT;i++) {

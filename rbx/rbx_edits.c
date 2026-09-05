@@ -71,19 +71,29 @@ const RbxEdit *rbx_edit_first(int cx,int cz) {
     return b && b->head ? &edits[b->head-1] : NULL;
 }
 const RbxEdit *rbx_edit_next(const RbxEdit *e) { return e && e->next ? &edits[e->next-1] : NULL; }
-int rbx_edit_set(int sx,int sy,int sz,int block,int original) {
+/* Значение ячейки — блок в младших четырёх битах плюс уровень воды в старших. */
+int rbx_edit_set_cell(int sx,int sy,int sz,int value,int original) {
     int x=rbx_floor_div(sx,2),y=rbx_floor_div(sy,2),z=rbx_floor_div(sz,2);
     int part=sx-x*2+(sy-y*2)*2+(sz-z*2)*4;
     RbxEdit *e=(RbxEdit *)rbx_edit_find(x,y,z);
     if (!e) {
-        if (block==original) return 0;
+        if (value==original) return 0;
         if (!reserve(count+1)) return 0;
         e=&edits[count]; *e=(RbxEdit){.x=x,.y=y,.z=z};
         memset(e->cells,original,8); index_edit(count++);
     }
-    if (e->cells[part]==block) return 0;
-    e->cells[part]=(unsigned char)block; dirty=1;
+    if (e->cells[part]==(unsigned char)value) return 0;
+    e->cells[part]=(unsigned char)value; dirty=1;
     return 1;
+}
+int rbx_edit_set(int sx,int sy,int sz,int block,int original) {
+    return rbx_edit_set_cell(sx,sy,sz,block,original);
+}
+int rbx_edit_cell_value(int sx,int sy,int sz) {
+    int x=rbx_floor_div(sx,2),y=rbx_floor_div(sy,2),z=rbx_floor_div(sz,2);
+    const RbxEdit *e=rbx_edit_find(x,y,z);
+    if (!e) return -1;
+    return e->cells[sx-x*2+(sy-y*2)*2+(sz-z*2)*4];
 }
 int rbx_edits_count(void) { return count; }
 int rbx_edits_dirty(void) { return dirty; }
@@ -136,7 +146,9 @@ int rbx_edits_load(void) {
         const unsigned char *p=bytes+20+i*20;
         int32_t x=(int32_t)get32(p),y=(int32_t)get32(p+4),z=(int32_t)get32(p+8);
         if (x < -10000000 || x>10000000 || z < -10000000 || z>10000000 || y<1 || y>=WORLD_HEIGHT) ok=0;
-        for (int c=0;c<8;c++) if (p[12+c]>=BLOCK_COUNT) ok=0;
+        /* Старые файлы без уровней воды читаются как есть: уровень 0 — источник. */
+        for (int c=0;c<8;c++)
+            if (RBX_CELL_BLOCK(p[12+c])>=BLOCK_COUNT || RBX_CELL_LEVEL(p[12+c])>WATER_MAX_FLOW) ok=0;
     }
     if (ok) {
         rbx_edits_reset(seed);

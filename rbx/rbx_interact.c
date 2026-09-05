@@ -1,6 +1,6 @@
 /* Half-cell DDA picking, building and independent held-action repeat. */
 #include "rbx_internal.h"
-static const int slots[HOTBAR_SLOTS]={BLOCK_GRASS,BLOCK_DIRT,BLOCK_STONE,BLOCK_SAND,BLOCK_LOG,BLOCK_LEAVES};
+static const int slots[HOTBAR_SLOTS]={BLOCK_GRASS,BLOCK_DIRT,BLOCK_STONE,BLOCK_SAND,BLOCK_LOG,BLOCK_LEAVES,BLOCK_WATER};
 static int selected=1,held[ACTION_COUNT],pending[ACTION_COUNT],has_target;
 static float cooldown[ACTION_COUNT];
 static RbxHit target;

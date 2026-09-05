@@ -72,6 +72,8 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             game_save();
             init_done = 0;
             app_active = 0;
+            /* Потоки растеризации гасятся до выгрузки окна. */
+            rbx3d_shutdown();
             gfx_shutdown();
             audio_shutdown();
             break;
@@ -135,6 +137,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             case AKEYCODE_4: game_key = "4"; break;
             case AKEYCODE_5: game_key = "5"; break;
             case AKEYCODE_6: game_key = "6"; break;
+            case AKEYCODE_7: game_key = "7"; break;
             case AKEYCODE_F: game_key = "f"; break;
             case AKEYCODE_DPAD_LEFT: game_key = "ArrowLeft"; break;
             case AKEYCODE_DPAD_RIGHT: game_key = "ArrowRight"; break;

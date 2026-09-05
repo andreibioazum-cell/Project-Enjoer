@@ -8,6 +8,8 @@
 #define CLOSE(a,b) CHECK(fabsf((a)-(b))<.001f)
 void rbx_cancel_input(void) {rbx_input_reset();rbx_key_reset();rbx_actions_reset();}
 int rbx3d_visible(float x,float y,float z,float a,float b,float c) {(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;return 0;}
+int rbx3d_box_visible(float x,float y,float z,float a,float b,float c) {(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;return 0;}
+int rbx3d_quad_visible(int x,int y,int z,int u,int v,int f) {(void)x;(void)y;(void)z;(void)u;(void)v;(void)f;return 0;}
 void rbx3d_surface(int x,int y,int z,int u,int v,int f,int b) {(void)x;(void)y;(void)z;(void)u;(void)v;(void)f;(void)b;}
 void rbx3d_segment(float x,float y,float z,float a,float b,float c,uint32_t color) {(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;(void)color;}
 static void fresh(void) {app_set_storage(NULL);rbx_cancel_input();rbx_world_build(RBX_WORLD_SEED);rbx_player_spawn();rbx_input_layout();}

@@ -36,7 +36,8 @@ void rbx_input_action_geom(int a,float *x,float *y,float *r) {
     if(r)*r=31*ui_scale;
 }
 void rbx_input_slot_geom(int index,float *x,float *y,float *size) {
-    if(x)*x=screen_w*.5f+(-129+index*44)*ui_scale;
+    /* Панель из семи ячеек остаётся по центру: 7*44-6 = 302 единицы ширины. */
+    if(x)*x=screen_w*.5f+(-151+index*44)*ui_scale;
     if(y)*y=screen_h-55*ui_scale;
     if(size)*size=38*ui_scale;
 }

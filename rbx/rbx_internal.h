@@ -12,7 +12,7 @@
 
 enum { BLOCK_AIR,BLOCK_GRASS,BLOCK_DIRT,BLOCK_STONE,BLOCK_SAND,BLOCK_WATER,BLOCK_LOG,BLOCK_LEAVES,BLOCK_COUNT };
 enum { CHUNK_SIZE=16,WORLD_HEIGHT=64,WATER_LEVEL=8,WORLD_RADIUS=5 };
-enum { ACTION_BREAK,ACTION_PLACE,ACTION_COUNT,HOTBAR_SLOTS=6 };
+enum { ACTION_BREAK,ACTION_PLACE,ACTION_COUNT,HOTBAR_SLOTS=7 };
 typedef struct { int x,y,z,nx,ny,nz,block;float distance; } RbxHit;
 
 int rbx3d_begin(Buffer *,int,float,float,float,float,float,float);
@@ -21,7 +21,15 @@ void rbx3d_fog(float start,float end);
 void rbx3d_surface(int sx,int sy,int sz,int u,int v,int face,int block);
 void rbx3d_segment(float x,float y,float z,float x2,float y2,float z2,uint32_t color);
 int rbx3d_visible(float x,float y,float z,float hx,float hy,float hz);
+int rbx3d_box_visible(float cx,float cy,float cz,float hx,float hy,float hz);
+int rbx3d_quad_visible(int sx,int sy,int sz,int u,int v,int face);
 void rbx3d_end(void);
+/* Треугольников принято за текущий кадр: проверка работы отсечения. */
+int rbx3d_frame_triangles(void);
+/* Растеризация полосами в несколько потоков; 1 — однопоточный режим. */
+int rbx3d_threads(void);
+void rbx3d_set_threads(int parts);
+void rbx3d_shutdown(void);
 int rbx_materials_load(AAssetManager *assets);
 const Image *rbx_material_icon(int block);
 

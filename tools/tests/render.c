@@ -298,6 +298,28 @@ static void test_merged_fog(void) {
     puts("PASS per-pixel radial fog stays continuous across greedy / individual face boundaries");
 }
 
+/* Полосы растеризации обязаны давать побитово тот же кадр, что один поток:
+ * полосы не пересекаются, порядок треугольников внутри полосы сохраняется. */
+static void test_thread_bands(void) {
+    const int sizes[][3] = {{320,240,1},{320,240,2},{403,811,3},{96,64,1},{257,129,2}};
+    for (unsigned k=0;k<sizeof(sizes)/sizeof(*sizes);k++) {
+        Buffer reference=make_buffer(sizes[k][0],sizes[k][1],5);
+        rbx3d_set_threads(1);
+        pattern(&reference,sizes[k][2]);
+        for (int parts=2;parts<=4;parts++) {
+            Buffer actual=make_buffer(sizes[k][0],sizes[k][1],5);
+            rbx3d_set_threads(parts);
+            pattern(&actual,sizes[k][2]);
+            for (int i=0;i<reference.stride*reference.height;i++)
+                CHECK(actual.pixels[i]==reference.pixels[i]);
+            check_padding(&actual);
+            free(actual.pixels);
+        }
+        rbx3d_set_threads(1);
+        free(reference.pixels);
+    }
+    puts("PASS полосы в 2-4 потока: кадр побитово совпадает с однопоточным на всех масштабах");
+}
 int main(void) {
     screen_w=320;screen_h=240;
     CHECK(rbx_materials_load(host_asset_manager("game/assets")));
@@ -307,5 +329,7 @@ int main(void) {
     test_clipping_and_camera();
     test_voxel_materials();
     test_half_uv();test_merged_fog();
+    test_thread_bands();
+    rbx3d_shutdown();
     return 0;
 }

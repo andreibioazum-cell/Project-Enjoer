@@ -3,6 +3,8 @@
 #include <stdio.h>
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"%s:%d: %s\n",__func__,__LINE__,#x);exit(1);}}while(0)
 int rbx3d_visible(float x,float y,float z,float hx,float hy,float hz) {(void)x;(void)y;(void)z;(void)hx;(void)hy;(void)hz;return 0;}
+int rbx3d_box_visible(float x,float y,float z,float hx,float hy,float hz) {(void)x;(void)y;(void)z;(void)hx;(void)hy;(void)hz;return 0;}
+int rbx3d_quad_visible(int x,int y,int z,int u,int v,int face) {(void)x;(void)y;(void)z;(void)u;(void)v;(void)face;return 0;}
 void rbx3d_surface(int x,int y,int z,int u,int v,int face,int block) {(void)x;(void)y;(void)z;(void)u;(void)v;(void)face;(void)block;}
 static void test_chunks(void) {
     unsigned char a[BASE_CELLS],b[BASE_CELLS];int types[BLOCK_COUNT]={0},low=100,high=0;

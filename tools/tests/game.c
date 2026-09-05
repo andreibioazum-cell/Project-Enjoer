@@ -2,6 +2,7 @@
 #include "rbx/rbx_world_internal.h"
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 extern AAssetManager *host_asset_manager(const char *root);
 static double now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t); return t.tv_sec+t.tv_nsec*1e-9; }
@@ -32,4 +33,11 @@ static void run(int w,int h) {
     rbx_edits_reset(RBX_WORLD_SEED); /* isolated test has no disk storage */
     gfx_shutdown();free(b.pixels);
 }
-int main(void) {run(960,540);run(2400,1080);return 0;}
+int main(void) {
+    /* RBX_THREADS задаёт число полос растеризации для замеров производительности. */
+    const char *threads=getenv("RBX_THREADS");
+    if (threads) rbx3d_set_threads(atoi(threads));
+    run(960,540);run(2400,1080);
+    rbx3d_shutdown();
+    return 0;
+}

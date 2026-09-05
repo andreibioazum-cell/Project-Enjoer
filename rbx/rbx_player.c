@@ -78,7 +78,7 @@ void rbx_key_state(const char *name, int down) {
     else if (!strcmp(name,"ArrowDown")) k_down = d;
     else if (!strcmp(name,"break") || !strcmp(name,"e") || !strcmp(name,"E")) rbx_action_hold(ACTION_BREAK,d,0);
     else if (!strcmp(name,"place") || !strcmp(name,"r") || !strcmp(name,"R")) rbx_action_hold(ACTION_PLACE,d,0);
-    else if (name[0]>='1' && name[0]<='6' && !name[1]) { if(d)rbx_select(name[0]-'1'); }
+    else if (name[0]>='1' && name[0]<='7' && !name[1]) { if(d)rbx_select(name[0]-'1'); }
     else if (!strcmp(name,"f") || !strcmp(name,"F")) { if (d && !k_f) rbx_player_toggle_flight(); k_f = d; }
 }
 int rbx_player_overlaps(int sx,int sy,int sz) {
