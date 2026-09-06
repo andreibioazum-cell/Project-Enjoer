@@ -1,4 +1,4 @@
-package com.cb4;
+package ru.enjoer.game;
 
 import android.app.NativeActivity;
 import android.os.Bundle;

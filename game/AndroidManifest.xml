@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  package — уникальный идентификатор приложения в RuStore. Сменить его после
+  публикации нельзя. Формат — обратный домен минимум из трёх сегментов:
+  короткое имя вроде «com.cb4» легко пересекается с чужим пакетом в каталоге,
+  и тогда версия не проходит обработку загрузки. Ключ подписи и versionCode —
+  в .github/workflows/main.yml.
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.cb4"
+    package="ru.enjoer.game"
     android:versionCode="1"
     android:versionName="1.0">
 
@@ -9,12 +16,13 @@
 
     <application
         android:label="Enjoer"
+        android:icon="@mipmap/ic_launcher"
         android:hasCode="true"
         android:allowBackup="false"
         android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
 
         <activity
-            android:name="com.cb4.GameActivity"
+            android:name="ru.enjoer.game.GameActivity"
             android:label="Enjoer"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:screenOrientation="sensorLandscape"
