@@ -29,6 +29,12 @@ $CC $FLAGS $CORE $WORLD $ACTORS src/geometrium/geometrium_hand.c tools/tests/edi
 "$DIR/edits" "$DIR/fixtures"
 $CC $FLAGS -DPREVIEW_EXTERNAL_AUDIO $CORE src/sound/sound.c tools/tests/audio.c -lm -lpthread -o "$DIR/audio"
 "$DIR/audio"
+# Engine layer: node tree, scene files, C scripting via dlopen, generalized rendering.
+$CC $FLAGS -rdynamic $CORE $WORLD src/geometrium/geometrium_perf.c \
+    src/graphics/image.c src/geometrium/geometrium_render.c src/geometrium/geometrium_shapes.c src/geometrium/geometrium_material.c \
+    src/engine/eng_api.c src/engine/eng_node.c src/engine/eng_mesh.c src/engine/eng_scene.c src/engine/eng_script.c src/engine/eng_project.c \
+    tools/tests/engine.c -lm -ldl -o "$DIR/engine"
+"$DIR/engine"
 $CC $FLAGS $CORE $WORLD $ACTORS src/geometrium/geometrium_perf.c src/geometrium/geometrium_game.c src/geometrium/geometrium_scene.c src/geometrium/geometrium_hud.c src/geometrium/geometrium_hand.c \
     src/geometrium/geometrium_render.c src/geometrium/geometrium_shapes.c src/geometrium/geometrium_material.c src/graphics/image.c src/graphics/gfx_frame.c \
     src/graphics/gfx_draw.c src/graphics/gfx_text.c src/graphics/ttf/ttf_font.c src/graphics/ttf/ttf_outline.c \

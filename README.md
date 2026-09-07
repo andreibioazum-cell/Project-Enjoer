@@ -11,6 +11,7 @@ is English.
 ```
 assets/        runtime assets: textures/*.png, fonts/*.ttf, sounds/*.wav
 game/          Android packaging: AndroidManifest.xml and the Java activity
+projects/      engine projects: demo scene and the voxel world as a project
 src/           all C sources
   main.c       Android entry point (native activity)
   engine.h     compact platform/asset/HUD/lifecycle API
@@ -18,8 +19,9 @@ src/           all C sources
   graphics/    2D renderer: primitives, textures, text (+ ttf/)
   sound/       audio: PCM16 mixer and AudioTrack output
   geometrium/  the 3D playset: render, terrain, water, player, input, HUD
+  engine/      engine layer: node tree, scenes, projects, C scripting
 third_party/   stb_image / stb_image_write
-tools/         preview server, regression tests, offline art tool
+tools/         preview server, regression tests, offline art tool, scaffolds
 ```
 
 Sounds live with the other assets in `assets/sounds/` (not in a game
@@ -211,6 +213,10 @@ tools/preview/build.sh
 # Open http://localhost:8090; run from the repository root.
 ```
 
+With `--project <dir>` the preview runs the engine instead of the built-in
+game and loads that project's scene tree, e.g.
+`./preview --project projects/demo`.
+
 Default **960×540**; `--w`, `--h`, `--port`, `--storage` are available. The
 server listens on `0.0.0.0`; the browser uses relative URLs and works through
 an external HTTPS proxy. The frame is letterboxed, not stretched. Transport
@@ -225,7 +231,7 @@ tools/tests/run.sh
 SANITIZE=1 tools/tests/run.sh
 ```
 
-38 check groups: original PNGs/palettes/mips, quarter UVs, smooth
+39 check groups: original PNGs/palettes/mips, quarter UVs, smooth
 perspective light and fog, depth/clipping, bit-exact upscale/stride,
 walk/flight/multitouch/FPS, exact mesh coverage, dark mines and half
 openings, soft leaves and chunk borders, the closed two-box hand and its
@@ -281,3 +287,83 @@ script accepts that legacy path as an alias for `assets/`. Targets are
 `libds_game.so` and the matching manifest field are kept for compatibility
 with the current CI packaging; it is only a library name, not an interpreter.
 The existing workflow and APK artifact names were not renamed either.
+
+## Engine
+
+The block world doubles as a small general-purpose 3D engine
+(`src/engine/`). The classic game stays the built-in default; the engine
+adds **projects**, **typed scene nodes** and **C scripting** on top of the
+same rasterizer, materials and terrain code.
+
+### Projects
+
+A project is a directory with a `project.eng` manifest:
+
+```
+name = Demo Scene
+main_scene = scenes/main.escn
+```
+
+`tools/project/create.sh <dir>` scaffolds a fresh project (manifest, a scene
+and a spinning-cube C script). Run any project with
+`./preview --project <dir>`. Two ready projects ship in `projects/`:
+`demo` (meshes, lights, an orbiting camera and two scripts) and
+`voxel_world` (the streamed terrain seen through a scene camera).
+
+### Node types
+
+Scenes are trees of typed nodes, Godot-style:
+
+| Type | Purpose |
+| --- | --- |
+| `Node` | plain container (scene root) |
+| `Node3D` | positioned container: position, yaw/pitch/roll, uniform scale |
+| `MeshInstance3D` | cube / plane / sphere / cylinder primitives |
+| `Camera3D` | viewpoint; `current = true` activates it, `fov` in degrees |
+| `DirectionalLight3D` | sun-like light along the node's −Z |
+| `OmniLight3D` | point light with `range` falloff |
+| `VoxelWorld3D` | the classic streamed block terrain |
+
+Transforms are hierarchical Euler angles (`Ry*Rx*Rz`, parent scale composed
+into children). `MeshInstance3D` takes either a flat `color = r g b`
+(a palette material built at runtime) or `material = grass|dirt|stone|sand|
+water|log|leaves` to reuse the voxel PNG tiles. Lights tint and shade every
+mesh face; with no lights at all meshes render fully lit.
+
+### Scene files
+
+`.escn` is plain text, one section per node:
+
+```
+[node name="Hero" type="MeshInstance3D" parent="."]
+mesh = cube
+position = 0 2 0
+yaw = 1.57
+script = "spin"
+```
+
+`parent` is a path from the root (`.` = root). Values are floats, vectors,
+quoted strings or `true`/`false`; `#` starts a comment.
+
+### C scripting
+
+A script is ordinary C compiled to a shared object and loaded with
+`dlopen`; the host rebuilds the `.so` automatically when the source is
+newer. Two optional entry points, both receiving the node the script is
+attached to:
+
+```c
+#include "eng_api.h"
+void eng_script_ready(EngNode *self);            /* once, after load */
+void eng_script_process(EngNode *self, float dt);/* every frame */
+```
+
+`src/engine/eng_api.h` is the whole scripting surface: create/attach/free
+nodes, find them by path, get/set position, rotation and scale, switch the
+current camera, set light energy/colour/range, choose a mesh primitive,
+colour and size, plus `eng_time()`/`eng_delta()` and `eng_print()`. The host
+exports the symbols (`-rdynamic`), scripts compile with
+`cc -shared -fPIC -Isrc/engine`. Compiled `.so` files are Git-ignored.
+
+The engine currently runs in the PC preview; the Android target still ships
+the classic game only. Regression coverage lives in `tools/tests/engine.c`.

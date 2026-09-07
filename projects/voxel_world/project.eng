@@ -1,0 +1,3 @@
+# The classic voxel playtest, expressed as an engine project.
+name = Voxel World
+main_scene = scenes/world.escn
