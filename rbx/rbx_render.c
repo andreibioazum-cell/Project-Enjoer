@@ -12,7 +12,7 @@
 #define NEAR_Z 0.08f
 #define FAR_Z RBX_FAR_Z
 
-typedef RbxVertex V3;
+typedef struct {float x,y,z,u,v,light;} V3;
 
 static Buffer *dst;
 static uint32_t *pix;
@@ -32,6 +32,7 @@ static float yaw_s, yaw_c, pitch_s, pitch_c;
 static float foc, view_x, view_y, side_x, side_y;
 static uint32_t fog_rgb;
 static float fog_a, fog_b;
+static int viewmodel;
 
 static uint32_t pack(uint32_t c) {
     uint32_t a = (c >> 24) & 0xff, r = (c >> 16) & 0xff, g = (c >> 8) & 0xff, b = c & 0xff;
@@ -45,11 +46,12 @@ static uint32_t shade_fog(uint32_t packed, float z, float shade) {
     if (ir > 255) ir = 255;
     if (ig > 255) ig = 255;
     if (ib > 255) ib = 255;
-    float t = (z - fog_a) * fog_b;
+    float t = viewmodel ? 0 : (z - fog_a) * fog_b;
     if (t < 0) t = 0;
     if (t > 1) t = 1;
     /* Знаковые каналы: вычитание из uint32_t давало переполнение и радугу. */
-    int fr = fog_rgb & 0xff, fg = (fog_rgb >> 8) & 0xff, fb = (fog_rgb >> 16) & 0xff;
+    float fl=fminf(1,shade*2);
+    int fr=(int)((fog_rgb&255)*fl),fg=(int)(((fog_rgb>>8)&255)*fl),fb=(int)(((fog_rgb>>16)&255)*fl);
     ir = (int)(ir + (fr - ir) * t);
     ig = (int)(ig + (fg - ig) * t);
     ib = (int)(ib + (fb - ib) * t);
@@ -57,7 +59,7 @@ static uint32_t shade_fog(uint32_t packed, float z, float shade) {
 }
 
 int rbx3d_begin(Buffer *b, int sc, float cx, float cy, float cz, float yaw, float pitch, float fov_deg) {
-    dst = NULL;
+    dst = NULL;viewmodel=0;
     if (!b || !b->pixels || b->width <= 0 || b->height <= 0 || b->stride < b->width ||
         !isfinite(cx + cy + cz + yaw + pitch + fov_deg) || fov_deg < 5 || fov_deg > 175)
         return 0;
@@ -138,13 +140,15 @@ void rbx3d_sky(uint32_t top, uint32_t bot) {
     }
 }
 
+void rbx3d_viewmodel(int enabled) {viewmodel=enabled!=0;}
 static int to_view(float wx, float wy, float wz, V3 *o) {
+    if (viewmodel) {*o=(V3){wx,wy,wz,0,0,0};return wz>.01f;}
     float dx = wx - camx, dy = wy - camy, dz = wz - camz;
     float rx = dx * yaw_c - dz * yaw_s;          /* right */
     float rz = dx * yaw_s + dz * yaw_c;          /* forward */
     float ry = dy;
     o->x = rx;
-    o->u = o->v = 0;
+    o->u = o->v = o->light = 0;
     /* Положительный pitch смотрит вверх — как камера и вектор полёта. */
     o->y = ry * pitch_c - rz * pitch_s;
     o->z = ry * pitch_s + rz * pitch_c;
@@ -166,6 +170,7 @@ static V3 lerp3(V3 a, V3 b, float t) {
     r.z = a.z + (b.z - a.z) * t;
     r.u = a.u + (b.u - a.u) * t;
     r.v = a.v + (b.v - a.v) * t;
+    r.light = a.light + (b.light - a.light) * t;
     return r;
 }
 
@@ -201,23 +206,25 @@ static int clip_plane(const V3 *in, int n, V3 *out, int plane) {
     return m;
 }
 
-typedef struct { float x, y, iz, u, v; } ScreenV;
+typedef struct { float x, y, iz, u, v, light; } ScreenV;
 typedef struct {
     uint32_t color;
     const uint32_t *palette;
+    const uint32_t (*shades)[FOG_LEVELS*PALETTE_SIZE];
     const unsigned char *texels;
     float plane;
-    int fog;
+    int fog,smooth;
 } Paint;
 
 static ScreenV mix_vertex(ScreenV a, ScreenV b, float t) {
     ScreenV r = {a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t, a.iz + (b.iz-a.iz)*t,
-                 a.u + (b.u-a.u)*t, a.v + (b.v-a.v)*t};
+                 a.u + (b.u-a.u)*t, a.v + (b.v-a.v)*t,a.light+(b.light-a.light)*t};
     return r;
 }
 static void span(int y, ScreenV a, ScreenV b, const Paint *paint) {
     if (a.x>b.x) {ScreenV t=a;a=b;b=t;}
-    int i0=(int)fmaxf(0,ceilf(a.x-.5f)),i1=(int)fminf((float)rw,ceilf(b.x-.5f));
+    float left=ceilf(a.x-.5f),right=ceilf(b.x-.5f);
+    int i0=(int)(left<0 ? 0 : left>rw ? rw : left),i1=(int)(right<0 ? 0 : right>rw ? rw : right);
     if (i0>=i1) return;
     float inv=b.x-a.x>1e-6f ? 1/(b.x-a.x) : 0;
     float diz=(b.iz-a.iz)*inv,offset=i0+.5f-a.x,iz=a.iz+offset*diz;
@@ -227,36 +234,52 @@ static void span(int y, ScreenV a, ScreenV b, const Paint *paint) {
         return;
     }
     float du=(b.u-a.u)*inv,dv=(b.v-a.v)*inv,u=a.u+offset*du,v=a.v+offset*dv;
+    float dl=(b.light-a.light)*inv,light=a.light+offset*dl;
     const float *ray=ray_length+y*rw;
     static const int offsets[6]={1364,1360,1344,1280,1024,0};
     /* Мелкий шаг LOD (8 вместо 16) — меньше блочной пикселизации вдали. */
     for (int start=i0;start<i1;start+=8) {
         int end=start+8<i1 ? start+8 : i1;
         float mid=iz+diz*(end-start-1)*.5f;
-        float pixels=foc*mid*fminf(1,paint->plane*mid);
+        float angle=paint->plane*mid;
+        float pixels=foc*mid*(angle<1 ? angle : 1);
         union {float f;uint32_t u;} bits={pixels};
         int exponent=(int)((bits.u>>23)&255)-127;
         if (exponent<0) exponent=0;
         if (exponent>5) exponent=5;
         int shift=5-exponent;
         const unsigned char *texels=paint->texels+offsets[exponent];
-        for (int x=start;x<end;x++,iz+=diz,u+=du,v+=dv) {
-            if (iz<=zr[x]) continue;
-            float depth=1/iz;
-            /* floor + power-of-two wrap also works for negative/world UV. */
-            float fu=u*depth,fv=v*depth;
-            int iu=(int)fu,iv=(int)fv;
-            iu-=fu<iu;iv-=fv<iv; /* bounded floor without generic libm overhead */
-            int tx=(iu&31)>>shift,ty=(iv&31)>>shift;
-            int color=texels[(ty<<exponent)+tx];
-            if (paint->fog) {
-                int level=(int)((depth*ray[x]-fog_a)*fog_b*(FOG_LEVELS-1)+.5f);
-                if (level<0) level=0;
-                if (level>=FOG_LEVELS) level=FOG_LEVELS-1;
-                color+=level*PALETTE_SIZE;
-            }
-            row[x]=paint->palette[color];zr[x]=iz;
+        /* Near/uniform surfaces take a lean loop. Specialization changes no
+         * texel, rounding or depth math; smooth/foggy pixels retain the full path. */
+#define DRAW_PIXELS(FOG,SMOOTH) \
+    for (int x=start;x<end;x++,iz+=diz,u+=du,v+=dv,light+=(SMOOTH)?dl:0) { \
+        if (iz<=zr[x]) continue; \
+        float depth=1/iz,fu=u*depth,fv=v*depth; \
+        int iu=(int)fu,iv=(int)fv; \
+        iu-=fu<iu;iv-=fv<iv; /* bounded floor, including negative UV */ \
+        int tx=(iu&31)>>shift,ty=(iv&31)>>shift; \
+        int color=texels[(ty<<exponent)+tx]; \
+        if (FOG) { \
+            int level=(int)((depth*ray[x]-fog_a)*fog_b*(FOG_LEVELS-1)+.5f); \
+            if (level<0) level=0; \
+            if (level>=FOG_LEVELS) level=FOG_LEVELS-1; \
+            color+=level*PALETTE_SIZE; \
+        } \
+        const uint32_t *palette=paint->palette; \
+        if (SMOOTH) { \
+            int shade=(int)(light*depth+.5f); \
+            if (shade<0) shade=0; \
+            if (shade>=LIGHT_LEVELS) shade=LIGHT_LEVELS-1; \
+            palette=paint->shades[shade]; \
+        } \
+        row[x]=palette[color];zr[x]=iz; \
+    }
+        if (paint->smooth) {
+            if (paint->fog) {DRAW_PIXELS(1,1)} else {DRAW_PIXELS(0,1)}
+        } else {
+            if (paint->fog) {DRAW_PIXELS(1,0)} else {DRAW_PIXELS(0,0)}
         }
+#undef DRAW_PIXELS
     }
 }
 static void fill_tri(ScreenV a, ScreenV b, ScreenV c, const Paint *paint) {
@@ -266,55 +289,74 @@ static void fill_tri(ScreenV a, ScreenV b, ScreenV c, const Paint *paint) {
     if (c.y - a.y < 1e-6f) return;
     int ys = (int)fmaxf(0, ceilf(a.y - .5f));
     int ye = (int)fminf((float)rh, ceilf(c.y - .5f));
+    float inv_long=1/(c.y-a.y),inv_top=b.y-a.y>1e-6f ? 1/(b.y-a.y) : 0,inv_bot=c.y-b.y>1e-6f ? 1/(c.y-b.y) : 0;
     for (int y = ys; y < ye; y++) {
         float fy = y + .5f;
-        ScreenV left = mix_vertex(a, c, (fy-a.y)/(c.y-a.y));
+        ScreenV left = mix_vertex(a, c, (fy-a.y)*inv_long);
         ScreenV lo = fy < b.y ? a : b, hi = fy < b.y ? b : c;
         if (hi.y - lo.y < 1e-6f) continue;
-        ScreenV right = mix_vertex(lo, hi, (fy-lo.y)/(hi.y-lo.y));
+        ScreenV right = mix_vertex(lo, hi, (fy-lo.y)*(fy<b.y ? inv_top : inv_bot));
         span(y, left, right, paint);
     }
 }
 
 void rbx3d_polygon(const RbxVertex *w, int n, float nx, float ny, float nz,
-                   uint32_t color, RbxMaterial *material, int shadow) {
-    if (!dst || n < 3 || n > 8) return;
-    float plane=nx*(camx-w[0].x)+ny*(camy-w[0].y)+nz*(camz-w[0].z);
+                   uint32_t color, RbxMaterial *material, const unsigned char *light) {
+    if (!dst || n<3 || n>8) return;
+    float ex=viewmodel ? 0 : camx,ey=viewmodel ? 0 : camy,ez=viewmodel ? 0 : camz;
+    float plane=nx*(ex-w[0].x)+ny*(ey-w[0].y)+nz*(ez-w[0].z);
     if (plane<=0) return;
-    V3 buffers[2][16], *in = buffers[0], *out = buffers[1];
-    float wx = 0, wy = 0, wz = 0,max_distance2=0;
-    for (int i = 0; i < n; i++) {
-        to_view(w[i].x, w[i].y, w[i].z, &in[i]);
-        in[i].u = w[i].u; in[i].v = w[i].v;
-        wx += w[i].x; wy += w[i].y; wz += w[i].z;
-        float dx=w[i].x-camx,dy=w[i].y-camy,dz=w[i].z-camz;
-        max_distance2=fmaxf(max_distance2,dx*dx+dy*dy+dz*dz);
+    V3 buffers[2][16],*in=buffers[0],*out=buffers[1];
+    float wx=0,wy=0,wz=0,max_distance2=0;
+    float face=rbx_face_shade(nx,ny,nz),lo=LIGHT_LEVELS,hi=0;
+    unsigned clip=0,all=63;
+    for (int i=0;i<n;i++) {
+        to_view(w[i].x,w[i].y,w[i].z,&in[i]);
+        in[i].u=w[i].u;in[i].v=w[i].v;
+        float ambient=light ? light[i]/255.f : 1;
+        in[i].light=face*(RBX_DARK_FLOOR+(1-RBX_DARK_FLOOR)*ambient)*(LIGHT_LEVELS-1);
+        if (in[i].light<lo) lo=in[i].light;
+        if (in[i].light>hi) hi=in[i].light;
+        if (!material) {wx+=in[i].x;wy+=in[i].y;wz+=in[i].z;}
+        float d2=in[i].x*in[i].x+in[i].y*in[i].y+in[i].z*in[i].z;
+        if (d2>max_distance2) max_distance2=d2;
+        V3 v=in[i];
+        unsigned code=(v.z<NEAR_Z) | ((v.z>FAR_Z)<<1) | ((v.z*view_x+v.x<0)<<2) |
+            ((v.z*view_x-v.x<0)<<3) | ((v.z*view_y+v.y<0)<<4) | ((v.z*view_y-v.y<0)<<5);
+        clip|=code;all&=code;
     }
-    wx = wx/n-camx; wy = wy/n-camy; wz = wz/n-camz;
-    float distance = sqrtf(wx*wx + wy*wy + wz*wz);
-    for (int plane = 0; plane < 6; plane++) {
-        n = clip_plane(in, n, out, plane);
-        if (n < 3) return;
-        V3 *swap = in; in = out; out = swap;
+    if (all) return;
+    float distance=material ? 0 : sqrtf(wx*wx+wy*wy+wz*wz)/n;
+    /* Most visible voxel quads need no clipping or temporary polygon copies. */
+    for (int p=0;p<6;p++) if (clip&(1u<<p)) {
+        n=clip_plane(in,n,out,p);
+        if (n<3) return;
+        V3 *swap=in;in=out;out=swap;
     }
-    float shade = .52f + .5f * fmaxf(0, nx*.32f + ny*.88f + nz*.35f);
-    if (shadow) shade *= RBX_SUN_SHADOW;
-    Paint paint = {0};
+    Paint paint={0};
     if (material) {
-        int face=ny>.5f ? 0 : ny<-.5f ? 1 : nz>.5f ? 2 : nz<-.5f ? 3 : nx>.5f ? 4 : 5;
-        if (shadow) face+=SHADE_FACES;
-        paint.palette=rbx_material_shades(material,face,fog_rgb);
+        int first=(int)fmaxf(0,lo+.5f),last=(int)fminf(LIGHT_LEVELS-1,hi+.5f);
+        if (first>=LIGHT_LEVELS) first=LIGHT_LEVELS-1;
+        if (last<first) last=first;
+        for (int level=first;level<=last;level++) rbx_material_shades(material,level,fog_rgb);
+        paint.palette=material->shades[first];paint.shades=material->shades;
+        paint.smooth=first!=last;
         paint.texels=material->mip;paint.plane=plane;
-        paint.fog=max_distance2>fog_a*fog_a;
-    } else paint.color=shade_fog(pack(color),distance,shade);
+        paint.fog=!viewmodel && max_distance2>fog_a*fog_a;
+    } else paint.color=shade_fog(pack(color),distance,(lo+hi)*.5f/(LIGHT_LEVELS-1));
     ScreenV v[16];
-    for (int i = 0; i < n; i++) {
-        if (!project_v(in[i], &v[i].x, &v[i].y)) return;
-        v[i].iz = 1 / in[i].z;
-        v[i].u = in[i].u * TEXTURE_SIZE * v[i].iz;
-        v[i].v = in[i].v * TEXTURE_SIZE * v[i].iz;
+    for (int i=0;i<n;i++) {
+        if (!project_v(in[i],&v[i].x,&v[i].y)) return;
+        v[i].iz=1/in[i].z;
+        v[i].u=in[i].u*TEXTURE_SIZE*v[i].iz;
+        v[i].v=in[i].v*TEXTURE_SIZE*v[i].iz;
+        v[i].light=in[i].light*v[i].iz;
     }
-    for (int i = 1; i < n-1; i++) fill_tri(v[0], v[i], v[i+1], &paint);
+    for (int i=1;i<n-1;i++) fill_tri(v[0],v[i],v[i+1],&paint);
+}
+int rbx3d_face_visible(int face,float plane) {
+    float eye=face<2 ? camy : face<4 ? camz : camx;
+    return dst && ((face&1) ? eye<plane : eye>plane);
 }
 
 int rbx3d_visible(float x, float y, float z, float hx, float hy, float hz) {
@@ -323,7 +365,7 @@ int rbx3d_visible(float x, float y, float z, float hx, float hy, float hz) {
     to_view(x, y, z, &center);
     float radius = sqrtf(hx*hx + hy*hy + hz*hz);
     float far=fog_a+1/fog_b;
-    if (sqrtf(center.x*center.x+center.y*center.y+center.z*center.z)-radius>far) return 0;
+    if (center.x*center.x+center.y*center.y+center.z*center.z>(far+radius)*(far+radius)) return 0;
     return center.z + radius >= NEAR_Z && center.z - radius <= FAR_Z &&
            fabsf(center.x) - center.z*view_x <= radius*side_x &&
            fabsf(center.y) - center.z*view_y <= radius*side_y;
@@ -383,6 +425,33 @@ static uint32_t mix_rgb(uint32_t a, uint32_t b, uint32_t t) {
     return rb | g | 0xff000000u;
 }
 
+/* The common phone 2x upscale has fixed 3:1 weights. Add/shift arithmetic
+ * replaces per-pixel multiplies and X table reads, with identical Q8 rounding. */
+static uint32_t mix_quarter(uint32_t a,uint32_t b) {
+    uint32_t rb=(((a&0x00ff00ffu)*3+(b&0x00ff00ffu)+0x00020002u)>>2)&0x00ff00ffu;
+    uint32_t g=(((a&0x0000ff00u)*3+(b&0x0000ff00u)+0x00000200u)>>2)&0x0000ff00u;
+    return rb|g|0xff000000u;
+}
+static void expand_two(const uint32_t *in,uint32_t *out) {
+    out[0]=in[0];out[rw*2-1]=in[rw-1];
+    for (int x=0;x<rw-1;x++) {
+        out[x*2+1]=mix_quarter(in[x],in[x+1]);out[x*2+2]=mix_quarter(in[x+1],in[x]);
+    }
+}
+static void upscale_two(void) {
+    int w=dst->width,stride=dst->stride;
+    expand_two(pix,horizontal_rows);
+    memcpy(dst->pixels,horizontal_rows,(size_t)w*sizeof(uint32_t));
+    for (int y=0;y<rh-1;y++) {
+        const uint32_t *a=horizontal_rows+(y&1)*w;
+        uint32_t *b=horizontal_rows+((y+1)&1)*w;
+        expand_two(pix+(y+1)*rw,b);
+        uint32_t *out0=dst->pixels+(y*2+1)*stride,*out1=out0+stride;
+        for (int x=0;x<w;x++) {out0[x]=mix_quarter(a[x],b[x]);out1[x]=mix_quarter(b[x],a[x]);}
+    }
+    memcpy(dst->pixels+(dst->height-1)*stride,horizontal_rows+((rh-1)&1)*w,(size_t)w*sizeof(uint32_t));
+}
+
 static Sample sample_at(int pos, int source, int target) {
     float f = ((float)pos + 0.5f) * source / target - 0.5f;
     if (f < 0) f = 0;
@@ -431,5 +500,6 @@ void rbx3d_end(void) {
             memcpy(dst->pixels + y * st, pix + y * rw, (size_t)rw * 4);
         return;
     }
-    upscale_smooth();
+    if (dst->width==rw*2 && dst->height==rh*2) upscale_two();
+    else upscale_smooth();
 }

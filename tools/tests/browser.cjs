@@ -17,7 +17,17 @@ let browser,page;
   await page.goto(url);
   const state=()=>page.evaluate(()=>fetch('/info').then(r=>r.json()));
   const flush=()=>page.waitForFunction(()=>!sending&&queue.length===0);
-  await page.waitForFunction(async()=>{const s=await fetch('/info').then(r=>r.json());return s.pending===0&&s.distance>=96},{},{timeout:20000});
+  // waitForFunction can treat a returned Promise as truthy before its boolean
+  // resolves. Poll awaited server snapshots, not async browser predicates.
+  const waitState=async(predicate,label,timeout=20000)=>{
+    const deadline=Date.now()+timeout;let latest;
+    while(Date.now()<deadline){
+      latest=await state();if(predicate(latest))return latest;
+      await page.waitForTimeout(40);
+    }
+    throw Error(`Timed out waiting for ${label}: ${JSON.stringify(latest)}`);
+  };
+  await waitState(s=>s.pending===0&&s.distance>=80,'streamed world');
   assert.match(await page.title(),/блочный мир/);
   assert.equal(await page.locator('h1,.hint').count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight),true);
@@ -33,7 +43,7 @@ let browser,page;
   const jump=point(11,882,458),joy=point(21,86,454),forward=point(21,86,394);
   const look=point(31,600,220),lookUp=point(31,630,140),flight=point(41,746,40);
   await touch('touchStart',[jump]);
-  await page.waitForFunction(async()=>(await fetch('/info').then(r=>r.json())).y>13.1);
+  await waitState(s=>s.y>13.1,'jump');
   await touch('touchStart',[jump,joy]);await touch('touchStart',[jump,joy,look]);
   await touch('touchMove',[jump,forward,lookUp]);await touch('touchStart',[jump,forward,lookUp,flight]);
   await touch('touchEnd',[flight]);await flush();await waitJump(false);
@@ -50,16 +60,15 @@ let browser,page;
   assert.equal((await state()).flying,0);await touch('touchCancel',[]);
   // Look straight down, then edit one quarter of the top face under the crosshair.
   await touch('touchStart',[point(71,600,90)]);await touch('touchMove',[point(71,600,475)]);await touch('touchEnd',[]);await flush();
-  await page.waitForFunction(async()=>{const s=await fetch('/info').then(r=>r.json());return s.target&&Math.abs(s.y-Math.round(s.y*2)/2)<.001});
-  const before=(await state()).target;
+  const before=(await waitState(s=>s.grounded&&!s.flying&&s.target,'landing before editing')).target;
   const click=async(x,y,button='left')=>{const p=xy(x,y);await page.mouse.click(p.x,p.y,{button});await flush()};
   await click(696,464);
-  await page.waitForFunction(async old=>JSON.stringify((await fetch('/info').then(r=>r.json())).target)!==JSON.stringify(old),before);
+  await waitState(s=>s.target&&JSON.stringify(s.target)!==JSON.stringify(before),'broken quarter');
   await page.evaluate(()=>window.dispatchEvent(new Event('blur')));await flush();
   function savedCell(sx,sy,sz){
-    const bytes=fs.readFileSync(save);assert.equal(bytes.toString('ascii',0,7),'EJVOX01');
+    const bytes=fs.readFileSync(save);assert.equal(bytes.toString('ascii',0,7),'EJVOX02');
     for(let i=0;i<bytes.readUInt32LE(12);i++){
-      const at=20+i*20,x=bytes.readInt32LE(at),y=bytes.readInt32LE(at+4),z=bytes.readInt32LE(at+8);
+      const at=20+i*28,x=bytes.readInt32LE(at),y=bytes.readInt32LE(at+4),z=bytes.readInt32LE(at+8);
       if(x===Math.floor(sx/2)&&y===Math.floor(sy/2)&&z===Math.floor(sz/2))return [...bytes.subarray(at+12,at+20)];
     }
     throw Error('Expected a persisted parent-block patch');
@@ -68,7 +77,7 @@ let browser,page;
   await page.screenshot({path:`${directory}/browser-broken-piece.png`});
   await click(458,504);assert.equal((await state()).selected,2); // stone
   await click(600,300,'right');
-  await page.waitForFunction(async old=>{const h=(await fetch('/info').then(r=>r.json())).target;return h&&h.x===old.x&&h.y===old.y&&h.z===old.z&&h.block===3},before);
+  await waitState(s=>{const h=s.target;return h&&h.x===before.x&&h.y===before.y&&h.z===before.z&&h.block===3},'placed quarter');
   await page.evaluate(()=>window.dispatchEvent(new Event('blur')));await flush();
   const replaced=savedCell(before.x,before.y,before.z);assert.equal(replaced.filter(x=>x===0).length,0);assert.equal(replaced.filter(x=>x===3).length,1);
   await page.screenshot({path:`${directory}/browser-placed-piece.png`});

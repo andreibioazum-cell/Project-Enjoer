@@ -253,8 +253,8 @@ int main(int argc, char **argv) {
             RbxHit hit;char target[160]="null";
             if(rbx_target(&hit))snprintf(target,sizeof(target),"{\"x\":%d,\"y\":%d,\"z\":%d,\"block\":%d}",hit.x,hit.y,hit.z,hit.block);
             char info[512];
-            int n=snprintf(info,sizeof(info),"{\"w\":%d,\"h\":%d,\"fps\":%.1f,\"distance\":%.1f,\"pending\":%d,\"x\":%.4f,\"y\":%.4f,\"z\":%.4f,\"flying\":%d,\"selected\":%d,\"target\":%s}",
-                           w,h,rbx_fps(),rbx_world_distance(),rbx_world_pending(),x,y,z,rbx_player_flying(),rbx_selected(),target);
+            int n=snprintf(info,sizeof(info),"{\"w\":%d,\"h\":%d,\"fps\":%.1f,\"distance\":%.1f,\"pending\":%d,\"x\":%.4f,\"y\":%.4f,\"z\":%.4f,\"flying\":%d,\"grounded\":%d,\"selected\":%d,\"target\":%s}",
+                           w,h,rbx_fps(),rbx_world_distance(),rbx_world_pending(),x,y,z,rbx_player_flying(),rbx_player_grounded(),rbx_selected(),target);
             http_head(fd, 200, "application/json", n, 0);
             send_all(fd, info, (size_t)n);
         } else if (!strcmp(method,"GET") && !strcmp(path,"/frame.jpg")) {

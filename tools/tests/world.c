@@ -3,10 +3,13 @@
 #include <stdio.h>
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"%s:%d: %s\n",__func__,__LINE__,#x);exit(1);}}while(0)
 int rbx3d_visible(float x,float y,float z,float hx,float hy,float hz) {(void)x;(void)y;(void)z;(void)hx;(void)hy;(void)hz;return 1;}
-static int drawn_lit,drawn_shadow;
-void rbx3d_surface(int x,int y,int z,int u,int v,int face,int block,int shadow) {
+int rbx3d_face_visible(int face,float plane) {(void)face;(void)plane;return 1;}
+static int drawn_lit,drawn_dim,drawn_smooth;
+void rbx3d_surface(int x,int y,int z,int u,int v,int face,int block,const unsigned char light[4]) {
     (void)x;(void)y;(void)z;(void)u;(void)v;(void)face;(void)block;
-    if(shadow) drawn_shadow++;else drawn_lit++;
+    CHECK(light);
+    if (light[0]==255) drawn_lit++;else drawn_dim++;
+    if (light[0]!=light[1] || light[0]!=light[2] || light[0]!=light[3]) drawn_smooth++;
 }
 static void test_chunks(void) {
     unsigned char a[BASE_CELLS],b[BASE_CELLS];int types[BLOCK_COUNT]={0},low=100,high=0;
@@ -56,7 +59,7 @@ static void test_streaming(void) {
             CHECK(rbx_world_cell((x+dx)*2,y*2,(z+dz)*2)==rbx_terrain_block(x+dx,y,z+dz));
     }
     CHECK(original==fingerprint());rbx_world_build(RBX_WORLD_SEED);CHECK(original==fingerprint());
-    puts("PASS bounded 15x15 cache, incremental nearest-first streaming, 96-block range and return-trip determinism");
+    puts("PASS bounded 13x13 cache, incremental nearest-first streaming, 80-block fog range and return-trip determinism");
 }
 static const int normals[6][3]={{0,1,0},{0,-1,0},{0,0,1},{0,0,-1},{1,0,0},{-1,0,0}};
 static size_t index_of(int x,int y,int z,int f) {
@@ -86,7 +89,8 @@ static void check_mesh(int cx,int cz) {
             CHECK(cover[index_of(x,y,z,f)]==material);
         }
     }
-    CHECK(c.count*4<exposed);free(cover);free(c.quads);
+    /* Non-uniform vertex light intentionally prevents some greedy merges. */
+    CHECK(c.count*3<exposed);free(cover);free(c.quads);free(c.light);
 }
 static void test_mesh(void) {
     rbx_world_build(RBX_WORLD_SEED);
@@ -104,54 +108,56 @@ static void test_mesh(void) {
     check_mesh(0,0);check_mesh(-1,0);check_mesh(1,0);check_mesh(0,-1);check_mesh(-1,-1);
     puts("PASS exact greedy/partial face coverage: no hidden or duplicate faces, water contacts, chunk edges and interior grass cuts");
 }
-/* Точная ссылка для теней: 3D-DDA по ячейкам вдоль направления солнца. */
-static int ref_sunlit(float x,float y,float z) {
-    float p[3]={x*2,y*2,z*2},d[3]={.5f,1.f,.75f};
-    int c[3],crossings=0;float tmax[3],tdelta[3];
-    for(int i=0;i<3;i++) {
-        c[i]=(int)floorf(p[i]);tmax[i]=((c[i]+1)-p[i])/d[i];tdelta[i]=1/d[i];
-    }
-    int b0=rbx_world_cell(c[0],c[1],c[2]);
-    if(b0!=BLOCK_AIR&&b0!=BLOCK_WATER) return 0;
-    for(int n=0;n<600;n++) {
-        int a=tmax[0]<=tmax[1]&&tmax[0]<=tmax[2]?0:tmax[1]<=tmax[2]?1:2;
-        tmax[a]+=tdelta[a];c[a]++;
-        if(a!=1&&++crossings>31) return 1; /* дальняя граница тени */
-        if(c[1]<0||c[1]>=WORLD_HEIGHT*2) return 1;
-        int b=rbx_world_cell(c[0],c[1],c[2]);
-        if(b!=BLOCK_AIR&&b!=BLOCK_WATER) return 0;
-    }
-    return 1;
+static void set(int x,int y,int z,int block) {
+    if(rbx_world_cell(x,y,z)!=block)CHECK(rbx_world_set(x,y,z,block));
 }
-static void test_shadows(void) {
+static void test_diffuse_light(void) {
     rbx_world_build(RBX_WORLD_SEED);
-    /* Столб 2×2 блоков и постройки вокруг спавна, включая половинные ячейки. */
-    for(int y=26;y<=45;y++) for(int x=32;x<=35;x++) for(int z=32;z<=35;z++)
-        CHECK(rbx_world_set(x,y,z,BLOCK_STONE));
-    CHECK(rbx_world_set(40,25,40,BLOCK_STONE));
-    CHECK(rbx_world_set(44,30,36,BLOCK_GRASS));
-    int checked=0;
-    for(int x=8;x<=56;x++) for(int z=8;z<=56;z++) for(int k=0;k<2;k++) {
-        int h=rbx_terrain_height(x/2,z/2);
-        float y=h+1.f+k*.6f,wx=x*.5f,wz=z*.5f;
-        CHECK(rbx_sunlit(wx,y+.002f,wz)==ref_sunlit(wx,y+.002f,wz));
-        checked++;
+    /* A sealed, long room spanning a negative chunk boundary. */
+    for(int x=-12;x<=36;x++)for(int z=-6;z<=6;z++)for(int y=70;y<=78;y++) {
+        int wall=x==-12 || x==36 || z==-6 || z==6 || y==70 || y==78;
+        set(x,y,z,wall ? BLOCK_STONE : BLOCK_AIR);
     }
-    for(int i=0;i<2500;i++) { /* детерминированные псевдослучайные точки */
-        float wx=-30.f+60.f*(i*37%401)/401.f,wy=1.5f+30.f*(i*53%397)/397.f,wz=-30.f+60.f*(i*71%409)/409.f;
-        CHECK(rbx_sunlit(wx,wy,wz)==ref_sunlit(wx,wy,wz));
-        checked++;
-    }
-    /* Направление: солнце со стороны +X/+Z, тень уходит в -X/-Z. */
-    CHECK(rbx_sunlit(15.5f,13.002f,15.5f)==0); /* у подножия, сторона тени */
-    CHECK(rbx_sunlit(18.5f,13.002f,18.5f)==1); /* солнечная сторона */
-    CHECK(rbx_sunlit(16.5f,23.5f,16.5f)==1);   /* крыша столба освещена */
-    CHECK(rbx_sunlit(16.5f,12.9f,16.5f)==0);   /* под столбом темно */
-    /* Меш несёт бит тени: видимый мир содержит и lit-, и shadow-грани. */
-    drawn_lit=drawn_shadow=0;
-    rbx_world_draw();
-    CHECK(drawn_lit>100&&drawn_shadow>20);
-    printf("PASS sharp sun shadows: exact match with cell DDA over %d probes, direction, %d lit + %d shadowed faces in mesh\n",
-           checked,drawn_lit,drawn_shadow);
+    warm(8.5f,8.5f);
+    CHECK(rbx_world_light(0.25f,36.75f,.25f)==0);
+    CHECK(rbx_world_light(0.25f,40.25f,.25f)==1);
+    for(int z=-2;z<=2;z++)for(int y=72;y<=76;y++)set(-12,y,z,BLOCK_AIR);
+    warm(8.5f,8.5f);
+    float entrance=rbx_world_light(-5.75f,36.75f,.25f);
+    float middle=rbx_world_light(-3.25f,36.75f,.25f);
+    float deep=rbx_world_light(4.25f,36.75f,.25f);
+    CHECK(entrance>.85f && entrance<1);
+    CHECK(middle>.2f && middle<entrance-.2f);CHECK(deep==0);
+    CHECK(fabsf(rbx_world_light(-4.2f,36.75f,.25f)-rbx_world_light(-4.19f,36.75f,.25f))<.005f);
+    /* The same propagated value on both sides of a negative chunk seam. */
+    RbxChunk a={.cx=-1,.cz=0},b={.cx=0,.cz=0};
+    rbx_terrain_chunk(a.cx,a.cz,a.blocks);rbx_terrain_chunk(b.cx,b.cz,b.blocks);
+    rbx_light_bake(&a);rbx_light_bake(&b);
+    for(int y=0;y<WORLD_HEIGHT*2;y++)for(int z=0;z<32;z++)for(int x=31;x<=32;x++)
+        CHECK(rbx_light_cell(&a,x,y,z)==rbx_light_cell(&b,x-32,y,z));
+    free(a.light);free(b.light);
+    for(int z=-2;z<=2;z++)for(int y=72;y<=76;y++)set(-12,y,z,BLOCK_STONE);
+    warm(8.5f,8.5f);CHECK(rbx_world_light(-5.75f,36.75f,.25f)==0);
+    /* One half-cell roof opening admits sky, without opening its other halves. */
+    set(0,78,0,BLOCK_AIR);warm(8.5f,8.5f);
+    CHECK(rbx_world_light(.25f,36.75f,.25f)==1);
+    CHECK(rbx_world_light(.75f,36.75f,.25f)<1);
+    CHECK(rbx_cell_solid(1,78,0));
+    set(0,78,0,BLOCK_STONE);warm(8.5f,8.5f);CHECK(rbx_world_light(.25f,36.75f,.25f)==0);
+    puts("PASS diffuse skylight: sealed mines are dark, portals fade with distance, half-cell apertures, roof edits and seamless negative borders");
 }
-int main(void) {dt=1.0/60;test_chunks();test_streaming();test_mesh();test_shadows();return 0;}
+static void test_canopy_light(void) {
+    rbx_world_build(RBX_WORLD_SEED);
+    set(17,100,17,BLOCK_STONE);warm(8.5f,8.5f);
+    float under=rbx_world_light(8.75f,49.75f,8.75f);
+    CHECK(under>.85f && under<1); /* not a binary/contact shadow under one block */
+    CHECK(rbx_world_light(8.75f,50.75f,8.75f)==1);
+    for(int z=10;z<=24;z++)for(int x=10;x<=24;x++)for(int y=100;y<=101;y++)set(x,y,z,BLOCK_LEAVES);
+    warm(8.5f,8.5f);
+    float canopy=rbx_world_light(8.75f,49.75f,8.75f),edge=rbx_world_light(12.25f,49.75f,8.75f);
+    CHECK(canopy>.5f && canopy<.85f);CHECK(edge>canopy && edge<1);
+    drawn_lit=drawn_dim=drawn_smooth=0;rbx_world_draw();
+    CHECK(drawn_lit>100 && drawn_dim>100 && drawn_smooth>100);
+    printf("PASS translucent canopy, no hard contact AO, %d daylight / %d dim / %d smooth-gradient quads\n",drawn_lit,drawn_dim,drawn_smooth);
+}
+int main(void) {dt=1.0/60;test_chunks();test_streaming();test_mesh();test_diffuse_light();test_canopy_light();return 0;}

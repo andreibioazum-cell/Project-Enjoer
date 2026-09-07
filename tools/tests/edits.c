@@ -9,12 +9,14 @@
 #define CLOSE(a,b) CHECK(fabsf((a)-(b))<.001f)
 void rbx_cancel_input(void) {rbx_input_reset();rbx_key_reset();rbx_actions_reset();}
 int rbx3d_visible(float x,float y,float z,float a,float b,float c) {(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;return 0;}
-void rbx3d_surface(int x,int y,int z,int u,int v,int f,int b,int s) {(void)x;(void)y;(void)z;(void)u;(void)v;(void)f;(void)b;(void)s;}
+void rbx3d_surface(int x,int y,int z,int u,int v,int f,int b,const unsigned char s[4]) {(void)x;(void)y;(void)z;(void)u;(void)v;(void)f;(void)b;(void)s;}
 void rbx3d_segment(float x,float y,float z,float a,float b,float c,uint32_t color) {(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;(void)color;}
 /* Заглушки растеризатора: rbx_hand.c линкуется сюда из-за общих действий. */
-void rbx3d_polygon(const RbxVertex *w,int n,float nx,float ny,float nz,uint32_t color,RbxMaterial *material,int shadow)
-{(void)w;(void)n;(void)nx;(void)ny;(void)nz;(void)color;(void)material;(void)shadow;}
+void rbx3d_polygon(const RbxVertex *w,int n,float nx,float ny,float nz,uint32_t color,RbxMaterial *material,const unsigned char *light)
+{(void)w;(void)n;(void)nx;(void)ny;(void)nz;(void)color;(void)material;(void)light;}
 int rbx3d_project(float x,float y,float z,float *sx,float *sy) {(void)x;(void)y;(void)z;if(sx)*sx=0;if(sy)*sy=0;return 1;}
+void rbx3d_viewmodel(int enabled) {(void)enabled;}
+int rbx3d_face_visible(int face,float plane) {(void)face;(void)plane;return 1;}
 void rbx3d_depth_clear(float x0,float y0,float x1,float y1) {(void)x0;(void)y0;(void)x1;(void)y1;}
 RbxMaterial *rbx_material(int block,int face) {(void)block;(void)face;return NULL;}
 static void fresh(void) {app_set_storage(NULL);rbx_cancel_input();rbx_world_build(RBX_WORLD_SEED);rbx_player_spawn();rbx_input_layout();}
@@ -130,7 +132,35 @@ static void test_persistence(const char *directory) {
     remove(path);app_set_storage(NULL);
     puts("PASS edit rehashing, distant eviction, atomic disk reload, seed/version/CRC/truncation validation and private save paths");
 }
+static void put32(unsigned char *p,uint32_t n) {for(int i=0;i<4;i++)p[i]=(unsigned char)(n>>(i*8));}
+static void crc(unsigned char *data,size_t n) {
+    uint32_t hash=2166136261u;
+    for(size_t i=20;i<n;i++)hash=(hash^data[i])*16777619u;
+    put32(data+16,hash);
+}
+static void test_save_migration(const char *directory) {
+    fresh();app_set_storage(directory);char path[600];CHECK(app_save_path(path,sizeof(path),"world.edits"));
+    unsigned char legacy[40]={0};memcpy(legacy,"EJVOX01\0",8);
+    put32(legacy+8,RBX_WORLD_SEED);put32(legacy+12,1);
+    put32(legacy+20,(uint32_t)-1);put32(legacy+24,40);put32(legacy+28,0);
+    legacy[32]=BLOCK_WATER;legacy[33]=BLOCK_STONE;crc(legacy,sizeof(legacy));
+    FILE *f=fopen(path,"wb");CHECK(f);CHECK(fwrite(legacy,1,sizeof(legacy),f)==sizeof(legacy));fclose(f);
+    rbx_world_build(RBX_WORLD_SEED);
+    CHECK(rbx_edits_count()==1 && rbx_water_level(-2,80,0)==0 && rbx_world_cell(-1,80,0)==BLOCK_STONE);
+    CHECK(rbx_world_set(-1,80,0,BLOCK_DIRT));CHECK(rbx_edits_save());
+    unsigned char current[48];f=fopen(path,"rb");CHECK(f);CHECK(fread(current,1,sizeof(current),f)==sizeof(current));fclose(f);
+    CHECK(!memcmp(current,"EJVOX02\0",8));
+    /* Valid checksum, invalid flow attached to a solid: metadata is validated. */
+    current[41]=1;crc(current,sizeof(current));
+    f=fopen(path,"wb");CHECK(f);CHECK(fwrite(current,1,sizeof(current),f)==sizeof(current));fclose(f);
+    rbx_world_build(RBX_WORLD_SEED);CHECK(!rbx_edits_count());
+    current[41]=0;current[40]=9;crc(current,sizeof(current));
+    f=fopen(path,"wb");CHECK(f);CHECK(fwrite(current,1,sizeof(current),f)==sizeof(current));fclose(f);
+    rbx_world_build(RBX_WORLD_SEED);CHECK(!rbx_edits_count());
+    remove(path);app_set_storage(NULL);
+    puts("PASS legacy EJVOX01 saves upgrade without losing blocks; EJVOX02 rejects invalid fluid metadata even with a valid checksum");
+}
 int main(int argc,char **argv) {
     CHECK(argc==2);screen_w=960;screen_h=540;dt=1.0/60;
-    test_eight_parts();test_ray_and_build();test_edit_controls();test_half_collisions();test_persistence(argv[1]);return 0;
+    test_eight_parts();test_ray_and_build();test_edit_controls();test_half_collisions();test_persistence(argv[1]);test_save_migration(argv[1]);return 0;
 }

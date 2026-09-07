@@ -38,6 +38,8 @@ add_library(enjoer SHARED
     rbx/rbx_material.c
     rbx/rbx_terrain.c
     rbx/rbx_world.c
+    rbx/rbx_light.c
+    rbx/rbx_water.c
     rbx/rbx_mesh.c
     rbx/rbx_edits.c
     rbx/rbx_interact.c

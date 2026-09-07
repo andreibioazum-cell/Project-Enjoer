@@ -25,18 +25,20 @@ int rbx3d_begin(Buffer *b,int sc,float x,float y,float z,float yaw,float pitch,f
 void rbx3d_sky(uint32_t a,uint32_t b) { (void)a; (void)b; }
 void rbx3d_end(void) {}
 int rbx3d_visible(float x,float y,float z,float hx,float hy,float hz) { (void)x;(void)y;(void)z;(void)hx;(void)hy;(void)hz;return 1; }
-void rbx3d_surface(int x,int y,int z,int u,int v,int face,int block,int shadow) {
+void rbx3d_surface(int x,int y,int z,int u,int v,int face,int block,const unsigned char light[4]) {
     (void)x;(void)y;(void)z; CHECK(u>0 && v>0); CHECK(face>=0&&face<6&&block>0&&block<BLOCK_COUNT);
-    CHECK(shadow>=0&&shadow<=1); drawn_faces++;
+    CHECK(light);drawn_faces++;
 }
 /* Минимальные заглушки софтверного рендера для руки от первого лица. */
-void rbx3d_polygon(const RbxVertex *w,int n,float nx,float ny,float nz,uint32_t color,RbxMaterial *material,int shadow) {
-    (void)nx;(void)ny;(void)nz;(void)color;(void)material;(void)shadow;
+void rbx3d_polygon(const RbxVertex *w,int n,float nx,float ny,float nz,uint32_t color,RbxMaterial *material,const unsigned char *light) {
+    (void)nx;(void)ny;(void)nz;(void)color;(void)material;(void)light;
     CHECK(w && n>=3 && n<=8);
 }
 int rbx3d_project(float x,float y,float z,float *sx,float *sy) {
     CHECK(isfinite(x+y+z) && sx && sy); *sx=screen_w*.5f; *sy=screen_h*.5f; return 1;
 }
+void rbx3d_viewmodel(int enabled) {CHECK(enabled==0 || enabled==1);}
+int rbx3d_face_visible(int face,float plane) {(void)face;(void)plane;return 1;}
 void rbx3d_depth_clear(float x0,float y0,float x1,float y1) {
     CHECK(isfinite(x0+y0+x1+y1));
 }
