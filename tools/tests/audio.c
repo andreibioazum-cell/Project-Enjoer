@@ -8,7 +8,7 @@ void snd_backend_pause(void) {}
 void snd_backend_resume(void) {}
 void snd_set_java_vm(void *vm) {(void)vm;}
 int main(void) {
-    CHECK(audio_init(host_asset_manager("game")));
+    CHECK(audio_init(host_asset_manager("assets")));
     CHECK(snd_load("jump.wav") && snd_load("break.wav") && snd_load("place.wav"));
     CHECK(snd_load("jump.wav"));CHECK(!snd_load("../jump.wav"));CHECK(!snd_load("missing.wav"));
     CHECK(!snd_play("missing.wav"));
@@ -21,7 +21,7 @@ int main(void) {
     for(int i=0;i<20;i++)snd_frame(out,1024);
     for(int i=0;i<2048;i++)CHECK(out[i]==0);
     snd_frame(NULL,0);audio_pause();audio_resume();audio_shutdown();CHECK(!snd_play("jump.wav"));
-    CHECK(audio_init(host_asset_manager("game")));CHECK(snd_load("jump.wav"));audio_shutdown();
+    CHECK(audio_init(host_asset_manager("assets")));CHECK(snd_load("jump.wav"));audio_shutdown();
     puts("PASS authored PCM16 effects, one-shot completion, bounded eight-voice clipping, output bounds and audio reinitialization");
     return 0;
 }

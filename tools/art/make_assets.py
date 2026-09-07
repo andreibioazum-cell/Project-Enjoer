@@ -28,7 +28,7 @@ def png(path, pixels):
 
 
 def textures():
-    folder = ROOT / 'game/assets/textures'
+    folder = ROOT / 'assets/textures'
     folder.mkdir(parents=True, exist_ok=True)
     for number, (name, base) in enumerate(BASE.items()):
         rng = random.Random(437 + number)
@@ -58,7 +58,7 @@ def textures():
 
 
 def effects():
-    folder = ROOT / 'game/sounds'
+    folder = ROOT / 'assets/sounds'
     folder.mkdir(parents=True, exist_ok=True)
     for name, duration in [('jump', .09), ('break', .095), ('place', .075)]:
         rng = random.Random(32)

@@ -1,4 +1,4 @@
-/* Хост-замена <android/native_window.h> для превью-сборки. */
+/* Host replacement for <android/native_window.h> in the preview build. */
 #ifndef HOST_COMPAT_NATIVE_WINDOW_H
 #define HOST_COMPAT_NATIVE_WINDOW_H
 

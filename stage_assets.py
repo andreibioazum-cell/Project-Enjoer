@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy a game's assets into the directory that aapt packages into the APK."""
+"""Copy the game's assets (assets/) into the directory aapt packages into the APK."""
 
 from __future__ import annotations
 
@@ -12,7 +12,14 @@ from pathlib import Path
 
 
 def stage_assets(source: Path, destination: Path) -> list[Path]:
-    """Replace *destination* with a clean copy of *source*."""
+    """Replace *destination* with a clean copy of *source*.
+
+    The source tree already contains every runtime asset the engine opens by
+    name: textures/*.png, fonts/*.ttf and sounds/*.wav. Older CI invocations
+    still pass the pre-restructure path game/assets; accept it as an alias.
+    """
+    if not source.is_dir() and source.name == "assets":
+        source = Path(__file__).resolve().parent / "assets"
     source = source.resolve()
     destination = destination.resolve()
 
@@ -35,39 +42,10 @@ def stage_assets(source: Path, destination: Path) -> list[Path]:
             raise ValueError(f"asset symlinks are not supported: {relative_path}")
         if path.is_dir():
             target.mkdir(parents=True, exist_ok=True)
-        elif path.name != ".gitkeep":
+        elif path.name not in {".gitkeep", "README.md"}:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, target)
             staged.append(relative_path)
-
-    return staged
-
-
-def stage_sounds(source: Path, destination: Path) -> list[Path]:
-    """Copy WAVs from *source* (game/sounds) into *destination* (assets/sounds).
-
-    The game opens sounds by name "sounds/<file>" (sound/sound.c), so the folder is
-    staged next to the regular assets inside the APK. An absent folder is
-    fine: the game just stays silent.
-    """
-    source = source.resolve()
-    destination = destination.resolve()
-    if not source.is_dir():
-        return []
-
-    staged: list[Path] = []
-    for path in sorted(source.rglob("*")):
-        relative_path = path.relative_to(source)
-        target = destination / relative_path
-
-        if path.is_symlink():
-            raise ValueError(f"sound symlinks are not supported: {relative_path}")
-        if path.is_dir():
-            target.mkdir(parents=True, exist_ok=True)
-        elif path.name != ".gitkeep":
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, target)
-            staged.append(Path("sounds") / relative_path)
 
     return staged
 
@@ -134,7 +112,7 @@ def build_android_activity(source: Path, apk_root: Path) -> Path | None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Copy game assets into an APK staging directory.")
-    parser.add_argument("source", nargs="?", default="game/assets")
+    parser.add_argument("source", nargs="?", default="assets")
     parser.add_argument("destination", nargs="?", default="staging/assets")
     return parser.parse_args(argv)
 
@@ -144,9 +122,6 @@ def main(argv: list[str] | None = None) -> int:
     try:
         destination = Path(args.destination)
         staged = stage_assets(Path(args.source), destination)
-        # Звуки (game/sounds) кладём в APK рядом с ассетами: assets/sounds/.
-        sounds_dir = Path(__file__).resolve().parent / "game" / "sounds"
-        staged += stage_sounds(sounds_dir, destination / "sounds")
         java_source = Path(__file__).resolve().parent / "game" / "java"
         dex = build_android_activity(java_source, destination.parent)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:

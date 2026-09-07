@@ -1,4 +1,4 @@
-# локальные данные превью и сборки — не в git
+# local preview and build data — not in git
 /data/
 *.dat
 /build*/

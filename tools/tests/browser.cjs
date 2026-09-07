@@ -28,7 +28,7 @@ let browser,page;
     throw Error(`Timed out waiting for ${label}: ${JSON.stringify(latest)}`);
   };
   await waitState(s=>s.pending===0&&s.distance>=80,'streamed world');
-  assert.match(await page.title(),/блочный мир/);
+  assert.match(await page.title(),/block world/);
   assert.equal(await page.locator('h1,.hint').count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight),true);
   const box=await page.locator('canvas').boundingBox();assert.equal(box.width,1280);assert.equal(box.height,720);

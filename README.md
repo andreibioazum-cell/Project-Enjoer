@@ -1,249 +1,283 @@
-# Enjoer — блочный мир
+# Enjoer — block world
 
-Горизонтальная игра от первого лица на **C99**: процедурный ландшафт, деревья,
-вода, ходьба, прыжки, переключаемый полёт и строительство половинными кубиками.
+A landscape first-person game in **C99**: procedural terrain with generated
+caves, trees, transparent water, walking, jumping, toggleable flight and
+half-cube building. The 3D world module is called **Geometrium**
+(`src/geometrium/`). Everything in the game — HUD, labels, error screens —
+is English.
 
-## Управление
+## Repository layout
 
-### Телефон
+```
+assets/        runtime assets: textures/*.png, fonts/*.ttf, sounds/*.wav
+game/          Android packaging: AndroidManifest.xml and the Java activity
+src/           all C sources
+  main.c       Android entry point (native activity)
+  engine.h     compact platform/asset/HUD/lifecycle API
+  core/        app state, error handling, logging, asset reads
+  graphics/    2D renderer: primitives, textures, text (+ ttf/)
+  sound/       audio: PCM16 mixer and AudioTrack output
+  geometrium/  the 3D playset: render, terrain, water, player, input, HUD
+third_party/   stb_image / stb_image_write
+tools/         preview server, regression tests, offline art tool
+```
 
-- Чёрный джойстик слева — движение. Подложка прозрачная, ручка без обводки,
-  внешнее кольцо толстое и чёрное.
-- Свайп справа — камера. Короткое касание этой области ломает выбранную часть;
-  свайп или длительное удержание камеры сами по себе ничего не ломают.
-- **«Ломать» / «Ставить»** — действия под белым прицелом. Удержание кнопки
-  повторяет действие; короткое нажатие обрабатывается даже между кадрами.
-- Шесть ячеек снизу выбирают материал: трава, земля, камень, песок, дерево, листва.
-- По умолчанию действуют гравитация и столкновения; справа есть **«Прыжок»**.
-- Белая кнопка **«Полёт»** сверху включает/выключает полёт. В полёте прыжок
-  скрывается, джойстик движет вдоль взгляда, включая подъём/спуск. Отпустил — завис;
-  выключил полёт — снова падаешь.
-- Стик, камера, прыжок и строительство поддерживают независимые пальцы.
-  Отмена жеста не нажимает переключатель и не оставляет зажатое действие.
+Sounds live with the other assets in `assets/sounds/` (not in a game
+folder); `stage_assets.py` stages the whole `assets/` tree into the APK.
 
-Android использует `sensorLandscape` — обе горизонтальные ориентации.
-В правом верхнем углу показан **измеренный FPS**, усреднённый примерно за полсекунды.
-Счётчик использует реальный интервал кадров, а не ограниченный шаг физики.
+## Controls
 
-### ПК / браузер
+### Phone
 
-| Клавиша / действие | Назначение |
+- Black joystick on the left — movement. Transparent backing, knob without an
+  outline, thick black outer ring.
+- Swipe on the right — camera. A short tap of this area breaks the selected
+  part; swiping or holding the camera alone breaks nothing.
+- **"Break" / "Place"** — text-only round buttons under the white crosshair.
+  Holding a button repeats the action; a short press is processed even
+  between frames.
+- Six slots at the bottom select the material: grass, dirt, stone, sand,
+  wood, leaves.
+- Gravity and collisions are on by default; **"Jump"** sits on the right.
+- The white **"Flight"** button at the top toggles flight. In flight the jump
+  button hides and the joystick moves along the view, including up/down.
+  Release to hover; turn flight off to fall again.
+- Stick, camera, jump and building support independent fingers. Cancelling a
+  gesture neither presses toggles nor leaves actions held.
+
+Android uses `sensorLandscape` — both landscape orientations. The top-right
+corner shows the **measured FPS**, averaged over about half a second. The
+counter uses the real frame interval, not the clamped physics step.
+
+### PC / browser
+
+| Key / action | Binding |
 | --- | --- |
-| `W A S D` | Движение |
-| Перетаскивание справа / стрелки | Камера |
-| Короткий левый клик справа / `E` | Ломать часть |
-| Правая кнопка мыши / `R` | Ставить часть |
-| `1`–`6` / ячейки панели | Материал |
-| `Space` | Прыжок; в воде — всплытие |
-| `F` | Переключение полёта |
-| `Space` / `Shift` в полёте | Вверх / вниз |
+| `W A S D` | Move |
+| Drag on the right / arrows | Camera |
+| Short left click on the right / `E` | Break part |
+| Right mouse button / `R` | Place part |
+| `1`–`6` / panel slots | Material |
+| `Space` | Jump; swim up in water |
+| `F` | Toggle flight |
+| `Space` / `Shift` in flight | Up / down |
 
-Правая кнопка мыши работает и во время перетаскивания левой.
-Потеря фокуса и изменение размеров сбрасывают удержания.
+Right mouse works while dragging with the left one. Losing focus and window
+resizes reset all holds.
 
-## Восемь частей и PNG
+## Eight parts and PNGs
 
-Один исходный блок **1×1×1** состоит из **2×2×2 частей размером 0.5×0.5×0.5**.
-Луч из камеры выбирает именно одну часть на расстоянии до шести исходных блоков.
-Установка происходит в соседнюю половинную ячейку; занятое место и пересечение
-с игроком запрещены. Нижний слой мира защищён от разрушения; высота строительства —
-64 исходных блока. Вода не препятствует лучу выбора твёрдых блоков.
+One source block **1×1×1** consists of **2×2×2 parts of size 0.5×0.5×0.5**.
+The camera ray selects exactly one part up to six source blocks away.
+Placement goes into the neighbouring half cell; occupied space and player
+intersection are forbidden. The bottom world layer is protected from
+destruction; the build height is 64 source blocks. Water does not block the
+ray that picks solid blocks.
 
-В `game/assets/textures/` лежат девять **собственных RGBA PNG 32×32**.
-Игра читает эти файлы, а не генерирует цветовые узоры при запуске.
-Одна текстура по-прежнему покрывает один исходный блок: четверть грани получает
-соответствующие **16×16 пикселей**, а не уменьшенную копию всего изображения.
-UV привязаны к мировой сетке, в том числе при отрицательных координатах.
-Объединённые грани повторяют PNG раз на исходный блок, не растягивают её.
-Внутренний горизонтальный срез травяного блока показывает землю.
+`assets/textures/` contains nine **original 32×32 RGBA PNGs**. The game reads
+these files instead of generating color patterns at startup. One texture
+still covers one source block: a quarter of a face receives the matching
+**16×16 pixels**, not a downscaled copy of the whole image. UVs are bound to
+the world grid, including negative coordinates. Merged faces repeat the PNG
+once per source block, never stretching it. A horizontal cut inside a grass
+block shows dirt.
 
-Необязательный офлайн-инструмент авторинга — `python3 tools/art/make_assets.py`.
-Он воспроизводит PNG и короткие PCM16-эффекты прыжка, ломания и установки.
-Звук воспроизводится в Android; браузерное превью без звука.
+The optional offline authoring tool is `python3 tools/art/make_assets.py`.
+It reproduces the PNGs and the short PCM16 jump/break/place effects. Sound
+plays on Android; the browser preview is silent.
 
-## Мягкое освещение
+## Terrain: gentle hills and caves
 
-- **Резкие солнечные и контактные тени убраны, освещение сохранено.** Объём граней
-  читается за счёт мягкой разницы их яркости, а не чёрных пятен под блоками.
-- Вместо двоичного «солнце/тень» используется **рассеянный свет от неба**. Открытые
-  колонны получают дневной свет; боковое распространение постепенно затухает.
-  Стены и потолки задерживают свет, поэтому закрытые шахты действительно тёмные,
-  а возле входа получается плавный переход. Проём 0.5×0.5 тоже учитывается.
-- Листва частично пропускает свет. Под кроной нет резких скачков яркости;
-  вода прозрачна для освещения и не создаёт ложную чёрную тень.
-- Свет запекается на половинной сетке **только при изменении непрозрачности**.
-  Кэш чанка хранит нужный диапазон высот между сплошным грунтом и небом;
-  общий временный буфер с ореолом переиспользуется. Трассировки лучей на кадр нет.
-- Четыре значения света на квад интерполируются перспективно, вместе с `1/z`.
-  Greedy-мешинг объединяет грани только вдоль направлений, в которых свет постоянен,
-  чтобы не растягивать переход и не создавать шов. Непрозрачные соседние ячейки
-  не усредняются как чёрный AO. Палитры яркости и тумана кэшируются.
-- Туман на тёмных поверхностях тоже тёмный: дальняя стена шахты больше не светится
-  цветом дневного неба. Небольшой минимальный уровень яркости оставляет контуры
-  различимыми; это не искусственный источник света в шахте.
+- Heights come from two soft value-noise octaves; the slope between
+  neighbouring columns stays well below one block, so the ground climbs in
+  short single steps instead of whole-block walls.
+- **Generated caves** ("holes") are carved by 3D noise inside the stone: a
+  sealed four-block crust keeps the surface intact, the two bottom layers
+  stay bedrock, and lake beds are never carved, so natural water cannot
+  drain into the underground.
+- A small safe clearing surrounds the spawn point.
 
-## Рука от первого лица
+## Soft lighting
 
-- Предплечье, кисть и выбранный блок — **замкнутые 3D-параллелепипеды** с шестью
-  разнесёнными гранями, а не пересекающиеся плоскости через центр.
-- Вся модель строится в системе камеры. Её оси ортонормированы: повороты взгляда
-  не вращают блок отдельно от руки и не меняют его форму. Текстура выбирается по
-  **локальной** грани: верх травы остаётся сверху при любом повороте камеры.
-- Рука рисуется после мира тем же растеризатором; очищается только её область
-  z-буфера. Она не протыкает стены, но её собственные части перекрываются правильно.
-- Сохранены замах, смена материала и покачивание при ходьбе. Покачивание плавно
-  затихает при остановке; в полёте его нет. Освещение всей руки плавно следует за
-  освещённостью у глаз игрока, без отдельных резких пятен под деревьями и тумана
-  поверх блока в руке.
+- **Harsh sun and contact shadows are removed, lighting is kept.** Face
+  volume reads through a gentle brightness difference, not black patches
+  under blocks.
+- Instead of binary sun/shadow the engine uses **diffuse skylight**. Open
+  columns get daylight; sideways spread decays gradually. Walls and ceilings
+  hold light back, so sealed mines are truly dark while entrances get a
+  smooth transition. A 0.5×0.5 opening counts.
+- Leaves transmit light partially. No sharp brightness jumps under canopies;
+  water is transparent to light and casts no false black shadow.
+- Light is baked on the half grid **only when opacity changes**. The chunk
+  cache stores the needed height range between solid ground and sky; a
+  shared scratch halo buffer is reused. No per-frame ray tracing.
+- Four light values per quad interpolate perspectively, together with `1/z`.
+  Greedy meshing merges faces only along directions where the light is
+  constant, so gradients never stretch and no seam appears. Opaque neighbour
+  cells are not averaged into black AO. Brightness and fog palettes are
+  cached.
+- Fog on dark surfaces is dark too: a far mine wall does not glow with the
+  daytime sky colour. A small minimum brightness keeps outlines readable; it
+  is not an artificial light source in the mine.
 
-## Вода по блокам
+## First-person hand
 
-- Природная вода — источник. Если сломать часть дна или стенки рядом с водой,
-  освободившаяся **половинная ячейка заполняется**, а не остаётся сухой дырой.
-- Симуляция идёт шагами по 0.1 с: сначала вниз, затем по соседним боковым граням
-  при наличии опоры. Получаются водопады и растекание по поверхности. Вода
-  не проходит сквозь блоки, не прыгает по диагонали и не течёт вверх.
-- Боковой поток имеет до семи ступеней дальности (по 0.5 блока). У основания
-  водопада начинается новый боковой поток. Это **блочная симуляция источников
-  и потоков**, а не расчёт непрерывной жидкости или сохранения её объёма.
-- Перекрытие источника/канала убирает неподдерживаемый поток; открытие канала
-  запускает его снова. Изменение пола под источником тоже обновляет соседнюю воду.
-- Обрабатывается только очередь активных ячеек рядом с игроком, до 512 за шаг.
-  Очередь ограничена и удаляет дубликаты; при переполнении есть постепенное
-  восстановление пропущенных обновлений с собственным небольшим бюджетом. В спокойной воде нет обхода всего мира.
-  Растекание перестраивает геометрию затронутых чанков, **не пересчитывая свет**.
-- Источник, боковой поток и падающая вода различаются в сохранении. После загрузки
-  поток не превращается в бесконечный источник; симуляция возобновляется и при
-  возвращении в выгруженную область.
+- The arm is **one solid rectangular cuboid** running from the lower-right
+  screen corner to the held block — a single box, not stacked flat slabs.
+  The held block is a second closed cuboid with six offset faces.
+- The whole model is built in camera space with orthonormal axes: view
+  rotation neither spins the block separately nor distorts it. Textures are
+  chosen by **local** face: grass tops stay on top at any camera rotation.
+- The hand draws after the world with the same rasterizer; only its screen
+  region of the z-buffer is cleared. It does not poke through walls, while
+  its own parts overlap correctly.
+- Swing, material change and walk bob are preserved. Bob fades out smoothly
+  when stopping and is absent in flight. The whole hand's light follows the
+  brightness at the player's eyes smoothly, with no separate harsh patches
+  under trees and no fog on the held block.
 
-## Мир, сохранения и производительность
+## Transparent water
 
-- Генерация хранит исходные блоки в чанках **16×16×64**. Разбиение на восемь
-  частей **не увеличивает весь мир в памяти в восемь раз**: отдельно хранятся
-  только изменённые исходные блоки, по восемь материалов в записи.
-- Кэш ограничен **13×13 чанками**: видимая область и дополнительное кольцо
-  предварительной загрузки. Seed — `RBX_WORLD_SEED` в `rbx/rbx_internal.h`.
-- Сохранена дальность: туман до **80 исходных блоков**, дальняя плоскость — 96.
-  Начальная ближняя область готовится сразу; дальняя достраивается постепенно.
-  Туман отступает по мере готовности, не открывая пустые края.
-- Генерация/мешинг обслуживаются от ближних чанков к дальним: максимум два задания
-  за кадр, мягкий бюджет 2.5 мс, без синхронной перестройки целого ряда при движении.
-- Открытые однородные грани объединяются **greedy-мешингом**. Разнотипные части и
-  контакты с частично разрушенными соседями учитываются точно. После изменения
-  перестраиваются только затронутые чанки и необходимые соседи на границе.
-- Mip-уровни PNG и палитры освещения кэшируются. Уровень детализации локален даже
-  на большой объединённой плоскости; туман считается по расстоянию пикселя,
-  а не одним цветом на весь чанк.
-- Сохранены перспективные **1/z** для глубины/UV и знаковая арифметика цвета.
-  Билинейный Q8-апскейл переиспользует горизонтальные строки, сохраняя прежнее
-  округление без переполнений. Для точного 2× есть быстрый путь с весами 3:1
-  через сложения/сдвиги — результат совпадает с прежней билинейной интерполяцией.
-  Обратные грани отсекаются до проверки фрустума; полностью видимые полигоны
-  не проходят лишнее отсечение. HUD рисуется в разрешении экрана.
-- 3D начинает с бюджета примерно 2.2 Мп и адаптирует внутренний масштаб по времени
-  рендера с гистерезисом. Сетевые задержки превью не управляют качеством Android.
-- Правки переживают выгрузку чанков и перезапуск. Файл `world.edits` сохраняется
-  периодически и при сворачивании/закрытии: временный файл + атомарная замена,
-  проверка версии, seed, длины и контрольной суммы. На Android это приватная
-  папка приложения, в превью — игнорируемая Git папка `data/`.
-  Лимит — 65 536 затронутых исходных блоков, включая изменения воды;
-  положение игрока не сохраняется.
-- Формат сохранения — **EJVOX02**: восемь материалов и восемь состояний потока
-  в записи. Старые **EJVOX01 читаются автоматически**; при следующем сохранении
-  записывается новая версия. Старый APK не умеет читать новый формат, поэтому
-  после обновления не следует открывать этот мир в старой сборке.
+- Water renders **see-through**: all opaque geometry draws first, then water
+  faces blend over the framebuffer (~55% water colour), so lake beds and
+  pool walls show through. Waterfall and spreading behaviour are unchanged.
+- Natural water is a source. Breaking a floor or wall part next to water
+  **fills the freed half cell** instead of leaving a dry hole.
+- The simulation steps at 0.1 s: down first, then lateral faces with support.
+  Water never passes through blocks, never jumps diagonally and never flows
+  uphill. Lateral flow reaches up to seven steps (0.5 block each); a new
+  lateral stream starts at the foot of a waterfall. This is a **blocky
+  source/stream simulation**, not a continuous fluid or volume-conserving
+  one.
+- Covering a source/channel removes the unsupported stream; reopening the
+  channel restarts it. Changing the floor under a source updates neighbouring
+  water as well.
+- Only a queue of active cells near the player is processed, up to 512 per
+  step. The queue is bounded and de-duplicated; overflow has a gradual
+  recovery with its own small budget. Calm water performs no world scans.
+  Spreading remeshes affected chunks **without recomputing light**.
+- Sources, lateral flow and falling water are distinguished in the save.
+  After loading, a stream does not become an infinite source; simulation
+  resumes when returning to an evicted area.
 
-### Локальный сравнительный замер (07.09.2026)
+## World, saves and performance
 
-Медиана трёх чередующихся прогонов GCC `-O2`, исходный сценарий по 180 кадров
-прыжка/полёта/падения против `bedf125`. Шаг симуляции одинаковый; измеряются
-обновление мира, стриминг, рендер и HUD. JPEG, браузер и сеть не включены.
+- Generation stores source blocks in **16×16×64** chunks. Splitting into
+  eight parts **does not multiply the whole world in memory by eight**: only
+  modified source blocks are stored separately, eight materials per record.
+- The cache is limited to **11×11 chunks**: the visible 9×9 area plus one
+  prefetch ring. Seed — `GEOMETRIUM_WORLD_SEED` in
+  `src/geometrium/geometrium_internal.h`.
+- View distance is one chunk shorter than before: fog to **64 source
+  blocks**, far plane 80. The initial near area is prepared immediately; the
+  far area completes gradually. Fog retreats as chunks become ready and
+  never exposes unmeshed edges.
+- Generation/meshing are serviced nearest-first: at most two jobs per frame
+  with a soft 2.5 ms budget, no synchronous row rebuilds while moving.
+- Exposed uniform faces merge with **greedy meshing**. Mixed parts and
+  contacts with partially broken neighbours are handled exactly. After an
+  edit only affected chunks and the necessary boundary neighbours rebuild.
+- PNG mip levels and lighting palettes are cached. The detail level stays
+  local even on large merged planes; fog is per pixel distance, not one
+  colour per chunk.
+- Perspective **1/z** for depth/UV and signed colour arithmetic are kept.
+  The bilinear Q8 upscale reuses horizontal rows with the same rounding and
+  no overflow; the exact 2× fast path uses 3:1 weights via adds/shifts.
+  Back faces are culled before the frustum test; fully visible polygons skip
+  extra clipping. The HUD draws at screen resolution.
+- 3D starts with a ~2.2 MP budget and adapts the internal scale from render
+  time with hysteresis. Preview network latency never controls Android
+  quality.
+- The shorter view distance and lighter terrain generator cut real work:
+  the regression scenario now renders **121 chunks / 26 218 quads** instead
+  of 169 / 40 414, and the 180-frame host run dropped from ~6.2 ms to
+  ~5.5 ms per frame at 960×540 (11.0 → 10.3 ms at 2400×1080).
+- Edits survive chunk eviction and restarts. The `world.edits` file is saved
+  periodically and on minimize/close: temp file + atomic rename, version,
+  seed, length and checksum validation. On Android this is the app-private
+  folder; in the preview it is the Git-ignored `data/` folder. The limit is
+  65 536 affected source blocks, including water changes; the player
+  position is not saved.
+- Save format is **EJVOX02**: eight materials and eight flow states per
+  record. Old **EJVOX01 files are read automatically**; the next save writes
+  the new version. An old APK cannot read the new format, so do not open
+  this world in an old build after updating.
 
-| Выходной кадр | Было | Стало | Внутренний масштаб в обоих вариантах |
-| --- | ---: | ---: | --- |
-| 960×540 | 7.27 мс | 7.77 мс | 1× |
-| 2400×1080 | 16.97 мс | 15.17 мс | 2× |
-
-На высоком разрешении время кадра уменьшилось примерно на **11%**.
-На 960×540 сценарий со стримингом стал примерно на 0.5 мс тяжелее: новый свет
-требует первоначального запекания и дополнительных градиентных граней
-(31 250 → 40 414 квадов в 169 чанках). Это явный компромисс ради мягкого света,
-а не обещание ускорения на любом разрешении. Вода обновляется отдельным
-ограниченным бюджетом; в этом сравнительном сценарии активного потока нет.
-
-Это **замер на хосте, не обещание FPS на телефоне**. На Android нужно собрать
-новый APK и проверять производительность на устройстве.
-
-## Превью
+## Preview
 
 ```sh
 tools/preview/build.sh
-./preview --port 8090 --assets game/assets
-# Открыть http://localhost:8090; запускать из корня репозитория.
+./preview --port 8090 --assets assets
+# Open http://localhost:8090; run from the repository root.
 ```
 
-По умолчанию **960×540**, доступны `--w`, `--h`, `--port`, `--storage`.
-Сервер слушает `0.0.0.0`; браузер использует относительные URL и корректно
-работает через внешний HTTPS-прокси. Кадр вписывается в окно без растяжения.
-Передача — JPEG с максимум одним кадром наперёд, вместо многомегабайтного RGBA
-на каждый запрос; несжатый `/frame.rgba` оставлен для диагностики.
-В браузерной проверке средний JPEG был около 96 КБ против 2.07 МБ RGBA.
-События сохраняют порядок и ID пальцев, лишние движения объединяются.
+Default **960×540**; `--w`, `--h`, `--port`, `--storage` are available. The
+server listens on `0.0.0.0`; the browser uses relative URLs and works through
+an external HTTPS proxy. The frame is letterboxed, not stretched. Transport
+is JPEG with at most one frame ahead instead of multi-megabyte RGBA per
+request; uncompressed `/frame.rgba` remains for diagnostics. Events keep
+their order and finger IDs; redundant moves coalesce.
 
-## Проверки
+## Tests
 
 ```sh
 tools/tests/run.sh
 SANITIZE=1 tools/tests/run.sh
 ```
 
-38 групп проверок: исходные PNG/палитры/mip, четвертные UV, плавный перспективный
-свет и туман, глубина/clipping, побитовое совпадение апскейла/stride,
-ходьба/полёт/мультитач/FPS, точное покрытие мешей, тёмные шахты и половинные проёмы,
-мягкая листва и границы чанков, замкнутая геометрия руки и её пиксельная стабильность
-при 48 сочетаниях yaw/pitch, наполнение/растекание/перекрытие/сохранение воды,
-переполнение очереди воды, редактирование/коллизии/хеш-индексы, миграция старых сохранений, PCM-микшер и полные
-кадры на 960×540 и 2400×1080. Sanitizer включает ASan, UBSan и float-cast-overflow.
+38 check groups: original PNGs/palettes/mips, quarter UVs, smooth
+perspective light and fog, depth/clipping, bit-exact upscale/stride,
+walk/flight/multitouch/FPS, exact mesh coverage, dark mines and half
+openings, soft leaves and chunk borders, the closed two-box hand and its
+pixel stability across 48 yaw/pitch combinations, water
+fill/spread/cover/save, water queue overflow, edits/collisions/hash indices,
+old-save migration, the PCM mixer and full frames at 960×540 and 2400×1080.
+The sanitizer build enables ASan, UBSan and float-cast-overflow.
 
-Для диагностических кадров руки, шахты и воды можно задать папку:
+Diagnostic frames for the hand, the mine and the water can be written to a
+folder:
 
 ```sh
 mkdir -p build-tests/visual
 ENJOER_TEST_IMAGES=build-tests/visual tools/tests/run.sh
-# Результат — PPM-кадры в игнорируемой папке build-tests/visual.
+# Result: PPM frames in the ignored build-tests/visual folder.
 ```
 
-`tools/tests/browser.cjs` — дополнительная проверка настоящего Chromium через
-Playwright: четыре пальца, отмена/blur, FPS, ломание и установка одной части,
-содержимое сохранения, панель материалов, сочетание кнопок мыши и размеры окна.
-Запускать на **отдельном тестовом мире**, не на текущей игре пользователя:
+`tools/tests/browser.cjs` is an extra check of real Chromium through
+Playwright: four fingers, cancel/blur, FPS, breaking and placing one part,
+save contents, the material panel, mouse button combinations and window
+sizes. Run it on a **separate test world**, never on the user's current game:
 
 ```sh
 mkdir -p build-tests/half-voxel/browser-data
-# Свежая пустая папка для каждого независимого прогона.
+# A fresh empty folder for every independent run.
 ./preview --port 8091 --storage build-tests/half-voxel/browser-data
-# В другом терминале, с установленным Playwright и Chromium:
+# In another terminal, with Playwright and Chromium installed:
 NODE_PATH="$PWD/build-tests/node_modules" node tools/tests/browser.cjs
 ```
 
-Поддерживаются `TEST_URL`, `TEST_OUTPUT`, `TEST_SAVE`, `CHROMIUM_EXECUTABLE_PATH`
-и `CHROMIUM_ARGUMENTS` (JSON-массив), если браузер расположен нестандартно.
+`TEST_URL`, `TEST_OUTPUT`, `TEST_SAVE`, `CHROMIUM_EXECUTABLE_PATH` and
+`CHROMIUM_ARGUMENTS` (a JSON array) are supported for unusual browser
+locations.
 
-## Исходники и Android
+## Sources and Android
 
-`engine.h` — компактный API платформы, ассетов, непосредственного HUD и жизненного
-цикла. В `core/`, `graphics/`, `sound/`, `rbx/` находятся отдельные C-модули.
-Старые API/состояния, массивы и строки DimScript, текстовая IME/JNI-прослойка,
-очередь команд рисования, старый загрузчик спрайтов и ненужные сценные объекты
-удалены. Java-активность отвечает только за полноэкранный режим.
+`engine.h` is the compact platform/asset/immediate-HUD/lifecycle API.
+`src/core/`, `src/graphics/`, `src/sound/` and `src/geometrium/` hold the
+separate C modules. Old APIs/state, DimScript arrays and strings, the text
+IME/JNI layer, the draw command queue, the old sprite loader and unneeded
+scene objects are gone. The Java activity only handles fullscreen.
 
-Каждый `.c` — отдельная единица компиляции; освещение и вода выделены
-в `rbx_light.c` и `rbx_water.c`. `.c` не включаются через `#include`. Внешние библиотеки — в `third_party/`.
+Every `.c` is its own translation unit; lighting and water are split into
+`geometrium_light.c` and `geometrium_water.c`. `.c` files are never pulled
+in via `#include`. External libraries live in `third_party/`.
 
-Android собирается существующим CMake/NDK и `stage_assets.py`; последний переносит
-PNG, шрифт, WAV и компилирует Java-активность в `classes.dex` при наличии SDK.
-Цели — `arm64-v8a` и `armeabi-v7a`, Android 10+.
-**YAML-файлы не изменялись.** Поэтому служебное имя `libds_game.so` и соответствующее
-поле manifest сохранены для совместимости с текущей упаковкой CI; это только имя
-библиотеки, не интерпретатор. Названия существующего workflow и APK-артефакта также
-не переименовывались.
+Android builds with the existing CMake/NDK flow and `stage_assets.py`; the
+latter copies the whole `assets/` tree (PNGs, font and WAVs) and compiles the
+Java activity from `game/java` into `classes.dex` when an SDK is present. The
+CI workflow still calls `stage_assets.py game/assets staging/assets`; the
+script accepts that legacy path as an alias for `assets/`. Targets are
+`arm64-v8a` and `armeabi-v7a`, Android 10+. The service library name
+`libds_game.so` and the matching manifest field are kept for compatibility
+with the current CI packaging; it is only a library name, not an interpreter.
+The existing workflow and APK artifact names were not renamed either.

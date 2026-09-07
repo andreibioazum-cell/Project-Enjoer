@@ -1,6 +1,6 @@
-/* Хост-реализация андроидных зависимостей для превью-сборки: файловый
- * «менеджер ассетов», системный лог и заглушки звука
- * (в браузере звук не нужен). */
+/* Host implementations of the Android dependencies for the preview build:
+ * a file-based asset manager, system logging and audio stubs
+ * (the browser preview needs no sound). */
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ── лог ───────────────────────────────────────────────────────────────── */
+/* ── logging ───────────────────────────────────────────────────────────── */
 int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap) {
     fprintf(stderr, "[%s] ", tag ? tag : "?");
     vfprintf(stderr, fmt, ap);
@@ -25,7 +25,7 @@ int __android_log_print(int prio, const char *tag, const char *fmt, ...) {
     return r;
 }
 
-/* ── файловый «менеджер ассетов» ───────────────────────────────────────── */
+/* ── file-based asset manager ──────────────────────────────────────────── */
 struct AAssetManager { char root[512]; };
 struct AAsset {
     unsigned char *data;
@@ -35,7 +35,7 @@ struct AAsset {
 static struct AAssetManager host_am;
 
 AAssetManager *host_asset_manager(const char *root) {
-    snprintf(host_am.root, sizeof(host_am.root), "%s", root ? root : "game/assets");
+    snprintf(host_am.root, sizeof(host_am.root), "%s", root ? root : "assets");
     return &host_am;
 }
 
