@@ -68,7 +68,11 @@ static int texture(int block,int face) {
 RbxMaterial *rbx_material(int block,int face) { return initialized ? &materials[texture(block,face)] : NULL; }
 const Image *rbx_material_icon(int block) { return initialized ? &materials[texture(block,block==BLOCK_LOG ? 2 : 0)].image : NULL; }
 const uint32_t *rbx_material_shades(RbxMaterial *m,int face,uint32_t fog) {
-    static const float light[6]={.96f,.52f,.695f,.52f,.68f,.52f};
+    /* Вторая шестёрка — те же грани, затемнённые тенью от блоков. */
+    static const float light[SHADE_FACES]={.96f,.52f,.695f,.52f,.68f,.52f,
+        .96f*RBX_SUN_SHADOW,.52f*RBX_SUN_SHADOW,.695f*RBX_SUN_SHADOW,
+        .52f*RBX_SUN_SHADOW,.68f*RBX_SUN_SHADOW,.52f*RBX_SUN_SHADOW};
+    if (face<0 || face>=SHADE_FACES) face=0;
     if (m->fog_color!=fog) { m->fog_color=fog;m->ready=0; }
     if (!(m->ready&(1u<<face))) {
         int fr=fog&255,fg=(fog>>8)&255,fb=(fog>>16)&255;

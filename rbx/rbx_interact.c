@@ -29,7 +29,12 @@ int rbx_raycast(float x,float y,float z,float dx,float dy,float dz,float reach,R
     }
     return 0;
 }
-void rbx_select(int index) { if(index>=0 && index<HOTBAR_SLOTS) selected=index; }
+void rbx_select(int index) {
+    if(index>=0 && index<HOTBAR_SLOTS && index!=selected) {
+        selected=index;
+        rbx_hand_equip(); /* рука опускается и показывает новый материал */
+    }
+}
 int rbx_selected(void) { return selected; }
 int rbx_slot_block(int index) { return index>=0 && index<HOTBAR_SLOTS ? slots[index] : BLOCK_DIRT; }
 void rbx_actions_reset(void) {
@@ -72,6 +77,7 @@ void rbx_actions_update(float d) {
     for (int a=0;a<ACTION_COUNT;a++) {
         cooldown[a]=fmaxf(0,cooldown[a]-d);
         if (pending[a] || (held[a] && cooldown[a]<=0)) {
+            rbx_hand_swing(); /* замах даже без цели — как в блочных оригиналах */
             if (has_target && rbx_action_apply(a,&target)) pick();
             cooldown[a]=a==ACTION_BREAK ? .18f : .22f;
         }

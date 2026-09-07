@@ -1,5 +1,6 @@
 /* Регрессии ходьбы, переключаемого полёта, мультитача и чистого HUD. */
 #include "rbx/rbx_internal.h"
+#include "rbx/rbx_render_internal.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,8 +25,24 @@ int rbx3d_begin(Buffer *b,int sc,float x,float y,float z,float yaw,float pitch,f
 void rbx3d_sky(uint32_t a,uint32_t b) { (void)a; (void)b; }
 void rbx3d_end(void) {}
 int rbx3d_visible(float x,float y,float z,float hx,float hy,float hz) { (void)x;(void)y;(void)z;(void)hx;(void)hy;(void)hz;return 1; }
-void rbx3d_surface(int x,int y,int z,int u,int v,int face,int block) {
-    (void)x;(void)y;(void)z; CHECK(u>0 && v>0); CHECK(face>=0&&face<6&&block>0&&block<BLOCK_COUNT); drawn_faces++;
+void rbx3d_surface(int x,int y,int z,int u,int v,int face,int block,int shadow) {
+    (void)x;(void)y;(void)z; CHECK(u>0 && v>0); CHECK(face>=0&&face<6&&block>0&&block<BLOCK_COUNT);
+    CHECK(shadow>=0&&shadow<=1); drawn_faces++;
+}
+/* Минимальные заглушки софтверного рендера для руки от первого лица. */
+void rbx3d_polygon(const RbxVertex *w,int n,float nx,float ny,float nz,uint32_t color,RbxMaterial *material,int shadow) {
+    (void)nx;(void)ny;(void)nz;(void)color;(void)material;(void)shadow;
+    CHECK(w && n>=3 && n<=8);
+}
+int rbx3d_project(float x,float y,float z,float *sx,float *sy) {
+    CHECK(isfinite(x+y+z) && sx && sy); *sx=screen_w*.5f; *sy=screen_h*.5f; return 1;
+}
+void rbx3d_depth_clear(float x0,float y0,float x1,float y1) {
+    CHECK(isfinite(x0+y0+x1+y1));
+}
+RbxMaterial *rbx_material(int block,int face) {
+    CHECK(block>0 && block<BLOCK_COUNT && face>=0 && face<6);
+    return (RbxMaterial *)1; /* рука не разыменовывает материал в этих тестах */
 }
 void rect(float x,float y,float w,float h,uint32_t c) {
     CHECK(c==0xFFFFFFFFu); CHECK(w<=20 && h<=20); CHECK(fabsf(x-screen_w*.5f)<20 && fabsf(y-screen_h*.5f)<20); cross_rects++;

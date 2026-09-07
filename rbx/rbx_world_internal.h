@@ -4,12 +4,16 @@
 enum { BASE_CELLS=CHUNK_SIZE*CHUNK_SIZE*WORLD_HEIGHT, BLOCK_PARTIAL=255,
        CACHE_RADIUS=WORLD_RADIUS+1, CACHE_SIDE=CACHE_RADIUS*2+1, CACHE_COUNT=CACHE_SIDE*CACHE_SIDE };
 /* Origin and extents are in half-block units; textures remain in full-block units. */
-typedef struct { unsigned char x,y,z,u,v,face,block; } RbxQuad;
+typedef struct { unsigned char x,y,z,u,v,face,block,shadow; } RbxQuad;
 typedef struct {
     int cx,cz,valid,ready,dirty,min_y,max_y;
     unsigned char blocks[BASE_CELLS];
     RbxQuad *quads;
     int count,capacity;
+    /* Верхняя твёрдая поверхность каждой половинной колонки (в половинах блока):
+       питает резкие тени от солнца без трассировки на каждый кадр. */
+    short hmap[CHUNK_SIZE*2*(CHUNK_SIZE*2)];
+    int hmax,hmap_valid;
 } RbxChunk;
 typedef struct { int x,y,z,next; unsigned char cells[8]; } RbxEdit;
 int rbx_floor_div(int value,int divisor);

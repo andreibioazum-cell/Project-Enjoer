@@ -1,6 +1,7 @@
 /* Breaking/building, ray picking, independent controls, half collisions and saves. */
 #define _POSIX_C_SOURCE 200809L
 #include "rbx/rbx_world_internal.h"
+#include "rbx/rbx_render_internal.h"
 #include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -8,8 +9,14 @@
 #define CLOSE(a,b) CHECK(fabsf((a)-(b))<.001f)
 void rbx_cancel_input(void) {rbx_input_reset();rbx_key_reset();rbx_actions_reset();}
 int rbx3d_visible(float x,float y,float z,float a,float b,float c) {(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;return 0;}
-void rbx3d_surface(int x,int y,int z,int u,int v,int f,int b) {(void)x;(void)y;(void)z;(void)u;(void)v;(void)f;(void)b;}
+void rbx3d_surface(int x,int y,int z,int u,int v,int f,int b,int s) {(void)x;(void)y;(void)z;(void)u;(void)v;(void)f;(void)b;(void)s;}
 void rbx3d_segment(float x,float y,float z,float a,float b,float c,uint32_t color) {(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;(void)color;}
+/* Заглушки растеризатора: rbx_hand.c линкуется сюда из-за общих действий. */
+void rbx3d_polygon(const RbxVertex *w,int n,float nx,float ny,float nz,uint32_t color,RbxMaterial *material,int shadow)
+{(void)w;(void)n;(void)nx;(void)ny;(void)nz;(void)color;(void)material;(void)shadow;}
+int rbx3d_project(float x,float y,float z,float *sx,float *sy) {(void)x;(void)y;(void)z;if(sx)*sx=0;if(sy)*sy=0;return 1;}
+void rbx3d_depth_clear(float x0,float y0,float x1,float y1) {(void)x0;(void)y0;(void)x1;(void)y1;}
+RbxMaterial *rbx_material(int block,int face) {(void)block;(void)face;return NULL;}
 static void fresh(void) {app_set_storage(NULL);rbx_cancel_input();rbx_world_build(RBX_WORLD_SEED);rbx_player_spawn();rbx_input_layout();}
 static void aim(float yaw,float pitch) {
     float y,p;rbx_camera_angles(&y,&p);float size=fminf(screen_w,screen_h);
