@@ -337,8 +337,9 @@ The existing workflow and APK artifact names were not renamed either.
 
 The block world doubles as a small general-purpose 3D engine
 (`src/engine/`). The classic game stays the built-in default; the engine
-adds **projects**, **typed scene nodes** and **C scripting** on top of the
-same rasterizer, materials and terrain code.
+adds **projects**, **typed scene nodes**, **C scripting**, a **physics**
+layer (`StaticBody3D`/`RigidBody3D`) and an **input API** on top of the same
+rasterizer, materials and terrain code.
 
 ### Projects
 
@@ -351,9 +352,11 @@ main_scene = scenes/main.escn
 
 `tools/project/create.sh <dir>` scaffolds a fresh project (manifest, a scene
 and a spinning-cube C script). Run any project with
-`./preview --project <dir>`. Two ready projects ship in `projects/`:
-`demo` (meshes, lights, an orbiting camera and two scripts) and
-`voxel_world` (the streamed terrain seen through a scene camera).
+`./preview --project <dir>`. Ready projects ship in `projects/`:
+`demo` (meshes, lights, an orbiting camera and two scripts),
+`voxel_world` (the streamed terrain seen through a scene camera) and
+`bounce` (the Physics Playground — a `RigidBody3D` ball you push around a
+`StaticBody3D` collider with WASD/arrows and jump with Space).
 
 ### Node types
 
@@ -368,12 +371,49 @@ Scenes are trees of typed nodes, Godot-style:
 | `DirectionalLight3D` | sun-like light along the node's −Z |
 | `OmniLight3D` | point light with `range` falloff |
 | `VoxelWorld3D` | the classic streamed block terrain |
+| `StaticBody3D` | a fixed collider; `shape = box|sphere`, `size` = full edge |
+| `RigidBody3D` | a dynamic sphere collider (gravity, impulses, sleeping) |
 
 Transforms are hierarchical Euler angles (`Ry*Rx*Rz`, parent scale composed
-into children). `MeshInstance3D` takes either a flat `color = r g b`
-(a palette material built at runtime) or `material = grass|dirt|stone|sand|
-water|log|leaves` to reuse the voxel PNG tiles. Lights tint and shade every
-mesh face; with no lights at all meshes render fully lit.
+into children). `MeshInstance3D` — and a `StaticBody3D`/`RigidBody3D` that
+carries a `mesh` — take either a flat `color = r g b` (a palette material
+built at runtime) or `material = grass|dirt|stone|sand|water|log|leaves` to
+reuse the voxel PNG tiles. Lights tint and shade every mesh face; with no
+lights at all meshes render fully lit.
+
+### Physics
+
+`StaticBody3D` nodes are fixed colliders: `box` (the default, an
+axis-aligned box whose half-extent is `size`/2) or `sphere`. A `RigidBody3D`
+is a dynamic **sphere** whose radius matches its drawn sphere mesh
+(`size`/2), so the physics body and the ball you see always coincide. Every
+frame the engine applies gravity, integrates velocity, resolves penetration
+against the static bodies, and puts a still, grounded body to sleep. Bodies
+move in world space, so a `RigidBody3D` must hang from the root or a plain
+`Node` container (no moving transform parent).
+
+```c
+/* from a C script attached to the body */
+if (eng_body_is_grounded(self))
+    eng_body_apply_impulse(self, 0, 8, 0);   /* jump */
+```
+
+Rigid/rigid contact is intentionally left out so the solver stays
+predictable; rigid bodies collide with the static world, which is how
+`RigidBody3D` is normally used. See `projects/bounce` for a full example.
+
+### Input
+
+A tiny polled input state lets scene scripts react to the keyboard and the
+pointer without touching the host. The preview forwards `W A S D`, the arrow
+keys, Space and pointer press/move/release to the engine (scripts never call
+`localhost`). In a script, read it once per frame:
+
+```c
+int down = eng_input_is_pressed(ENG_KEY_SPACE);   /* ENG_KEY_* enum */
+float x, y; int pressed;
+eng_input_pointer(&x, &y, &pressed);              /* window pixels */
+```
 
 ### Scene files
 
@@ -385,10 +425,26 @@ mesh = cube
 position = 0 2 0
 yaw = 1.57
 script = "spin"
+
+[node name="Ground" type="StaticBody3D" parent="."]
+shape = box
+size = 40
+position = 0 -20 0
+
+[node name="Ball" type="RigidBody3D" parent="."]
+mesh = sphere
+color = 0.95 0.62 0.18
+mass = 1
+gravity_scale = 1
+velocity = 0 0 0
+position = 0 3 0
+script = "roller"
 ```
 
 `parent` is a path from the root (`.` = root). Values are floats, vectors,
-quoted strings or `true`/`false`; `#` starts a comment.
+quoted strings or `true`/`false`; `#` starts a comment. On body nodes the
+extra keys `shape = box|sphere`, `mass`, `gravity_scale`, `velocity`,
+`restitution` and `friction` configure the collider.
 
 ### C scripting
 
@@ -406,9 +462,15 @@ void eng_script_process(EngNode *self, float dt);/* every frame */
 `src/engine/eng_api.h` is the whole scripting surface: create/attach/free
 nodes, find them by path, get/set position, rotation and scale, switch the
 current camera, set light energy/colour/range, choose a mesh primitive,
-colour and size, plus `eng_time()`/`eng_delta()` and `eng_print()`. The host
+colour and size, plus the body API (`eng_body_set_shape`, `eng_body_set_mass`,
+`eng_body_apply_impulse`, `eng_body_set/get_linear_velocity`,
+`eng_body_is_grounded`), the input API (`eng_input_is_pressed`,
+`eng_input_pointer`) and `eng_time()`/`eng_delta()`/`eng_print()`. The host
 exports the symbols (`-rdynamic`), scripts compile with
 `cc -shared -fPIC -Isrc/engine`. Compiled `.so` files are Git-ignored.
 
 The engine currently runs in the PC preview; the Android target still ships
-the classic game only. Regression coverage lives in `tools/tests/engine.c`.
+the classic game only. Regression coverage (scene parsing, node-tree math,
+physics, input and rendering) lives in `tools/tests/engine.c`, which now
+reports **9 groups**, including a ball that falls, lands, sleeps, wakes on an
+impulse and is stopped by a static wall.

@@ -14,6 +14,6 @@ ${CC:-gcc} -O2 -std=c99 -Itools/preview/compat -Isrc -I. \
     src/platformium/platformium_particles.c src/platformium/platformium_player.c src/platformium/platformium_actors.c \
     src/platformium/platformium_render.c src/platformium/platformium_hud.c src/platformium/platformium_game.c \
     src/core/game.c \
-    src/engine/eng_api.c src/engine/eng_node.c src/engine/eng_mesh.c src/engine/eng_scene.c src/engine/eng_script.c src/engine/eng_project.c \
+    src/engine/eng_api.c src/engine/eng_node.c src/engine/eng_mesh.c src/engine/eng_physics.c src/engine/eng_input.c src/engine/eng_scene.c src/engine/eng_script.c src/engine/eng_project.c \
     tools/preview/host_compat.c tools/preview/host_main.c tools/preview/frame_jpeg.c \
     -rdynamic -lm -lpthread -ldl -o preview

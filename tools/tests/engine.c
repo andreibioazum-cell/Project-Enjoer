@@ -158,12 +158,124 @@ static void test_meshes(void) {
     CHECK(eng_flat_material(0xff112233u) == m); /* cached */
 }
 
+/* ── physics & input pillars ────────────────────────────────────────────── */
+
+/* Build a scene of one static ground + bodies under a plain container root.
+ * The ground box has half-extent `L` in every axis and its top face at y=0
+ * (box centre placed at y=-L), giving L of reach in x/z for rolling bodies. */
+static EngNode *scene_floor_root(float L) {
+    EngNode *root = eng_node_create(ENG_NODE, "Root");
+    eng_node_set_root(root);
+    EngNode *floor = eng_node_create(ENG_STATIC_BODY, "Floor");
+    eng_mesh_set_size(floor, 2 * L);            /* full side = 2*L → half = L */
+    eng_node3d_set_position(floor, 0, -L, 0);
+    eng_mesh_set(floor, "cube");
+    eng_node_attach(root, floor);
+    return root;
+}
+static EngNode *add_ball(EngNode *root, const char *name, float x, float y, float z) {
+    EngNode *b = eng_node_create(ENG_RIGID_BODY, name);
+    eng_node3d_set_position(b, x, y, z);
+    eng_mesh_set(b, "sphere");
+    eng_node_attach(root, b);
+    return b;
+}
+
+static void test_physics_fall(void) {
+    EngNode *root = scene_floor_root(6.0f);            /* ground top at y=0 */
+    EngNode *ball = add_ball(root, "Ball", 0, 5, 0);   /* radius 0.5, size 1 */
+    eng_node_update_transforms();
+    for (int i = 0; i < 400; i++) eng_physics_step(1.0f / 60.0f);
+    /* rests with its centre ~radius above the floor top (y=0) */
+    CHECK(ball->grounded);
+    CHECK(fabsf(ball->gpos.y - 0.5f) < 0.02f);
+    CHECK(fabsf(ball->vel[1]) < 0.5f);
+    /* an upward impulse makes it leave the ground, gravity brings it back */
+    eng_body_apply_impulse(ball, 0, 8, 0);
+    eng_physics_step(1.0f / 60.0f);
+    CHECK(ball->gpos.y > 0.55f);
+    eng_node_destroy(root);
+    eng_node_set_root(NULL);
+}
+
+static void test_physics_obstacle(void) {
+    EngNode *root = scene_floor_root(6.0f);
+    /* a tall wall the ball cannot cross (box: half 1, from y 0..2) */
+    EngNode *wall = eng_node_create(ENG_STATIC_BODY, "Wall");
+    eng_node3d_set_position(wall, 6, 1, 0);
+    eng_mesh_set_size(wall, 2);
+    eng_node_attach(root, wall);
+    EngNode *ball = add_ball(root, "Ball", 0, 1, 0);
+    eng_body_set_linear_velocity(ball, 6, 0, 0);   /* roll toward the wall */
+    eng_node_update_transforms();
+    for (int i = 0; i < 300; i++) eng_physics_step(1.0f / 60.0f);
+    /* blocked by the wall face at x=5 (centre 6, half 1, ball radius 0.5) */
+    CHECK(ball->gpos.x < 5.6f);
+    CHECK(ball->gpos.x > 3.0f);                    /* and actually moved */
+    eng_node_destroy(root);
+    eng_node_set_root(NULL);
+}
+
+static void test_input_api(void) {
+    eng_input_reset();
+    CHECK(!eng_input_is_pressed(ENG_KEY_SPACE));
+    eng_input_feed_key(ENG_KEY_SPACE, 1);
+    CHECK(eng_input_is_pressed(ENG_KEY_SPACE));
+    eng_input_feed_key(ENG_KEY_SPACE, 0);
+    CHECK(!eng_input_is_pressed(ENG_KEY_SPACE));
+    eng_input_feed_key(ENG_KEY_A, 1);
+    CHECK(eng_input_is_pressed(ENG_KEY_A));
+    CHECK(!eng_input_is_pressed(ENG_KEY_D));
+    float x = 0, y = 0; int down = 0;
+    CHECK(!eng_input_pointer(&x, &y, &down));
+    eng_input_feed_pointer(123, 456, 1);
+    CHECK(eng_input_pointer(&x, &y, &down));
+    CHECK(NEAR(x, 123) && NEAR(y, 456) && down == 1);
+    eng_input_reset();
+    CHECK(!eng_input_is_pressed(ENG_KEY_A));
+}
+
+static void test_body_scene_parse(void) {
+    make_dirs("build-tests/fixtures/bodyproj/scenes");
+    write_file("build-tests/fixtures/bodyproj/project.eng",
+               "name = Physics Test\nmain_scene = scenes/main.escn\n");
+    write_file("build-tests/fixtures/bodyproj/scenes/main.escn",
+               "[node name=\"Root\" type=\"Node\"]\n"
+               "[node name=\"Floor\" type=\"StaticBody3D\" parent=\".\"]\n"
+               "mesh = cube\n"
+               "shape = box\n"
+               "size = 2\n"
+               "position = 0 -1 0\n"
+               "[node name=\"Ball\" type=\"RigidBody3D\" parent=\".\"]\n"
+               "mesh = sphere\n"
+               "mass = 2\n"
+               "gravity_scale = 1\n"
+               "position = 0 5 0\n");
+
+    CHECK(eng_project_load("build-tests/fixtures/bodyproj"));
+    EngNode *ball = eng_node_find("Ball");
+    CHECK(ball && ball->type == ENG_RIGID_BODY);
+    CHECK(NEAR(ball->mass, 2.0f));
+    EngNode *floor = eng_node_find("Floor");
+    CHECK(floor && floor->type == ENG_STATIC_BODY && floor->shape == ENG_SHAPE_BOX);
+    /* falling with mass 2 still settles on the floor */
+    for (int i = 0; i < 400; i++) eng_update(1.0f / 60.0f);
+    CHECK(ball->grounded);
+    CHECK(fabsf(ball->gpos.y - 0.5f) < 0.02f);
+    eng_project_free();
+    CHECK(eng_node_root() == NULL);
+}
+
 int main(void) {
     test_types();
     test_tree();
     test_transforms();
     test_scene_parse();
     test_meshes();
-    printf("engine: %d groups ok\n", 5);
+    test_input_api();
+    test_physics_fall();
+    test_physics_obstacle();
+    test_body_scene_parse();
+    printf("engine: %d groups ok\n", 9);
     return 0;
 }

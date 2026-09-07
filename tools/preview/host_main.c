@@ -26,6 +26,7 @@ static Buffer frame;
 static uint64_t last_ns = 0;
 static volatile sig_atomic_t running=1;
 static int project_mode;
+static int eng_pointer_down; /* last known engine pointer press state */
 const unsigned char *preview_jpeg(const Buffer *frame,size_t *length);
 static void shutdown_signal(int signal_number) { (void)signal_number;running=0; }
 
@@ -138,6 +139,20 @@ static void form_get(const char *body, int blen, const char *key, char *out, int
     }
 }
 
+/* Map the browser key tokens to engine ENG_KEY_* codes; -1 = ignore. */
+static int engine_key_code(const char *k) {
+    if (!strcmp(k, "a") || !strcmp(k, "ArrowLeft")) return ENG_KEY_LEFT;
+    if (!strcmp(k, "d") || !strcmp(k, "ArrowRight")) return ENG_KEY_RIGHT;
+    if (!strcmp(k, "w") || !strcmp(k, "ArrowUp")) return ENG_KEY_UP;
+    if (!strcmp(k, "s") || !strcmp(k, "ArrowDown")) return ENG_KEY_DOWN;
+    if (!strcmp(k, "space")) return ENG_KEY_SPACE;
+    if (!strcmp(k, "A")) return ENG_KEY_A;
+    if (!strcmp(k, "D")) return ENG_KEY_D;
+    if (!strcmp(k, "W")) return ENG_KEY_W;
+    if (!strcmp(k, "S")) return ENG_KEY_S;
+    return -1;
+}
+
 static void handle_event(const char *body, int blen) {
     char t[16], k[16], xs[32], ys[32], ids[32];
     form_get(body, blen, "t", t, sizeof(t));
@@ -145,12 +160,19 @@ static void handle_event(const char *body, int blen) {
         form_get(body, blen, "x", xs, sizeof(xs));
         form_get(body, blen, "y", ys, sizeof(ys));
         int action = strcmp(t, "down") == 0 ? 0 : strcmp(t, "up") == 0 ? 1 : strcmp(t, "cancel-pointer") == 0 ? 4 : 2;
+        if (project_mode) {
+            if (action == 0) eng_pointer_down = 1;
+            else if (action != 2) eng_pointer_down = 0;
+            eng_input_feed_pointer((float)atof(xs), (float)atof(ys), eng_pointer_down);
+            return;
+        }
         form_get(body, blen, "id", ids, sizeof(ids));
         char *end;
         long id = ids[0] ? strtol(ids, &end, 10) : 0;
         if (id < 0 || id > INT_MAX || (ids[0] && *end)) return;
         game_touch((float)atof(xs), (float)atof(ys), action, (int)id);
     } else if (strcmp(t, "cancel") == 0) {
+        if (project_mode) { eng_input_reset(); return; }
         game_cancel_input();
         last_ns=0;game_save();
     } else if (strcmp(t, "key") == 0) {
@@ -158,6 +180,11 @@ static void handle_event(const char *body, int blen) {
         char down_text[8];
         form_get(body, blen, "d", down_text, sizeof(down_text));
         int down = down_text[0] ? atoi(down_text) : 1;
+        if (project_mode) {
+            int code = engine_key_code(k);
+            if (code >= 0) eng_input_feed_key(code, down);
+            return;
+        }
         game_key(k, down);
     }
 
@@ -174,18 +201,55 @@ static void handle_events(const char *body, int len) {
     }
 }
 
-/* Minimal live viewport for engine projects: no game controls. */
+/* Live viewport for engine projects: the pointer and WASD/arrows/space are
+ * forwarded to the engine input API so scene scripts can react to them. */
 static const char engine_html[] =
-    "<!doctype html><meta charset=utf-8><title>Enjoer engine</title>"
-    "<style>html,body{margin:0;height:100%;background:#101418;display:flex;"
-    "align-items:center;justify-content:center;overflow:hidden}"
-    "img{max-width:100%;max-height:100%;image-rendering:pixelated}"
-    "h1{position:fixed;top:8px;left:12px;margin:0;font:14px/1.4 monospace;"
-    "color:#9fd3ff;background:#0008;padding:4px 10px;border-radius:6px}</style>"
-    "<h1 id=t>engine</h1><img id=f src=\"/frame.jpg\">"
-    "<script>fetch('/info').then(r=>r.json()).then(j=>{if(j.project)t.textContent="
-    "'Enjoer engine — '+j.project;}).catch(()=>{});"
-    "setInterval(()=>{f.src='/frame.jpg?'+Date.now();},120);</script>";
+    "<!doctype html><html lang=en><meta charset=utf-8>"
+    "<title>Enjoer engine</title>"
+    "<style>html,body{margin:0;height:100%;background:#0f141a;overflow:hidden;"
+    "overscroll-behavior:none}canvas{position:fixed;inset:0;width:100%;height:100%;"
+    "image-rendering:pixelated;touch-action:none;cursor:crosshair}"
+    "#ui{position:fixed;top:8px;left:12px;margin:0;z-index:2;font:13px/1.5 monospace;"
+    "color:#9fd3ff;background:#000a;padding:6px 12px;border-radius:8px;max-width:70%}"
+    "#ui b{color:#fff}</style>"
+    "<canvas id=c></canvas><div id=ui><b id=t>engine</b><br>"
+    "<span style=color:#7f93a6>WASD / arrows move a ball · Space jump · "
+    "hold the pointer to push</span></div>"
+    "<script>"
+    "const cv=document.getElementById('c'),ctx=cv.getContext('2d'),ui=document.getElementById('t');"
+    "async function tick(){"
+    "try{const r=await fetch('/frame.jpg',{cache:'no-store'});if(!document.hidden&&r.ok){"
+    "const b=await r.blob(),im=await createImageBitmap(b);"
+    "ctx.imageSmoothingEnabled=false;ctx.drawImage(im,0,0,cv.width,cv.height);im.close();}}catch(e){}"
+    "requestAnimationFrame(tick);}"
+    "fetch('/info').then(r=>r.json()).then(j=>{if(j.project)ui.textContent='Enjoer engine — '+j.project;"
+    "cv.width=innerWidth;cv.height=innerHeight;tick();}).catch(()=>tick());"
+    "function post(body){fetch('/event',{method:'POST',body})}"
+    "function send(batch){post(batch.map(e=>new URLSearchParams(e).toString()).join('\\n'))}"
+    "const Q=[];let sending=false;"
+    "function ev(body){Q.push(body);if(!sending){sending=true;"
+    "post(Q.splice(0,64).map(e=>new URLSearchParams(e).toString()).join('\\n')).then(()=>{"
+    "sending=false;if(Q.length)ev()} ).catch(()=>{sending=false;Q.length=0})}}"
+    "const px=new Set(),keys={};let mx=0,my=0;"
+    "function xy(e){const r=cv.getBoundingClientRect();"
+    "return{x:Math.round((e.clientX-r.left)*cv.width/r.width),y:Math.round((e.clientY-r.top)*cv.height/r.height)}}"
+    "cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);px.add(e.pointerId);"
+    "mx=e.x;my=e.y;const p=xy(e);ev({t:'down',id:e.pointerId,x:p.x,y:p.y})});"
+    "cv.addEventListener('pointermove',e=>{if(!px.has(e.pointerId))return;const p=xy(e);"
+    "ev({t:'move',id:e.pointerId,x:p.x,y:p.y})});"
+    "function up(e){if(px.delete(e.pointerId)){const p=xy(e);ev({t:'up',id:e.pointerId,x:p.x,y:p.y})}}"
+    "cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);"
+    "const map={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',"
+    "ArrowUp:'ArrowUp',ArrowDown:'ArrowDown',Space:'space'};"
+    "window.addEventListener('keydown',e=>{const k=map[e.code];if(!k||e.ctrlKey||e.metaKey||e.altKey)return;"
+    "e.preventDefault();if(!keys[e.code]){keys[e.code]=1;ev({t:'key',k,d:1})}});"
+    "window.addEventListener('keyup',e=>{const k=map[e.code];if(k&&keys[e.code]){keys[e.code]=0;"
+    "ev({t:'key',k,d:0})}});"
+    "function release(){const ids=[...px];px.clear();keys.length=0;ev({t:'cancel'});"
+    "for(const id of ids)if(cv.hasPointerCapture(id))cv.releasePointerCapture(id)}"
+    "window.addEventListener('blur',release);"
+    "window.addEventListener('resize',()=>{cv.width=innerWidth;cv.height=innerHeight})"
+    "</script></html>";
 
 static char *read_html(void) {
     FILE *f=fopen("tools/preview/index.html","rb");if(!f)return NULL;

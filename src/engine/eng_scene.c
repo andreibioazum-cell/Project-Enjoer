@@ -95,6 +95,18 @@ static void apply_property(EngNode *n, const char *key, char *value) {
     } else if (!strcmp(key, "seed") && parse_floats(value, f, 1) == 1) {
         world_seed = (uint32_t)f[0];
         seed_set = 1;
+    } else if (!strcmp(key, "shape")) {
+        eng_body_set_shape(n, trim(value));
+    } else if (!strcmp(key, "mass") && parse_floats(value, f, 1) == 1) {
+        eng_body_set_mass(n, f[0]);
+    } else if (!strcmp(key, "gravity_scale") && parse_floats(value, f, 1) == 1) {
+        eng_body_set_gravity_scale(n, f[0]);
+    } else if (!strcmp(key, "velocity") && parse_floats(value, f, 3) == 3) {
+        eng_body_set_linear_velocity(n, f[0], f[1], f[2]);
+    } else if (!strcmp(key, "restitution") && parse_floats(value, f, 1) == 1) {
+        n->restitution = f[0] > 0 ? f[0] : 0;
+    } else if (!strcmp(key, "friction") && parse_floats(value, f, 1) == 1) {
+        n->friction = f[0] >= 0 ? f[0] : 0;
     }
 }
 
@@ -161,6 +173,8 @@ int eng_scene_load(const char *path) {
         geometrium_world_build(seed_set ? world_seed : 1234);
         world_built = 1;
     }
+    eng_physics_reset();       /* fresh scene: wake every rigid body */
+    eng_node_update_transforms();
     eng_script_ready_run();
     eng_node_update_transforms();
     return 1;
@@ -173,6 +187,7 @@ void eng_scene_free(void) {
         eng_node_destroy(r);
     }
     world_built = 0;
+    eng_input_reset();
 }
 
 /* ── per-frame update ── */
@@ -190,6 +205,15 @@ void eng_update(float dt) {
     eng_node_update_transforms(); /* scripts see fresh global transforms */
     eng_script_process_all(dt);
     eng_node_update_transforms();
+    /* physics: split large frame gaps into <= 1/30 s substeps for stability */
+    {
+        float remain = dt;
+        while (remain > 1e-5f) {
+            float step = remain < 1.0f / 30.0f ? remain : 1.0f / 30.0f;
+            eng_physics_step(step);
+            remain -= step;
+        }
+    }
     if (world_built) {
         geometrium_water_update(dt);
         EngNode *cam = first_of_type(root, ENG_CAMERA);
@@ -240,7 +264,8 @@ static int face_index(EngVec n) {
 }
 
 static void draw_mesh(EngNode *n, const DirLight *d, int nd, const OmniLight *o, int no) {
-    if (n->type != ENG_MESH || n->mesh_kind == ENG_MESH_NONE) return;
+    int visual = n->type == ENG_MESH || n->type == ENG_STATIC_BODY || n->type == ENG_RIGID_BODY;
+    if (!visual || n->mesh_kind == ENG_MESH_NONE) return;
     const EngFace *faces;
     int count = eng_mesh_faces(n->mesh_kind, &faces);
     const EngBasis *b = eng_node_basis(n);

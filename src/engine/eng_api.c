@@ -8,6 +8,8 @@ int eng_init(AAssetManager *assets) {
         app_fail("Engine: could not load materials");
         return 0;
     }
+    eng_physics_init();
+    eng_input_reset();
     return 1;
 }
 
