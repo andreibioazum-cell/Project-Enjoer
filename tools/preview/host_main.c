@@ -151,14 +151,14 @@ static void handle_event(const char *body, int blen) {
         if (id < 0 || id > INT_MAX || (ids[0] && *end)) return;
         game_touch((float)atof(xs), (float)atof(ys), action, (int)id);
     } else if (strcmp(t, "cancel") == 0) {
-        geometrium_cancel_input();
+        game_cancel_input();
         last_ns=0;game_save();
     } else if (strcmp(t, "key") == 0) {
         form_get(body, blen, "k", k, sizeof(k));
         char down_text[8];
         form_get(body, blen, "d", down_text, sizeof(down_text));
         int down = down_text[0] ? atoi(down_text) : 1;
-        geometrium_key(k, down);
+        game_key(k, down);
     }
 
 }

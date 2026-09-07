@@ -6,7 +6,6 @@
 #endif
 #include <android_native_app_glue.h>
 #include "engine.h"
-#include "geometrium/geometrium.h"
 #include <stdio.h>
 #include <time.h>
 #include <android/input.h>
@@ -58,7 +57,7 @@ static void handle_cmd(struct android_app *app, int32_t command) {
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
         case APP_CMD_CONFIG_CHANGED:
-            geometrium_cancel_input();
+            game_cancel_input();
             /* Recreate the surface after a resize. */
             if (app->window) {
                 ANativeWindow_setBuffersGeometry(app->window, 0, 0, WINDOW_FORMAT_RGBA_8888);
@@ -68,7 +67,7 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             }
             break;
         case APP_CMD_TERM_WINDOW:
-            geometrium_cancel_input();
+            game_cancel_input();
             game_save();
             init_done = 0;
             app_active = 0;
@@ -78,7 +77,7 @@ static void handle_cmd(struct android_app *app, int32_t command) {
         case APP_CMD_GAINED_FOCUS: app_focused=1;prev_frame_ns=0;audio_resume();break;
         case APP_CMD_LOST_FOCUS:
             app_focused=0;
-            geometrium_cancel_input();
+            game_cancel_input();
             game_save();
             prev_frame_ns = 0;
             audio_pause();
@@ -99,7 +98,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         count = AMotionEvent_getPointerCount(event);
         raw = AMotionEvent_getAction(event);
         action = raw & AMOTION_EVENT_ACTION_MASK;
-        if (action == AMOTION_EVENT_ACTION_CANCEL) { geometrium_cancel_input(); return 1; }
+        if (action == AMOTION_EVENT_ACTION_CANCEL) { game_cancel_input(); return 1; }
         if (count == 0) return 0;
         if (action == AMOTION_EVENT_ACTION_POINTER_DOWN) action = AMOTION_EVENT_ACTION_DOWN;
         else if (action == AMOTION_EVENT_ACTION_POINTER_UP) action = AMOTION_EVENT_ACTION_UP;
@@ -136,6 +135,8 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             case AKEYCODE_5: game_key = "5"; break;
             case AKEYCODE_6: game_key = "6"; break;
             case AKEYCODE_F: game_key = "f"; break;
+            case AKEYCODE_M: game_key = "m"; break;
+            case AKEYCODE_ESCAPE: game_key = "Escape"; break;
             case AKEYCODE_DPAD_LEFT: game_key = "ArrowLeft"; break;
             case AKEYCODE_DPAD_RIGHT: game_key = "ArrowRight"; break;
             case AKEYCODE_DPAD_UP: game_key = "ArrowUp"; break;
@@ -146,7 +147,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             default: break;
         }
         if (game_key && app_active && (action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP))
-            geometrium_key(game_key, action == AKEY_EVENT_ACTION_DOWN);
+            game_key(game_key, action == AKEY_EVENT_ACTION_DOWN);
         return 1;
     }
     return 0;
@@ -159,7 +160,7 @@ void android_main(struct android_app *app) {
     app->onInputEvent = handle_input;
     audio_set_java_vm((void *)app->activity->vm);
     app_set_storage(app->activity->internalDataPath);
-    app_log("Enjoer: Android, pure-C 3D playset");
+    app_log("Enjoer: Android, pure-C playsets (Geometrium + Platformium)");
     for (;;) {
         struct android_poll_source *source = NULL;
         int ident;

@@ -92,7 +92,7 @@ static void run(int w,int h) {
     screen_w=w;screen_h=h;
     Buffer b={malloc((size_t)(w+8)*h*4),w,h,w+8};assert(b.pixels);
     for(int y=0;y<h;y++)for(int x=w;x<b.stride;x++)b.pixels[y*b.stride+x]=0x12345678;
-    AAssetManager *am=host_asset_manager("assets");assert(gfx_init(am));game_init(am);
+    AAssetManager *am=host_asset_manager("assets");assert(gfx_init(am));geometrium_game_init(am);
     double start=now();int max_scale=1;
     for(int i=0;i<180;i++) {
         if(i==20)geometrium_key("space",1);
@@ -102,16 +102,16 @@ static void run(int w,int h) {
         if(i==95) {geometrium_key("space",0);geometrium_key("w",0);}
         if(i==110)geometrium_camera_look(.12f*h,-.10f*h);
         if(i==145)geometrium_player_toggle_flight();
-        dt=1.0/60;game_update();
-        assert(gfx_begin_frame(&b));game_draw(&b);gfx_end_frame();
+        dt=1.0/60;geometrium_game_update();
+        assert(gfx_begin_frame(&b));geometrium_game_draw(&b);gfx_end_frame();
         int scale=geometrium_render_scale(w,h);if(scale>max_scale)max_scale=scale;assert(!app_failed());
         for(int y=0;y<h;y++)for(int x=w;x<b.stride;x++)assert(b.pixels[y*b.stride+x]==0x12345678);
     }
     int chunks,faces;geometrium_world_stats(&chunks,&faces);
     printf("PASS %dx%d: 180 complete frames, jump/flight/fall/UV/HUD/stride, %d chunks, %d exposed quads, scale %d (max %d), %.2f ms/frame\n",w,h,chunks,faces,geometrium_render_scale(w,h),max_scale,(now()-start)*1000/180);
-    assert(geometrium_world_set(17,25,16,BLOCK_AIR));game_update();
-    assert(gfx_begin_frame(&b));game_draw(&b);gfx_end_frame();assert(!app_failed());
-    assert(geometrium_world_set(17,25,16,BLOCK_GRASS));game_update();
+    assert(geometrium_world_set(17,25,16,BLOCK_AIR));geometrium_game_update();
+    assert(gfx_begin_frame(&b));geometrium_game_draw(&b);gfx_end_frame();assert(!app_failed());
+    assert(geometrium_world_set(17,25,16,BLOCK_GRASS));geometrium_game_update();
     geometrium_edits_reset(GEOMETRIUM_WORLD_SEED); /* isolated test has no disk storage */
     if(w==960) {test_viewmodel(&b);test_cave_frame(&b);test_water_frames(&b);}
     gfx_shutdown();free(b.pixels);
