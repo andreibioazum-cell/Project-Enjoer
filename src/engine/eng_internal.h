@@ -7,8 +7,14 @@
 
 enum {
     ENG_NODE, ENG_NODE3D, ENG_MESH, ENG_CAMERA,
-    ENG_DIR_LIGHT, ENG_OMNI_LIGHT, ENG_VOXEL_WORLD
+    ENG_DIR_LIGHT, ENG_OMNI_LIGHT, ENG_VOXEL_WORLD,
+    ENG_STATIC_BODY, ENG_RIGID_BODY
 };
+
+/* Body shapes for StaticBody3D / RigidBody3D (see eng_node_shape_name). */
+enum { ENG_SHAPE_NONE, ENG_SHAPE_BOX, ENG_SHAPE_SPHERE };
+/* A box collider half-extent for the uniform `size` value. */
+#define ENG_SIZE_HALF 0.5f
 
 typedef struct { float m[9]; } EngBasis;   /* row-major 3x3, v' = M*v */
 typedef struct { float x, y, z; } EngVec;
@@ -30,6 +36,13 @@ struct EngNode {
     float fov; int current;
     /* lights */
     float energy, range; float lcol[3];
+    /* physics: StaticBody3D / RigidBody3D */
+    int shape;                     /* ENG_SHAPE_* */
+    float mass, gravity_scale, restitution, friction;
+    float vel[3];                  /* RigidBody3D world-space velocity */
+    int grounded;                  /* RigidBody3D resting on a support */
+    float sleep_t;                 /* frames of near-zero motion */
+    int asleep;                    /* RigidBody3D fully resting (not stepped) */
     /* scripting */
     struct EngScript *script;
 };
@@ -54,6 +67,8 @@ void eng_node_update_transforms(void);
 const EngBasis *eng_node_basis(const EngNode *node);
 int eng_type_from_name(const char *type);
 const char *eng_type_name(int type);
+int eng_shape_from_name(const char *shape);
+const char *eng_shape_name(int shape);
 void eng_basis_euler(EngBasis *out, float yaw, float pitch, float roll);
 
 /* ── mesh.c ── */
@@ -73,6 +88,22 @@ EngScript *eng_script_load(const char *name, const char *project_dir);
 void eng_script_ready_run(void);
 void eng_script_process_all(float dt);
 void eng_script_discard_all(void);
+
+/* ── physics.c ── */
+/* Fixed-timestep accumulator driven from eng_update(). */
+void eng_physics_init(void);
+void eng_physics_reset(void);            /* scene load: wake every body */
+void eng_physics_step(float dt);         /* integrate + resolve once at dt */
+int eng_body_dynamic(const EngNode *node);
+float eng_body_world_size(const EngNode *node);
+void eng_body_apply_impulse(EngNode *body, float x, float y, float z);
+void eng_body_set_linear_velocity(EngNode *body, float x, float y, float z);
+void eng_body_sync_scene(void);          /* push body transforms to the tree */
+
+/* ── input.c ── */
+void eng_input_reset(void);
+void eng_input_feed_key(int key, int down);
+void eng_input_feed_pointer(float x, float y, int down);
 
 /* ── project.c ── */
 int eng_project_load(const char *directory);

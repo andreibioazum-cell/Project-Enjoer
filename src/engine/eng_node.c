@@ -15,6 +15,8 @@ int eng_type_from_name(const char *t) {
     if (!strcmp(t, "DirectionalLight3D")) return ENG_DIR_LIGHT;
     if (!strcmp(t, "OmniLight3D")) return ENG_OMNI_LIGHT;
     if (!strcmp(t, "VoxelWorld3D")) return ENG_VOXEL_WORLD;
+    if (!strcmp(t, "StaticBody3D")) return ENG_STATIC_BODY;
+    if (!strcmp(t, "RigidBody3D")) return ENG_RIGID_BODY;
     return -1;
 }
 const char *eng_type_name(int type) {
@@ -25,7 +27,22 @@ const char *eng_type_name(int type) {
         case ENG_DIR_LIGHT: return "DirectionalLight3D";
         case ENG_OMNI_LIGHT: return "OmniLight3D";
         case ENG_VOXEL_WORLD: return "VoxelWorld3D";
+        case ENG_STATIC_BODY: return "StaticBody3D";
+        case ENG_RIGID_BODY: return "RigidBody3D";
         default: return "Node";
+    }
+}
+int eng_shape_from_name(const char *s) {
+    if (!s) return ENG_SHAPE_NONE;
+    if (!strcmp(s, "box")) return ENG_SHAPE_BOX;
+    if (!strcmp(s, "sphere")) return ENG_SHAPE_SPHERE;
+    return ENG_SHAPE_NONE;
+}
+const char *eng_shape_name(int shape) {
+    switch (shape) {
+        case ENG_SHAPE_BOX: return "box";
+        case ENG_SHAPE_SPHERE: return "sphere";
+        default: return "none";
     }
 }
 EngNode *eng_node_create(int type, const char *name) {
@@ -40,6 +57,14 @@ EngNode *eng_node_create(int type, const char *name) {
     n->lcol[0] = n->lcol[1] = n->lcol[2] = 1;
     n->size = 1;
     n->dirty = 1;
+    n->mass = 1;
+    n->gravity_scale = 1;
+    n->restitution = 0.1f;
+    n->friction = 0.6f;
+    /* sensible default shapes: a static body is a solid box, a rigid body is
+     * a dynamic sphere whose radius matches its drawn sphere mesh. */
+    n->shape = (type == ENG_STATIC_BODY) ? ENG_SHAPE_BOX
+             : (type == ENG_RIGID_BODY) ? ENG_SHAPE_SPHERE : ENG_SHAPE_NONE;
     return n;
 }
 void eng_node_attach(EngNode *parent, EngNode *child) {
@@ -181,8 +206,11 @@ void eng_light_set_color(EngNode *n, float r, float g, float b) {
     n->lcol[2] = b;
 }
 void eng_light_set_range(EngNode *n, float r) { if (n && n->type == ENG_OMNI_LIGHT && r > 0) n->range = r; }
+static int can_draw_mesh(const EngNode *n) {
+    return n && (n->type == ENG_MESH || n->type == ENG_STATIC_BODY || n->type == ENG_RIGID_BODY);
+}
 void eng_mesh_set(EngNode *n, const char *mesh) {
-    if (!n || n->type != ENG_MESH || !mesh) return;
+    if (!can_draw_mesh(n) || !mesh) return;
     if (!strcmp(mesh, "cube")) n->mesh_kind = ENG_MESH_CUBE;
     else if (!strcmp(mesh, "plane")) n->mesh_kind = ENG_MESH_PLANE;
     else if (!strcmp(mesh, "sphere")) n->mesh_kind = ENG_MESH_SPHERE;

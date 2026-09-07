@@ -14,6 +14,12 @@
 
 typedef struct EngNode EngNode;
 
+/* ── key codes for eng_input_is_pressed ─────────────────────────────────── */
+enum {
+    ENG_KEY_LEFT = 1000, ENG_KEY_RIGHT, ENG_KEY_UP, ENG_KEY_DOWN,
+    ENG_KEY_A, ENG_KEY_D, ENG_KEY_W, ENG_KEY_S, ENG_KEY_SPACE
+};
+
 /* ── logging ────────────────────────────────────────────────────────────── */
 void eng_print(const char *message);
 
@@ -38,13 +44,34 @@ void eng_node3d_set_scale(EngNode *node, float scale);
 /* ── Camera3D ───────────────────────────────────────────────────────────── */
 void eng_camera_make_current(EngNode *camera);
 
+/* ── input (polled every frame from a script) ───────────────────────────── */
+/* key: one of the ENG_KEY_* codes above. Returns 1 while held. */
+int eng_input_is_pressed(int key);
+/* pointer: the last pointer position in window pixels and whether it is
+ * currently pressed. Returns 0 until a pointer has been seen. */
+int eng_input_pointer(float *x, float *y, int *down);
+
+/* ── StaticBody3D / RigidBody3D ─────────────────────────────────────────── */
+/* Set which collision shape a body uses: "box" or "sphere" (default box for
+ * StaticBody3D, sphere for RigidBody3D). Only meaningful on the two body
+ * node types; others are ignored. */
+void eng_body_set_shape(EngNode *node, const char *shape);
+void eng_body_set_mass(EngNode *body, float mass);
+void eng_body_set_gravity_scale(EngNode *body, float scale);
+/* Impulse = instantaneous change of momentum; velocity += impulse / mass. */
+void eng_body_apply_impulse(EngNode *body, float x, float y, float z);
+void eng_body_set_linear_velocity(EngNode *body, float x, float y, float z);
+void eng_body_get_linear_velocity(EngNode *body, float *x, float *y, float *z);
+int eng_body_is_grounded(EngNode *body);
+
 /* ── lights ─────────────────────────────────────────────────────────────── */
 void eng_light_set_energy(EngNode *light, float energy);
 void eng_light_set_color(EngNode *light, float r, float g, float b);
 void eng_light_set_range(EngNode *omni, float range); /* OmniLight3D only */
 
 /* ── MeshInstance3D ─────────────────────────────────────────────────────── */
-/* mesh: "cube", "plane", "sphere", "cylinder" */
+/* mesh: "cube", "plane", "sphere", "cylinder". Also applies to
+ * StaticBody3D / RigidBody3D so a body can carry a visible mesh. */
 void eng_mesh_set(EngNode *node, const char *mesh);
 void eng_mesh_set_color(EngNode *node, float r, float g, float b);
 void eng_mesh_set_size(EngNode *node, float size);

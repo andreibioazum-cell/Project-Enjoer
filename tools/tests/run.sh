@@ -39,7 +39,7 @@ $CC $FLAGS -DPREVIEW_EXTERNAL_AUDIO $CORE src/sound/sound.c tools/tests/audio.c 
 # Engine layer: node tree, scene files, C scripting via dlopen, generalized rendering.
 $CC $FLAGS -rdynamic $CORE $WORLD src/geometrium/geometrium_perf.c \
     src/graphics/image.c src/geometrium/geometrium_render.c src/geometrium/geometrium_shapes.c src/geometrium/geometrium_material.c \
-    src/engine/eng_api.c src/engine/eng_node.c src/engine/eng_mesh.c src/engine/eng_scene.c src/engine/eng_script.c src/engine/eng_project.c \
+    src/engine/eng_api.c src/engine/eng_node.c src/engine/eng_mesh.c src/engine/eng_physics.c src/engine/eng_input.c src/engine/eng_scene.c src/engine/eng_script.c src/engine/eng_project.c \
     tools/tests/engine.c -lm -ldl -o "$DIR/engine"
 "$DIR/engine"
 $CC $FLAGS $CORE $WORLD $ACTORS src/geometrium/geometrium_perf.c src/geometrium/geometrium_game.c src/geometrium/geometrium_scene.c src/geometrium/geometrium_hud.c src/geometrium/geometrium_hand.c \
