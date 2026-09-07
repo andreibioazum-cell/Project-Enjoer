@@ -6,7 +6,6 @@
 #endif
 #include <android_native_app_glue.h>
 #include "engine.h"
-#include "geometrium/geometrium.h"
 #include <stdio.h>
 #include <time.h>
 #include <android/input.h>
@@ -58,7 +57,7 @@ static void handle_cmd(struct android_app *app, int32_t command) {
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
         case APP_CMD_CONFIG_CHANGED:
-            geometrium_cancel_input();
+            game_cancel_input();
             /* Recreate the surface after a resize. */
             if (app->window) {
                 ANativeWindow_setBuffersGeometry(app->window, 0, 0, WINDOW_FORMAT_RGBA_8888);
@@ -68,7 +67,7 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             }
             break;
         case APP_CMD_TERM_WINDOW:
-            geometrium_cancel_input();
+            game_cancel_input();
             game_save();
             init_done = 0;
             app_active = 0;
@@ -78,7 +77,7 @@ static void handle_cmd(struct android_app *app, int32_t command) {
         case APP_CMD_GAINED_FOCUS: app_focused=1;prev_frame_ns=0;audio_resume();break;
         case APP_CMD_LOST_FOCUS:
             app_focused=0;
-            geometrium_cancel_input();
+            game_cancel_input();
             game_save();
             prev_frame_ns = 0;
             audio_pause();
@@ -99,7 +98,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         count = AMotionEvent_getPointerCount(event);
         raw = AMotionEvent_getAction(event);
         action = raw & AMOTION_EVENT_ACTION_MASK;
-        if (action == AMOTION_EVENT_ACTION_CANCEL) { geometrium_cancel_input(); return 1; }
+        if (action == AMOTION_EVENT_ACTION_CANCEL) { game_cancel_input(); return 1; }
         if (count == 0) return 0;
         if (action == AMOTION_EVENT_ACTION_POINTER_DOWN) action = AMOTION_EVENT_ACTION_DOWN;
         else if (action == AMOTION_EVENT_ACTION_POINTER_UP) action = AMOTION_EVENT_ACTION_UP;
@@ -121,32 +120,36 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         int32_t action = AKeyEvent_getAction(event);
         int32_t key = AKeyEvent_getKeyCode(event);
         if (key == AKEYCODE_BACK) return 0;
-        const char *game_key = NULL;
+        /* Note: the local must not be named game_key (shadows the router
+         * function of the same name declared in engine.h). */
+        const char *mapped = NULL;
         switch (key) {
-            case AKEYCODE_W: game_key = "w"; break;
-            case AKEYCODE_A: game_key = "a"; break;
-            case AKEYCODE_S: game_key = "s"; break;
-            case AKEYCODE_D: game_key = "d"; break;
-            case AKEYCODE_E: game_key = "break"; break;
-            case AKEYCODE_R: game_key = "place"; break;
-            case AKEYCODE_1: game_key = "1"; break;
-            case AKEYCODE_2: game_key = "2"; break;
-            case AKEYCODE_3: game_key = "3"; break;
-            case AKEYCODE_4: game_key = "4"; break;
-            case AKEYCODE_5: game_key = "5"; break;
-            case AKEYCODE_6: game_key = "6"; break;
-            case AKEYCODE_F: game_key = "f"; break;
-            case AKEYCODE_DPAD_LEFT: game_key = "ArrowLeft"; break;
-            case AKEYCODE_DPAD_RIGHT: game_key = "ArrowRight"; break;
-            case AKEYCODE_DPAD_UP: game_key = "ArrowUp"; break;
-            case AKEYCODE_DPAD_DOWN: game_key = "ArrowDown"; break;
-            case AKEYCODE_SPACE: game_key = "space"; break;
+            case AKEYCODE_W: mapped = "w"; break;
+            case AKEYCODE_A: mapped = "a"; break;
+            case AKEYCODE_S: mapped = "s"; break;
+            case AKEYCODE_D: mapped = "d"; break;
+            case AKEYCODE_E: mapped = "break"; break;
+            case AKEYCODE_R: mapped = "place"; break;
+            case AKEYCODE_1: mapped = "1"; break;
+            case AKEYCODE_2: mapped = "2"; break;
+            case AKEYCODE_3: mapped = "3"; break;
+            case AKEYCODE_4: mapped = "4"; break;
+            case AKEYCODE_5: mapped = "5"; break;
+            case AKEYCODE_6: mapped = "6"; break;
+            case AKEYCODE_F: mapped = "f"; break;
+            case AKEYCODE_M: mapped = "m"; break;
+            case AKEYCODE_ESCAPE: mapped = "Escape"; break;
+            case AKEYCODE_DPAD_LEFT: mapped = "ArrowLeft"; break;
+            case AKEYCODE_DPAD_RIGHT: mapped = "ArrowRight"; break;
+            case AKEYCODE_DPAD_UP: mapped = "ArrowUp"; break;
+            case AKEYCODE_DPAD_DOWN: mapped = "ArrowDown"; break;
+            case AKEYCODE_SPACE: mapped = "space"; break;
             case AKEYCODE_SHIFT_LEFT:
-            case AKEYCODE_SHIFT_RIGHT: game_key = "Shift"; break;
+            case AKEYCODE_SHIFT_RIGHT: mapped = "Shift"; break;
             default: break;
         }
-        if (game_key && app_active && (action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP))
-            geometrium_key(game_key, action == AKEY_EVENT_ACTION_DOWN);
+        if (mapped && app_active && (action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP))
+            game_key(mapped, action == AKEY_EVENT_ACTION_DOWN);
         return 1;
     }
     return 0;
@@ -159,7 +162,7 @@ void android_main(struct android_app *app) {
     app->onInputEvent = handle_input;
     audio_set_java_vm((void *)app->activity->vm);
     app_set_storage(app->activity->internalDataPath);
-    app_log("Enjoer: Android, pure-C 3D playset");
+    app_log("Enjoer: Android, pure-C playsets (Geometrium + Platformium)");
     for (;;) {
         struct android_poll_source *source = NULL;
         int ident;

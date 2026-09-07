@@ -56,6 +56,14 @@ void game_init(AAssetManager *assets);
 void game_update(void);
 void game_draw(Buffer *buffer);
 void game_touch(float x, float y, int action, int pointer_id);
+void game_key(const char *name, int down);
+void game_cancel_input(void);
 void game_reset(void);
 void game_save(void);
+/* Launcher menu state and geometry (app router, src/core/game.c). */
+int game_menu_open(void);
+int game_current_mode(void);          /* 0 Geometrium, 1 Platformium */
+void game_menu_button_geom(float *x, float *y, float *r);
+void game_menu_card_geom(int index, float *x, float *y, float *w, float *h);
+void game_menu_chip_geom(int index, float *x, float *y, float *w, float *h);
 #endif

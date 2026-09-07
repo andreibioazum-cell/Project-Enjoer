@@ -1,24 +1,37 @@
-# Enjoer — block world
+# Enjoer — two playsets, one C99 engine
 
-A landscape first-person game in **C99**: procedural terrain with generated
-caves, trees, transparent water, walking, jumping, toggleable flight and
-half-cube building. The 3D world module is called **Geometrium**
-(`src/geometrium/`). Everything in the game — HUD, labels, error screens —
-is English.
+A landscape first-person block game plus a full 2D platformer, both in
+**C99** on the same 2D/asset/audio core. The launcher menu (top-left button,
+or `Esc` / `M`) switches playsets:
+
+- **Geometrium** (`src/geometrium/`) — procedural terrain with generated
+  caves, trees, transparent water, walking, jumping, toggleable flight and
+  half-cube building.
+- **Platformium** (`src/platformium/`) — a side-scrolling platformer
+  toolkit: tile levels, coyote time and jump buffering, springs, one-way
+  platforms, moving lifts, walkers and flyers, spikes, lava, coins,
+  checkpoints, a goal flag, particles and a lookahead camera. Four worlds
+  ship in the APK (three built in, one as a text level asset), and more
+  platformers can be added as plain-text levels without recompiling
+  (see `assets/levels/README.md`).
+
+Everything in the game — HUD, labels, error screens — is English.
 
 ## Repository layout
 
 ```
-assets/        runtime assets: textures/*.png, fonts/*.ttf, sounds/*.wav
+assets/        runtime assets: textures/*.png, fonts/*.ttf, sounds/*.wav,
+               levels/*.txt (extra Platformium worlds)
 game/          Android packaging: AndroidManifest.xml and the Java activity
 projects/      engine projects: demo scene and the voxel world as a project
 src/           all C sources
   main.c       Android entry point (native activity)
   engine.h     compact platform/asset/HUD/lifecycle API
-  core/        app state, error handling, logging, asset reads
+  core/        app state, error handling, logging, asset reads, playset router
   graphics/    2D renderer: primitives, textures, text (+ ttf/)
   sound/       audio: PCM16 mixer and AudioTrack output
   geometrium/  the 3D playset: render, terrain, water, player, input, HUD
+  platformium/ the 2D platformer: levels, physics, actors, camera, HUD
   engine/      engine layer: node tree, scenes, projects, C scripting
 third_party/   stb_image / stb_image_write
 tools/         preview server, regression tests, offline art tool, scaffolds
@@ -66,6 +79,34 @@ counter uses the real frame interval, not the clamped physics step.
 
 Right mouse works while dragging with the left one. Losing focus and window
 resizes reset all holds.
+
+### Platformium
+
+- Touch: left / right pads on the left, **Jump** on the right; every finger
+  owns one control. Keyboard: `A`/`D` or arrows run, `Space`/`W`/up jumps
+  (hold for a higher arc), `R` restarts the level.
+- The round button in the top-left corner (or `Esc` / `M`) opens the
+  launcher. In the launcher, tap the **Platformium** card to keep playing,
+  or a numbered level chip to start a specific world; locked chips unlock
+  by finishing the previous world. Progress (unlocked worlds and best
+  scores) persists between sessions.
+- Mechanics: run, jump with coyote time and jump buffering, variable jump
+  height, springs (`S`), one-way platforms (`=`), moving lifts (`M`/`V`),
+  stompable walkers, flying enemies, spikes, lava, coins, checkpoints and
+  the goal flag. Falling off the bottom of a sky level ends the run.
+
+## Platformium levels (make your own platformer)
+
+Four worlds ship: *Green Hills*, *Cave Depths*, *Sky Ruins* (compiled in)
+and *River Run* (the text file `assets/levels/bonus.txt`, staged into the
+APK like every other asset). The engine also tries
+`assets/levels/extra1.txt` … `extra8.txt` at startup, so additional
+platformers ship by dropping text files in `assets/levels/` — no C changes.
+The map format, tile legend and design guidelines are documented in
+`assets/levels/README.md`. Levels need a player start `P` and a goal `G`;
+gaps of up to three tiles and one-tile steps keep them clearable with
+touch controls. `tools/tests/platformer.c` proves every shipped world is
+beatable by simulating a simple run-and-jump bot to the flag.
 
 ## Eight parts and PNGs
 
@@ -238,7 +279,11 @@ openings, soft leaves and chunk borders, the closed two-box hand and its
 pixel stability across 48 yaw/pitch combinations, water
 fill/spread/cover/save, water queue overflow, edits/collisions/hash indices,
 old-save migration, the PCM mixer and full frames at 960×540 and 2400×1080.
-The sanitizer build enables ASan, UBSan and float-cast-overflow.
+The `platformer` binary adds the Platformium suite: the launcher router,
+a run-and-jump bot that finishes every shipped world, and mechanics checks
+(one-way platforms, springs, hazards, coins, checkpoints, stomping, lifts,
+progress persistence). The sanitizer build enables ASan, UBSan and
+float-cast-overflow.
 
 Diagnostic frames for the hand, the mine and the water can be written to a
 folder:

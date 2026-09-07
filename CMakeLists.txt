@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.16...3.31)
 project(Enjoer C)
 set(CMAKE_C_STANDARD 99)
 
@@ -52,10 +52,24 @@ add_library(enjoer SHARED
     src/geometrium/geometrium_hud.c
     src/geometrium/geometrium_hand.c
     src/geometrium/geometrium_game.c
+    src/core/game.c
+    src/platformium/platformium_level.c
+    src/platformium/platformium_input.c
+    src/platformium/platformium_camera.c
+    src/platformium/platformium_particles.c
+    src/platformium/platformium_player.c
+    src/platformium/platformium_actors.c
+    src/platformium/platformium_render.c
+    src/platformium/platformium_hud.c
+    src/platformium/platformium_game.c
     ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
 # Filename contract of the existing, unchanged APK workflow and manifest.
 set_target_properties(enjoer PROPERTIES OUTPUT_NAME ds_game)
+# The project root is on the include path so translation units can reach
+# vendored single-file libraries as "third_party/..." (stb_image and friends);
+# the PC preview mirrors this with `-I.` in tools/preview/build.sh.
 target_include_directories(enjoer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
     src
     src/geometrium
     ${ANDROID_NDK}/sources/android/native_app_glue)

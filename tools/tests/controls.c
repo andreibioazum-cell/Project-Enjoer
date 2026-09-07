@@ -194,13 +194,13 @@ static void test_clean_hud_and_camera(void) {
         float x,y,r; geometrium_input_joy_geom(&x,&y,&r); CHECK(x-r>0&&x+r<screen_w*.5f&&y+r<screen_h);
         float w,h; geometrium_input_flight_geom(&x,&y,&w,&h); CHECK(x>screen_w*.5f&&y>0&&x+w<screen_w&&y+h<screen_h*.5f);
     }
-    geometrium_key("w",1); game_reset(); CHECK(!geometrium_player_flying());
-    dt=-1; p=pos(); game_update(); CLOSE(pos_dist(p,pos()),0);
+    geometrium_key("w",1); geometrium_game_reset(); CHECK(!geometrium_player_flying());
+    dt=-1; p=pos(); geometrium_game_update(); CLOSE(pos_dist(p,pos()),0);
     puts("PASS clean HUD: transparent black joystick, thick outer ring, white crosshair, conditional jump and eye camera");
 }
 static void test_fps_and_quality(void) {
     geometrium_perf_reset();for(int i=0;i<60;i++)geometrium_perf_frame(1.0/60);CLOSE(geometrium_fps(),60);
-    geometrium_perf_reset();dt=.1;for(int i=0;i<10;i++)game_update();CLOSE(geometrium_fps(),10); /* NOT clamped physics 20 FPS */
+    geometrium_perf_reset();dt=.1;for(int i=0;i<10;i++)geometrium_game_update();CLOSE(geometrium_fps(),10); /* NOT clamped physics 20 FPS */
     geometrium_perf_frame(NAN);geometrium_perf_frame(-1);CLOSE(geometrium_fps(),10);
     geometrium_perf_reset();CHECK(geometrium_render_scale(960,540)==1);
     for(int i=0;i<30;i++)geometrium_render_time(.03);
@@ -211,7 +211,7 @@ static void test_fps_and_quality(void) {
     puts("PASS genuine wall-clock FPS, invalid interval guard, adaptive resolution with hysteresis");
 }
 int main(void) {
-    screen_w=960;screen_h=540;dt=1.0/60;game_init(NULL);
+    screen_w=960;screen_h=540;dt=1.0/60;geometrium_game_init(NULL);
     test_walk_jump(); test_toggle_and_flight(); test_touch_lifetimes(); test_voxel_collisions(); test_clean_hud_and_camera();test_fps_and_quality();
     return 0;
 }
