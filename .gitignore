@@ -1,6 +1,8 @@
-# локальные данные превью и сборки — не в git
+# local preview and build data — not in git
 /data/
 *.dat
 /build*/
 /preview
 /staging/
+# compiled engine scripts (built on demand from the .c sources)
+projects/*/scripts/*.so

@@ -1,0 +1,3 @@
+# Enjoer engine project manifest.
+name = Demo Scene
+main_scene = scenes/main.escn

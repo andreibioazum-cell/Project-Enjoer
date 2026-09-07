@@ -1,0 +1,59 @@
+# Engine demo: a spinning grass cube with a satellite, lit by a sun and a lamp.
+[node name="Main" type="Node"]
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+yaw = 0.5
+pitch = -0.9
+energy = 1.0
+light_color = 1 0.96 0.88
+
+[node name="Lamp" type="OmniLight3D" parent="."]
+position = 0 3.6 0
+energy = 0.9
+range = 9
+light_color = 1 0.8 0.55
+
+[node name="Camera" type="Camera3D" parent="."]
+position = 0 3.2 9
+pitch = -0.2
+fov = 66
+current = true
+script = "orbit"
+
+[node name="Hero" type="MeshInstance3D" parent="."]
+mesh = cube
+material = grass
+size = 2
+position = 0 2.4 0
+script = "spin"
+
+[node name="Satellite" type="MeshInstance3D" parent="Hero"]
+mesh = sphere
+color = 0.95 0.62 0.18
+size = 0.7
+position = 2.6 0 0
+
+[node name="Pedestal" type="MeshInstance3D" parent="."]
+mesh = cylinder
+material = stone
+size = 1.4
+position = 0 0.7 0
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+mesh = plane
+color = 0.36 0.55 0.33
+size = 24
+
+[node name="Columns" type="Node3D" parent="."]
+
+[node name="ColumnA" type="MeshInstance3D" parent="Columns"]
+mesh = cylinder
+material = log
+size = 1.6
+position = -5 0.8 -3
+
+[node name="ColumnB" type="MeshInstance3D" parent="Columns"]
+mesh = cylinder
+material = log
+size = 1.6
+position = 5 0.8 -3

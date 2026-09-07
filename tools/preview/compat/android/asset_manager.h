@@ -1,5 +1,5 @@
-/* Хост-замена <android/asset_manager.h> для превью на ПК.
- * Тот же API, но читает файлы с диска из каталога ассетов. */
+/* Host replacement for <android/asset_manager.h> in the PC preview.
+ * Same API, but reads files from disk under the asset root. */
 #ifndef HOST_COMPAT_ASSET_MANAGER_H
 #define HOST_COMPAT_ASSET_MANAGER_H
 #include <stddef.h>
@@ -15,7 +15,7 @@ off_t AAsset_getLength(AAsset *asset);
 int AAsset_read(AAsset *asset, void *buf, size_t count);
 void AAsset_close(AAsset *asset);
 
-/* только для хоста */
+/* host only */
 AAssetManager *host_asset_manager(const char *root);
 
 #endif

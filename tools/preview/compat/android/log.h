@@ -1,4 +1,4 @@
-/* Хост-замена <android/log.h> для превью-сборки. */
+/* Host replacement for <android/log.h> in the preview build. */
 #ifndef HOST_COMPAT_LOG_H
 #define HOST_COMPAT_LOG_H
 #include <stdarg.h>

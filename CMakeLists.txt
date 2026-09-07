@@ -2,59 +2,61 @@ cmake_minimum_required(VERSION 3.16)
 project(Enjoer C)
 set(CMAKE_C_STANDARD 99)
 
-# Единственная целевая платформа — Android: библиотека libds_game.so, которую
-# забирает APK из game/AndroidManifest.xml. Игра — 3D-плейс на чистом C.
+# The only shipping platform is Android: libds_game.so, packaged by the APK
+# described in game/AndroidManifest.xml. The game is a pure-C 3D voxel
+# world called Geometrium.
 #
-# Структура исходников (каждый файл — отдельная единица компиляции):
-#   main.c          вход под Android (native activity)
-#   core/           состояние приложения, ошибки, лог, ассеты
-#   graphics/       2D-рендер: примитивы, текстуры, текст (+ ttf/)
-#   sound/          звук: микшер и вывод через AudioTrack
-#   rbx/            3D-плейс: рендер, мир, игрок, ввод, сцена, HUD
+# Source layout (every file is its own translation unit):
+#   src/main.c            Android entry point (native activity)
+#   src/core/             app state, error handling, logging, asset reads
+#   src/graphics/         2D rendering: primitives, textures, text (+ ttf/)
+#   src/sound/            audio: PCM mixer and AudioTrack output
+#   src/geometrium/       the 3D world: render, terrain, player, input, HUD
+# Runtime assets (PNG tiles, font, WAV effects) live in assets/.
 if(NOT ANDROID)
     message(FATAL_ERROR
-        "Enjoer собирается только под Android. Запусти CMake через "
-        "инструментальный файл NDK, например: cmake -B build "
+        "Enjoer builds for Android only. Run CMake through the NDK toolchain "
+        "file, e.g.: cmake -B build "
         "-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake "
         "-DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29. "
-        "Для превью на ПК смотри tools/preview (обычный gcc, без CMake).")
+        "For the PC preview see tools/preview (plain gcc, no CMake).")
 endif()
 
 add_library(enjoer SHARED
-    main.c
-    core/log.c
-    core/state.c
-    core/assets.c
-    graphics/gfx_frame.c
-    graphics/gfx_draw.c
-    graphics/image.c
-    graphics/gfx_text.c
-    graphics/ttf/ttf_outline.c
-    graphics/ttf/ttf_font.c
-    sound/sound.c
-    sound/sound_android.c
-    rbx/rbx_render.c
-    rbx/rbx_shapes.c
-    rbx/rbx_material.c
-    rbx/rbx_terrain.c
-    rbx/rbx_world.c
-    rbx/rbx_light.c
-    rbx/rbx_water.c
-    rbx/rbx_mesh.c
-    rbx/rbx_edits.c
-    rbx/rbx_interact.c
-    rbx/rbx_perf.c
-    rbx/rbx_player.c
-    rbx/rbx_input.c
-    rbx/rbx_scene.c
-    rbx/rbx_hud.c
-    rbx/rbx_hand.c
-    rbx/rbx_game.c
+    src/main.c
+    src/core/log.c
+    src/core/state.c
+    src/core/assets.c
+    src/graphics/gfx_frame.c
+    src/graphics/gfx_draw.c
+    src/graphics/image.c
+    src/graphics/gfx_text.c
+    src/graphics/ttf/ttf_outline.c
+    src/graphics/ttf/ttf_font.c
+    src/sound/sound.c
+    src/sound/sound_android.c
+    src/geometrium/geometrium_render.c
+    src/geometrium/geometrium_shapes.c
+    src/geometrium/geometrium_material.c
+    src/geometrium/geometrium_terrain.c
+    src/geometrium/geometrium_world.c
+    src/geometrium/geometrium_light.c
+    src/geometrium/geometrium_water.c
+    src/geometrium/geometrium_mesh.c
+    src/geometrium/geometrium_edits.c
+    src/geometrium/geometrium_interact.c
+    src/geometrium/geometrium_perf.c
+    src/geometrium/geometrium_player.c
+    src/geometrium/geometrium_input.c
+    src/geometrium/geometrium_scene.c
+    src/geometrium/geometrium_hud.c
+    src/geometrium/geometrium_hand.c
+    src/geometrium/geometrium_game.c
     ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
 # Filename contract of the existing, unchanged APK workflow and manifest.
 set_target_properties(enjoer PROPERTIES OUTPUT_NAME ds_game)
 target_include_directories(enjoer PRIVATE
-    .
-    rbx
+    src
+    src/geometrium
     ${ANDROID_NDK}/sources/android/native_app_glue)
 target_link_libraries(enjoer PRIVATE android log m)

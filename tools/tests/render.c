@@ -1,5 +1,5 @@
-/* Регрессии публичного API рендера; без Android, GPU и include .c. */
-#include "rbx/rbx_render_internal.h"
+/* Regressions of the public render API; no Android, GPU or .c includes. */
+#include "geometrium/geometrium_render_internal.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -23,19 +23,19 @@ static const int normals[6][3] = {{0,1,0},{0,-1,0},{0,0,1},{0,0,-1},{1,0,0},{-1,
 
 static void test_box(float x, float y, float z, float hx, float hy, float hz, float yaw, uint32_t color) {
     if (hx <= 0 || hy <= 0 || hz <= 0 || !isfinite(x + y + z + hx + hy + hz + yaw) ||
-        !rbx3d_visible(x, y, z, hx, hy, hz)) return;
+        !geometrium3d_visible(x, y, z, hx, hy, hz)) return;
     float c = cosf(yaw), s = sinf(yaw);
     for (int face = 0; face < 6; face++) {
-        RbxVertex w[4];
+        GeometriumVertex w[4];
         for (int i = 0; i < 4; i++) {
             float lx = (corners[face][i][0] * 2 - 1) * hx;
             float ly = (corners[face][i][1] * 2 - 1) * hy;
             float lz = (corners[face][i][2] * 2 - 1) * hz;
-            w[i] = (RbxVertex){x + lx * c + lz * s, y + ly, z - lx * s + lz * c, 0, 0};
+            w[i] = (GeometriumVertex){x + lx * c + lz * s, y + ly, z - lx * s + lz * c, 0, 0};
         }
         float nx = normals[face][0] * c + normals[face][2] * s;
         float nz = -normals[face][0] * s + normals[face][2] * c;
-        rbx3d_polygon(w, 4, nx, normals[face][1], nz, color, NULL, 0);
+        geometrium3d_polygon(w, 4, nx, normals[face][1], nz, color, NULL, 0);
     }
 }
 
@@ -63,14 +63,14 @@ static void test_color_fog(void) {
         for (unsigned c = 0; c < sizeof(colors) / sizeof(*colors); c++) {
             for (unsigned i = 0; i < sizeof(distances) / sizeof(*distances); i++) {
                 float z = distances[i];
-                CHECK(rbx3d_begin(&b, sc, 0, 0, 0, 0, 0, 72));
-                rbx3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
+                CHECK(geometrium3d_begin(&b, sc, 0, 0, 0, 0, 0, 72));
+                geometrium3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
                 test_box(0, 0, z, 4, 4, .12f, 0, colors[c]);
-                rbx3d_end();
+                geometrium3d_end();
                 uint32_t pixel = b.pixels[120 * b.stride + 160];
-                float t = fmaxf(0, fminf(1, (z - .12f - RBX_FOG_START) / (RBX_FOG_END - RBX_FOG_START)));
+                float t = fmaxf(0, fminf(1, (z - .12f - GEOMETRIUM_FOG_START) / (GEOMETRIUM_FOG_END - GEOMETRIUM_FOG_START)));
                 for (int ch = 0; ch < 3; ch++) {
-                    int lit = (int)(((colors[c] >> (16 - ch * 8)) & 255) * rbx_face_shade(0,0,-1));
+                    int lit = (int)(((colors[c] >> (16 - ch * 8)) & 255) * geometrium_face_shade(0,0,-1));
                     int expected = (int)(lit + (fog[ch] - lit) * t);
                     CHECK(abs(channel(pixel, ch) - expected) <= 1);
                 }
@@ -84,12 +84,12 @@ static void test_color_fog(void) {
 }
 
 static void pattern(Buffer *b, int scale) {
-    CHECK(rbx3d_begin(b, scale, 0, 0, 0, .15f, -.12f, 72));
-    rbx3d_sky(0xFFBBDDEFu, 0xFF284658u);
+    CHECK(geometrium3d_begin(b, scale, 0, 0, 0, .15f, -.12f, 72));
+    geometrium3d_sky(0xFFBBDDEFu, 0xFF284658u);
     const uint32_t colors[] = {0xFFFFFFFFu, 0xFF000000u, 0xFFFFD600u, 0xFF0000FFu};
     for (int i = 0; i < 4; i++)
         test_box(-2.1f + i * 1.4f, 0, 6 + i * .3f, .55f, 1.4f, .3f, i * .31f, colors[i]);
-    rbx3d_end();
+    geometrium3d_end();
 }
 
 static void test_upscale(void) {
@@ -165,14 +165,14 @@ static void test_perspective_depth(void) {
     Buffer out = make_buffer(256, 192, 3);
     int checked = 0;
     for (int reverse = 0; reverse < 2; reverse++) {
-        CHECK(rbx3d_begin(&out, 1, 0, 0, 0, 0, 0, 72));
-        rbx3d_sky(0xFF004000u, 0xFF004000u);
+        CHECK(geometrium3d_begin(&out, 1, 0, 0, 0, 0, 0, 72));
+        geometrium3d_sky(0xFF004000u, 0xFF004000u);
         draw_box(reverse ? &blue : &red); draw_box(reverse ? &red : &blue);
-        rbx3d_end();
+        geometrium3d_end();
         for (int y = 4; y < out.height - 4; y++) {
             for (int x = 4; x < out.width - 4; x++) {
                 int expected = expected_object(x, y, out.width, out.height);
-                /* Пропускаем только субпиксельные границы силуэтов/пересечений. */
+                /* Skip only sub-pixel silhouette/intersection borders. */
                 if (expected != expected_object(x - .8f, y, out.width, out.height) ||
                     expected != expected_object(x + .8f, y, out.width, out.height) ||
                     expected != expected_object(x, y - .8f, out.width, out.height) ||
@@ -191,40 +191,40 @@ static void test_perspective_depth(void) {
 
 static void test_clipping_and_camera(void) {
     Buffer out = make_buffer(160, 120, 5);
-    CHECK(rbx3d_begin(&out, 1, 0, 0, 0, 0, 0, 72));
-    rbx3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
+    CHECK(geometrium3d_begin(&out, 1, 0, 0, 0, 0, 0, 72));
+    geometrium3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
     test_box(0, 0, -5, 1, 1, 1, 0, 0xFFFFFFFFu);
     test_box(0, 0, 130, 1, 1, 1, 0, 0xFFFFFFFFu);
     test_box(1000, 0, 5, 1, 1, 1, 0, 0xFFFFFFFFu);
     test_box(0, -1000, 5, 1, 1, 1, 0, 0xFFFFFFFFu);
-    rbx3d_end();
+    geometrium3d_end();
     for (int y = 0; y < out.height; y++)
         for (int x = 0; x < out.width; x++) CHECK(out.pixels[y * out.stride + x] == 0xFFF7C56Eu);
     for (int i = 0; i < 120; i++) {
-        CHECK(rbx3d_begin(&out, 1, 0, 0, 0, 0, (i - 60) * .024f, 72));
-        rbx3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
+        CHECK(geometrium3d_begin(&out, 1, 0, 0, 0, 0, (i - 60) * .024f, 72));
+        geometrium3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
         test_box(0, 0, (i - 20) * .05f, .42f, .42f, .12f, i * .12f, 0xFFFFD600u);
         test_box(0, -2, 0, 32, .5f, 32, 0, 0xFF4CAF50u);
-        rbx3d_end();
+        geometrium3d_end();
         check_padding(&out);
     }
     float yaw = .7f, pitch = .8f;
-    CHECK(rbx3d_begin(&out, 1, 10, 6, -3, yaw, pitch, 72));
-    rbx3d_sky(0xff000000u,0xff000000u);
+    CHECK(geometrium3d_begin(&out, 1, 10, 6, -3, yaw, pitch, 72));
+    geometrium3d_sky(0xff000000u,0xff000000u);
     test_box(10+sinf(yaw)*cosf(pitch)*20,6+sinf(pitch)*20,-3+cosf(yaw)*cosf(pitch)*20,.5f,.5f,.5f,0,0xffffffffu);
-    rbx3d_end();
+    geometrium3d_end();
     CHECK(channel(out.pixels[60*out.stride+80],0)>100); /* gaze vector projects onto the crosshair */
     Buffer invalid = out; invalid.stride = out.width - 1;
-    CHECK(!rbx3d_begin(&invalid, 1, 0, 0, 0, 0, 0, 72));
-    rbx3d_end(); /* не пишет старый кадр после неудачного begin */
-    CHECK(!rbx3d_visible(0,0,1,1,1,1));
+    CHECK(!geometrium3d_begin(&invalid, 1, 0, 0, 0, 0, 0, 72));
+    geometrium3d_end(); /* must not write a stale frame after a failed begin */
+    CHECK(!geometrium3d_visible(0,0,1,1,1,1));
     free(out.pixels);
     puts("PASS near/frustum clipping, first-person pitch direction, invalid frame guard");
 }
 
 static void test_voxel_materials(void) {
     for (int b = BLOCK_GRASS; b < BLOCK_COUNT; b++) for (int face = 0; face < 6; face++) {
-        const RbxMaterial *m = rbx_material(b, face);
+        const GeometriumMaterial *m = geometrium_material(b, face);
         CHECK(m && m->image.width==32 && m->image.height==32);
         for(int i=0;i<TEXTURE_SIZE*TEXTURE_SIZE;i++) {
             uint32_t c=m->image.pixels[i];
@@ -235,10 +235,10 @@ static void test_voxel_materials(void) {
         for (int i = 0; i < m->colors; i++) CHECK((m->palette[i] >> 24) == 255);
     }
     Buffer b = make_buffer(160, 120, 5);
-    CHECK(rbx3d_begin(&b, 1, .5f, .5f, -2, 0, 0, 72));
-    rbx3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
-    rbx3d_surface(0,0,0,2,2,3,BLOCK_STONE,0);
-    rbx3d_end();
+    CHECK(geometrium3d_begin(&b, 1, .5f, .5f, -2, 0, 0, 72));
+    geometrium3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
+    geometrium3d_surface(0,0,0,2,2,3,BLOCK_STONE,0);
+    geometrium3d_end();
     uint32_t colors[16]; int count = 0;
     for (int y = 48; y < 72; y++) for (int x = 68; x < 92; x++) {
         uint32_t c = b.pixels[y * b.stride + x];
@@ -257,12 +257,12 @@ static void test_half_uv(void) {
         int origin=negative ? -2 : 0;
         for(int pass=0;pass<2;pass++) {
             Buffer *b=pass ? &parts : &whole;
-            CHECK(rbx3d_begin(b,1,origin+extent*.5f,origin+extent*.5f,origin-2,0,0,72));
-            rbx3d_sky(0xff6ec5f7u,0xff6ec5f7u);
-            if(!pass)rbx3d_surface(origin*2,origin*2,origin*2,extent*2,extent*2,3,BLOCK_DIRT,0);
+            CHECK(geometrium3d_begin(b,1,origin+extent*.5f,origin+extent*.5f,origin-2,0,0,72));
+            geometrium3d_sky(0xff6ec5f7u,0xff6ec5f7u);
+            if(!pass)geometrium3d_surface(origin*2,origin*2,origin*2,extent*2,extent*2,3,BLOCK_DIRT,0);
             else for(int y=0;y<extent*2;y++) for(int x=0;x<extent*2;x++)
-                rbx3d_surface(origin*2+x,origin*2+y,origin*2,1,1,3,BLOCK_DIRT,0);
-            rbx3d_end();
+                geometrium3d_surface(origin*2+x,origin*2+y,origin*2,1,1,3,BLOCK_DIRT,0);
+            geometrium3d_end();
         }
         int different=0;
         for(int y=0;y<whole.height;y++)for(int x=0;x<whole.width;x++)
@@ -274,18 +274,18 @@ static void test_half_uv(void) {
     puts("PASS half-cell UV: four quarters reconstruct a PNG; merged faces repeat at full-block scale, including negative coordinates");
 }
 static void test_merged_fog(void) {
-    static RbxMaterial flat;
+    static GeometriumMaterial flat;
     flat.colors=1;flat.palette[0]=0xff207010u;
     Buffer a=make_buffer(160,120,5),b=make_buffer(160,120,5);
     for(int pass=0;pass<2;pass++) {
         Buffer *out=pass ? &b : &a;
-        CHECK(rbx3d_begin(out,1,0,3,0,0,0,72));rbx3d_sky(0xff6ec5f7u,0xff6ec5f7u);rbx3d_fog(3,12);
+        CHECK(geometrium3d_begin(out,1,0,3,0,0,0,72));geometrium3d_sky(0xff6ec5f7u,0xff6ec5f7u);geometrium3d_fog(3,12);
         int step=pass ? 1 : 20;
         for(int z=2;z<22;z+=step)for(int x=-10;x<10;x+=step) {
-            RbxVertex v[4]={{x,0,z,0,0},{x,0,z+step,0,step},{x+step,0,z+step,step,step},{x+step,0,z,step,0}};
-            rbx3d_polygon(v,4,0,1,0,0,&flat,0);
+            GeometriumVertex v[4]={{x,0,z,0,0},{x,0,z+step,0,step},{x+step,0,z+step,step,step},{x+step,0,z,step,0}};
+            geometrium3d_polygon(v,4,0,1,0,0,&flat,0);
         }
-        rbx3d_end();
+        geometrium3d_end();
     }
     int different=0;
     for(int y=0;y<a.height;y++)for(int x=0;x<a.width;x++) {
@@ -299,23 +299,23 @@ static void test_merged_fog(void) {
 }
 
 static void test_smooth_light(void) {
-    static RbxMaterial flat;
+    static GeometriumMaterial flat;
     flat.colors=1;flat.palette[0]=0xfff0f0f0u;
     Buffer a=make_buffer(320,240,5),b=make_buffer(320,240,5);
     for(int slant=0;slant<2;slant++) {
         for(int pass=0;pass<2;pass++) {
             Buffer *out=pass ? &b : &a;
-            CHECK(rbx3d_begin(out,1,0,0,0,0,0,72));rbx3d_sky(0xff000000u,0xff000000u);
+            CHECK(geometrium3d_begin(out,1,0,0,0,0,0,72));geometrium3d_sky(0xff000000u,0xff000000u);
             int pieces=pass ? 4 : 1;
             for(int i=0;i<pieces;i++) {
                 float x0=-3+6.f*i/pieces,x1=-3+6.f*(i+1)/pieces;
                 float z0=slant ? 6+x0 : 4,z1=slant ? 6+x1 : 4;
-                RbxVertex v[4]={{x0,-1,z0,0,0},{x1,-1,z1,0,0},{x1,1,z1,0,0},{x0,1,z0,0,0}};
+                GeometriumVertex v[4]={{x0,-1,z0,0,0},{x1,-1,z1,0,0},{x1,1,z1,0,0},{x0,1,z0,0,0}};
                 unsigned char lo=(unsigned char)(255.f*i/pieces+.5f),hi=(unsigned char)(255.f*(i+1)/pieces+.5f);
                 unsigned char light[4]={lo,hi,hi,lo};
-                rbx3d_polygon(v,4,slant ? .70710678f : 0,0,slant ? -.70710678f : -1,0,&flat,light);
+                geometrium3d_polygon(v,4,slant ? .70710678f : 0,0,slant ? -.70710678f : -1,0,&flat,light);
             }
-            rbx3d_end();
+            geometrium3d_end();
         }
         for(int y=0;y<a.height;y++)for(int x=0;x<a.width;x++) {
             int p=channel(a.pixels[y*a.stride+x],0),q=channel(b.pixels[y*b.stride+x],0);
@@ -329,9 +329,9 @@ static void test_smooth_light(void) {
         }
         CHECK(shades>=20);
     }
-    const uint32_t *dark=rbx_material_shades(&flat,1,0xffffffffu);
+    const uint32_t *dark=geometrium_material_shades(&flat,1,0xffffffffu);
     CHECK(channel(dark[(FOG_LEVELS-1)*PALETTE_SIZE],0)<20);
-    const uint32_t *day=rbx_material_shades(&flat,LIGHT_LEVELS-1,0xffffffffu);
+    const uint32_t *day=geometrium_material_shades(&flat,LIGHT_LEVELS-1,0xffffffffu);
     CHECK(channel(day[(FOG_LEVELS-1)*PALETTE_SIZE],0)==255);
     check_padding(&a);check_padding(&b);free(a.pixels);free(b.pixels);
     puts("PASS perspective-correct smooth vertex light, consistent split quads, bounded light palettes and non-glowing cave fog");
@@ -339,7 +339,7 @@ static void test_smooth_light(void) {
 
 int main(void) {
     screen_w=320;screen_h=240;
-    CHECK(rbx_materials_load(host_asset_manager("game/assets")));
+    CHECK(geometrium_materials_load(host_asset_manager("assets")));
     test_color_fog();
     test_upscale();
     test_perspective_depth();

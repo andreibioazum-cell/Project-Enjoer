@@ -1,10 +1,13 @@
-/* Превью-сервер 3D-плейса для ПК: тот же C-код, окно — браузер.
- * JPEG transport keeps remote input responsive; PNG assets stay lossless in the game. */
+/* PC preview server for the 3D playset: the same C code, the browser is the
+ * window. JPEG transport keeps remote input responsive; PNG assets stay
+ * lossless in the game. */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 #include "engine.h"
-#include "rbx/rbx_internal.h"
+#include "engine/eng_api.h"
+#include "engine/eng_internal.h"
+#include "geometrium/geometrium_internal.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -22,6 +25,7 @@
 static Buffer frame;
 static uint64_t last_ns = 0;
 static volatile sig_atomic_t running=1;
+static int project_mode;
 const unsigned char *preview_jpeg(const Buffer *frame,size_t *length);
 static void shutdown_signal(int signal_number) { (void)signal_number;running=0; }
 
@@ -43,7 +47,11 @@ static void tick(void) {
 static void render_frame(void) {
     tick();
     if (!gfx_begin_frame(&frame)) return;
-    game_draw(&frame);
+    if (project_mode) {
+        eng_time_internal((double)last_ns / 1e9, dt);
+        eng_update((float)dt);
+        eng_draw(&frame);
+    } else game_draw(&frame);
     gfx_end_frame();
 }
 
@@ -143,19 +151,19 @@ static void handle_event(const char *body, int blen) {
         if (id < 0 || id > INT_MAX || (ids[0] && *end)) return;
         game_touch((float)atof(xs), (float)atof(ys), action, (int)id);
     } else if (strcmp(t, "cancel") == 0) {
-        rbx_cancel_input();
+        geometrium_cancel_input();
         last_ns=0;game_save();
     } else if (strcmp(t, "key") == 0) {
         form_get(body, blen, "k", k, sizeof(k));
         char down_text[8];
         form_get(body, blen, "d", down_text, sizeof(down_text));
         int down = down_text[0] ? atoi(down_text) : 1;
-        rbx_key(k, down);
+        geometrium_key(k, down);
     }
 
 }
 
-/* Пакет событий одного запроса применяется строго по порядку. */
+/* The event batch of one request is applied strictly in order. */
 static void handle_events(const char *body, int len) {
     while (len > 0) {
         const char *nl = (const char *)memchr(body, '\n', (size_t)len);
@@ -165,6 +173,19 @@ static void handle_events(const char *body, int len) {
         if (len > 0) { body++; len--; }
     }
 }
+
+/* Minimal live viewport for engine projects: no game controls. */
+static const char engine_html[] =
+    "<!doctype html><meta charset=utf-8><title>Enjoer engine</title>"
+    "<style>html,body{margin:0;height:100%;background:#101418;display:flex;"
+    "align-items:center;justify-content:center;overflow:hidden}"
+    "img{max-width:100%;max-height:100%;image-rendering:pixelated}"
+    "h1{position:fixed;top:8px;left:12px;margin:0;font:14px/1.4 monospace;"
+    "color:#9fd3ff;background:#0008;padding:4px 10px;border-radius:6px}</style>"
+    "<h1 id=t>engine</h1><img id=f src=\"/frame.jpg\">"
+    "<script>fetch('/info').then(r=>r.json()).then(j=>{if(j.project)t.textContent="
+    "'Enjoer engine — '+j.project;}).catch(()=>{});"
+    "setInterval(()=>{f.src='/frame.jpg?'+Date.now();},120);</script>";
 
 static char *read_html(void) {
     FILE *f=fopen("tools/preview/index.html","rb");if(!f)return NULL;
@@ -180,13 +201,15 @@ static char *read_html(void) {
 int main(int argc, char **argv) {
     int port = 8090;
     int w = 960, h = 540;
-    const char *assets = "game/assets", *storage = "data";
+    const char *assets = "assets", *storage = "data";
+    const char *project = NULL;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--port") && i + 1 < argc) port = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--w") && i + 1 < argc) w = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--h") && i + 1 < argc) h = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--storage") && i + 1 < argc) storage = argv[++i];
         else if (!strcmp(argv[i], "--assets") && i + 1 < argc) assets = argv[++i];
+        else if (!strcmp(argv[i], "--project") && i + 1 < argc) project = argv[++i];
     }
     if(w<64 || h<64 || w>4096 || h>4096 || port<1 || port>65535) {
         fprintf(stderr,"Invalid preview size or port\n");return 1;
@@ -209,8 +232,16 @@ int main(int argc, char **argv) {
 
     AAssetManager *am = host_asset_manager(assets);
     if (!gfx_init(am)) { fprintf(stderr, "graphics init failed\n"); return 1; }
-    game_init(am);
-    if(app_failed()){fprintf(stderr,"%s\n",app_error());return 1;}
+    if (project) {
+        project_mode = 1;
+        if (!eng_init(am) || !eng_project_load(project)) {
+            fprintf(stderr, "engine: failed to load project '%s'\n", project);
+            return 1;
+        }
+    } else {
+        game_init(am);
+        if(app_failed()){fprintf(stderr,"%s\n",app_error());return 1;}
+    }
     render_frame();
 
     int srv = socket(AF_INET, SOCK_STREAM, 0);
@@ -246,15 +277,25 @@ int main(int argc, char **argv) {
         sscanf(reqbuf, "%7s %511s", method, path);
 
         if (strcmp(method, "GET") == 0 && strcmp(path, "/") == 0) {
-            http_head(fd, 200, "text/html; charset=utf-8", (int)strlen(index_html), 0);
-            send_all(fd, index_html, strlen(index_html));
+            const char *page = project_mode ? engine_html : index_html;
+            http_head(fd, 200, "text/html; charset=utf-8", (int)strlen(page), 0);
+            send_all(fd, page, strlen(page));
         } else if (strcmp(method, "GET") == 0 && strcmp(path, "/info") == 0) {
-            float x,y,z;rbx_player_pos(&x,&y,&z);
-            RbxHit hit;char target[160]="null";
-            if(rbx_target(&hit))snprintf(target,sizeof(target),"{\"x\":%d,\"y\":%d,\"z\":%d,\"block\":%d}",hit.x,hit.y,hit.z,hit.block);
+            if (project_mode) {
+                char info[256];
+                int n = snprintf(info, sizeof(info), "{\"w\":%d,\"h\":%d,\"engine\":true,\"project\":\"%s\"}",
+                                 w, h, eng_project_name());
+                http_head(fd, 200, "application/json", n, 0);
+                send_all(fd, info, (size_t)n);
+                close(fd);
+                continue;
+            }
+            float x,y,z;geometrium_player_pos(&x,&y,&z);
+            GeometriumHit hit;char target[160]="null";
+            if(geometrium_target(&hit))snprintf(target,sizeof(target),"{\"x\":%d,\"y\":%d,\"z\":%d,\"block\":%d}",hit.x,hit.y,hit.z,hit.block);
             char info[512];
             int n=snprintf(info,sizeof(info),"{\"w\":%d,\"h\":%d,\"fps\":%.1f,\"distance\":%.1f,\"pending\":%d,\"x\":%.4f,\"y\":%.4f,\"z\":%.4f,\"flying\":%d,\"grounded\":%d,\"selected\":%d,\"target\":%s}",
-                           w,h,rbx_fps(),rbx_world_distance(),rbx_world_pending(),x,y,z,rbx_player_flying(),rbx_player_grounded(),rbx_selected(),target);
+                           w,h,geometrium_fps(),geometrium_world_distance(),geometrium_world_pending(),x,y,z,geometrium_player_flying(),geometrium_player_grounded(),geometrium_selected(),target);
             http_head(fd, 200, "application/json", n, 0);
             send_all(fd, info, (size_t)n);
         } else if (!strcmp(method,"GET") && !strcmp(path,"/frame.jpg")) {
