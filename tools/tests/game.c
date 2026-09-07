@@ -1,119 +1,304 @@
+/* App router regression: the launcher lists the engine projects, runs the one
+ * you pick, routes keys/pointer into the engine and keeps drawing frames. */
 #define _POSIX_C_SOURCE 200809L
-#include "geometrium/geometrium_world_internal.h"
-#include "geometrium/geometrium_render_internal.h"
+#include "engine.h"
+#include "engine/eng_api.h"
+#include "engine/eng_internal.h"
 #include <assert.h>
 #include <stdio.h>
-#include <time.h>
+#include <stdlib.h>
+#include <string.h>
+
 extern AAssetManager *host_asset_manager(const char *root);
-static double now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t); return t.tv_sec+t.tv_nsec*1e-9; }
-static void capture(Buffer *b,const char *name) {
-    const char *directory=getenv("ENJOER_TEST_IMAGES");if(!directory)return;
-    char path[600];snprintf(path,sizeof(path),"%s/%s.ppm",directory,name);
-    FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n%d %d\n255\n",b->width,b->height);
-    for(int y=0;y<b->height;y++)for(int x=0;x<b->width;x++) {
-        uint32_t c=b->pixels[y*b->stride+x];fputc(c&255,f);fputc((c>>8)&255,f);fputc((c>>16)&255,f);
-    }
-    assert(!fclose(f));
+
+#define CHECK(x) do { if (!(x)) { fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, #x); exit(1); } } while (0)
+
+static uint32_t *frame_copy;
+static size_t frame_bytes;
+
+static void remember(const Buffer *b) {
+    frame_bytes = (size_t)b->stride * b->height * 4;
+    if (!frame_copy) frame_copy = malloc(frame_bytes);
+    CHECK(frame_copy);
+    memcpy(frame_copy, b->pixels, frame_bytes);
 }
-static void aim(float yaw,float pitch) {
-    float y,p;geometrium_camera_angles(&y,&p);float size=fminf(screen_w,screen_h);
-    geometrium_camera_look((yaw-y)*size/2.7f,(p-pitch)*size/2.4f);
+static int changed_since(const Buffer *b) {
+    return memcmp(frame_copy, b->pixels, frame_bytes) != 0;
 }
-static void hand_frame(Buffer *b,int occluder) {
-    float x,y,z,yaw,pitch;geometrium_player_pos(&x,&y,&z);geometrium_camera_angles(&yaw,&pitch);
-    assert(geometrium3d_begin(b,1,x,y+GEOMETRIUM_PLAYER_EYE_HEIGHT,z,yaw,pitch,66));geometrium3d_sky(0xff101820u,0xff101820u);
-    if(occluder) {
-        GeometriumVertex v[4]={{-2,-2,.081f,0,0},{2,-2,.081f,0,0},{2,2,.081f,0,0},{-2,2,.081f,0,0}};
-        geometrium3d_viewmodel(1);geometrium3d_polygon(v,4,0,0,-1,0xff1020f0u,NULL,NULL);geometrium3d_viewmodel(0);
-    }
-    geometrium_hand_draw();geometrium3d_end();
+static int distinct_colors(const Buffer *b) {
+    int seen[256] = {0};
+    for (int y = 0; y < b->height; y++)
+        for (int x = 0; x < b->width; x++) {
+            uint32_t c = b->pixels[y * b->stride + x];
+            seen[((c & 0xff) ^ ((c >> 8) & 0xff) ^ ((c >> 16) & 0xff)) & 255] = 1;
+        }
+    int n = 0;
+    for (int i = 0; i < 256; i++) n += seen[i];
+    return n;
 }
-static void test_viewmodel(Buffer *b) {
-    geometrium_select(0);geometrium_hand_reset();hand_frame(b,0);capture(b,"hand");
-    size_t bytes=(size_t)b->stride*b->height*4;uint32_t *reference=malloc(bytes);assert(reference);memcpy(reference,b->pixels,bytes);
-    int green=0,occupied=0;
-    for(int y=0;y<b->height;y++)for(int x=0;x<b->width;x++) {
-        uint32_t c=reference[y*b->stride+x];int r=c&255,g=(c>>8)&255;
-        green+=g>r*1.2f && g>40;occupied+=c!=0xff201810u;
-    }
-    assert(green>200 && occupied>3000); /* visible grass top, not just two flat sides */
-    for(int i=0;i<48;i++) {
-        aim((i/3)*.39269908f-3.14159265f,(i%3-1)*1.25f);
-        hand_frame(b,0);assert(!memcmp(reference,b->pixels,bytes));
-    }
-    hand_frame(b,1);
-    for(int y=0;y<b->height;y++)for(int x=0;x<b->width;x++) {
-        int at=y*b->stride+x;if(reference[at]!=0xff201810u)assert(b->pixels[at]==reference[at]);
-    }
-    free(reference);puts("PASS rendered 3D hand: identical silhouette/UV at 48 yaw/pitch combinations, visible grass top, overlay depth against a near wall");
+static void check_stride_guard(const Buffer *b, int w) {
+    for (int y = 0; y < b->height; y++)
+        for (int x = w; x < b->stride; x++)
+            CHECK(b->pixels[y * b->stride + x] == 0x12345678u);
 }
-static void set(int x,int y,int z,int block) {if(geometrium_world_cell(x,y,z)!=block)assert(geometrium_world_set(x,y,z,block));}
-static void warm(void) {
-    for(int i=0;i<600;i++) {geometrium_world_update(8.5f,8.5f);if(!geometrium_world_pending())return;}assert(0);
+
+static void step(Buffer *b, int frames) {
+    for (int i = 0; i < frames; i++) {
+        dt = 1.0 / 60.0;
+        game_update();
+        CHECK(gfx_begin_frame(b));
+        game_draw(b);
+        gfx_end_frame();
+        CHECK(!app_failed());
+    }
 }
-static void test_cave_frame(Buffer *b) {
-    geometrium_world_build(GEOMETRIUM_WORLD_SEED);geometrium_player_spawn();geometrium_actions_reset();geometrium_hand_reset();aim(0,-.1f);
-    for(int x=8;x<=27;x++)for(int z=8;z<=27;z++)for(int y=25;y<=35;y++) {
-        int wall=x==8 || x==27 || z==8 || z==27 || y==25 || y==35;
-        set(x,y,z,wall ? BLOCK_STONE : BLOCK_AIR);
-    }
-    warm();geometrium_hand_reset();geometrium_scene_draw(b);capture(b,"mine-closed");
-    unsigned long long dark=0,open=0;
-    for(int y=0;y<b->height;y++)for(int x=0;x<b->width;x++) {
-        uint32_t c=b->pixels[y*b->stride+x];
-        for(int ch=0;ch<3;ch++) {int value=(c>>(ch*8))&255;assert(value<24);dark+=value;}
-    }
-    for(int x=16;x<=19;x++)for(int y=27;y<=32;y++)set(x,y,27,BLOCK_AIR);
-    warm();for(int i=0;i<40;i++)geometrium_hand_update(.05f);geometrium_scene_draw(b);capture(b,"mine-entrance");
-    for(int y=0;y<b->height;y++)for(int x=0;x<b->width;x++) {
-        uint32_t c=b->pixels[y*b->stride+x];for(int ch=0;ch<3;ch++)open+=(c>>(ch*8))&255;
-    }
-    assert(open>dark*3);geometrium_edits_reset(GEOMETRIUM_WORLD_SEED);
-    puts("PASS full cave frame: sealed room and hand stay dark; a portal lights the room without sky-fog glow");
+
+/* Tap the middle of a launcher card and report whether the tap hit it. */
+static void tap_card(int index) {
+    float x, y, w, h;
+    game_menu_card_geom(index, &x, &y, &w, &h);
+    game_touch(x + w * .5f, y + h * .5f, 0, 0);
+    game_touch(x + w * .5f, y + h * .5f, 1, 0);
 }
-static void test_water_frames(Buffer *b) {
-    geometrium_world_build(GEOMETRIUM_WORLD_SEED);geometrium_player_spawn();geometrium_actions_reset();geometrium_hand_reset();aim(0,-.2f);
-    for(int x=10;x<=26;x++)for(int z=15;z<=32;z++) {
-        set(x,25,z,BLOCK_SAND);
-        for(int y=26;y<=34;y++)set(x,y,z,BLOCK_AIR);
+
+static void test_launcher(Buffer *b) {
+    CHECK(game_menu_open());                      /* the engine greets you */
+    int count = game_project_count();
+    CHECK(count >= 3);
+    int demo = -1, physics = -1, voxel = -1;
+    for (int i = 0; i < count; i++) {
+        const char *title = game_project_title(i);
+        CHECK(title && title[0]);
+        if (!strcmp(title, "Demo Scene")) demo = i;
+        if (!strcmp(title, "Physics Playground")) physics = i;
+        if (!strcmp(title, "Voxel World")) voxel = i;
+        /* every card sits inside the frame and below the title */
+        float x, y, w, h;
+        game_menu_card_geom(i, &x, &y, &w, &h);
+        CHECK(x > 0 && y > 0 && w > 0 && h > 0 && x + w < screen_w && y + h < screen_h);
+        if (i > 0) {
+            float py, ph;
+            game_menu_card_geom(i - 1, NULL, &py, NULL, &ph);
+            CHECK(y > py + ph - 1.0f);            /* no overlap */
+        }
     }
-    set(18,34,23,BLOCK_WATER);warm();geometrium_scene_draw(b);capture(b,"water-start");
-    size_t bytes=(size_t)b->stride*b->height*4;uint32_t *reference=malloc(bytes);assert(reference);memcpy(reference,b->pixels,bytes);
-    for(int i=0;i<50;i++) {geometrium_water_update(.05f);geometrium_world_update(8.5f,8.5f);}
-    warm();geometrium_scene_draw(b);capture(b,"water-flow");
-    int different=0;for(int y=0;y<b->height;y++)for(int x=0;x<b->width;x++) {
-        int at=y*b->stride+x;different+=reference[at]!=b->pixels[at];
-    }
-    assert(different>1000 && geometrium_world_cell(18,26,23)==BLOCK_WATER && geometrium_world_cell(19,26,23)==BLOCK_WATER);
-    free(reference);geometrium_edits_reset(GEOMETRIUM_WORLD_SEED);
-    puts("PASS fluid render integration: a source becomes a meshed waterfall and a block-by-block pool");
+    CHECK(demo >= 0 && physics >= 0 && voxel >= 0);
+
+    step(b, 1);
+    CHECK(distinct_colors(b) > 32);               /* the launcher really drew */
+    check_stride_guard(b, b->width);
+
+    /* a tap on the menu button while the launcher is open changes nothing */
+    float bx, by, br;
+    game_menu_button_geom(&bx, &by, &br);
+    CHECK(br > 0);
+    game_touch(bx, by, 0, 0);
+    game_touch(bx, by, 1, 0);
+    CHECK(game_menu_open());
+
+    /* picking a project starts it */
+    tap_card(demo);
+    CHECK(!game_menu_open());
+    CHECK(eng_project_active());
+    CHECK(game_current_project() == demo);
+    CHECK(!strcmp(eng_project_name(), "Demo Scene"));
+    CHECK(eng_scene_node_count() > 5);
+    printf("PASS launcher: %d engine projects listed, tap starts '%s' (%d nodes)\n",
+           count, eng_project_name(), eng_scene_node_count());
 }
-static void run(int w,int h) {
-    screen_w=w;screen_h=h;
-    Buffer b={malloc((size_t)(w+8)*h*4),w,h,w+8};assert(b.pixels);
-    for(int y=0;y<h;y++)for(int x=w;x<b.stride;x++)b.pixels[y*b.stride+x]=0x12345678;
-    AAssetManager *am=host_asset_manager("assets");assert(gfx_init(am));geometrium_game_init(am);
-    double start=now();int max_scale=1;
-    for(int i=0;i<180;i++) {
-        if(i==20)geometrium_key("space",1);
-        if(i==35)geometrium_key("space",0);
-        if(i==50)geometrium_player_toggle_flight();
-        if(i==55) {geometrium_key("space",1);geometrium_key("w",1);}
-        if(i==95) {geometrium_key("space",0);geometrium_key("w",0);}
-        if(i==110)geometrium_camera_look(.12f*h,-.10f*h);
-        if(i==145)geometrium_player_toggle_flight();
-        dt=1.0/60;geometrium_game_update();
-        assert(gfx_begin_frame(&b));geometrium_game_draw(&b);gfx_end_frame();
-        int scale=geometrium_render_scale(w,h);if(scale>max_scale)max_scale=scale;assert(!app_failed());
-        for(int y=0;y<h;y++)for(int x=w;x<b.stride;x++)assert(b.pixels[y*b.stride+x]==0x12345678);
-    }
-    int chunks,faces;geometrium_world_stats(&chunks,&faces);
-    printf("PASS %dx%d: 180 complete frames, jump/flight/fall/UV/HUD/stride, %d chunks, %d exposed quads, scale %d (max %d), %.2f ms/frame\n",w,h,chunks,faces,geometrium_render_scale(w,h),max_scale,(now()-start)*1000/180);
-    assert(geometrium_world_set(17,25,16,BLOCK_AIR));geometrium_game_update();
-    assert(gfx_begin_frame(&b));geometrium_game_draw(&b);gfx_end_frame();assert(!app_failed());
-    assert(geometrium_world_set(17,25,16,BLOCK_GRASS));geometrium_game_update();
-    geometrium_edits_reset(GEOMETRIUM_WORLD_SEED); /* isolated test has no disk storage */
-    if(w==960) {test_viewmodel(&b);test_cave_frame(&b);test_water_frames(&b);}
-    gfx_shutdown();free(b.pixels);
+
+static void test_running_project(Buffer *b) {
+    EngNode *hero = eng_node_find("Main/Hero");
+    EngNode *camera = eng_node_find("Main/Camera");
+    CHECK(hero && camera);
+    float yaw0, pitch, roll;
+    eng_node3d_get_rotation(hero, &yaw0, &pitch, &roll);
+    float cx0, cy0, cz0;
+    eng_node3d_get_position(camera, &cx0, &cy0, &cz0);
+
+    step(b, 1);
+    remember(b);
+    step(b, 45);
+    CHECK(changed_since(b));                      /* the scene is alive */
+    check_stride_guard(b, b->width);
+
+    float yaw1;
+    eng_node3d_get_rotation(hero, &yaw1, &pitch, &roll);
+    CHECK(yaw1 > yaw0 + 0.3f);                    /* the spin script ran */
+    float cx1, cy1, cz1;
+    eng_node3d_get_position(camera, &cx1, &cy1, &cz1);
+    CHECK(fabsf(cx1 - cx0) + fabsf(cz1 - cz0) > 0.05f);   /* the orbit script ran */
+
+    /* keys and the pointer reach the engine input API */
+    game_key("w", 1);
+    game_key("ArrowRight", 1);
+    game_key("space", 1);
+    CHECK(eng_input_is_pressed(ENG_KEY_UP));
+    CHECK(eng_input_is_pressed(ENG_KEY_RIGHT));
+    CHECK(eng_input_is_pressed(ENG_KEY_SPACE));
+    game_touch(400, 300, 0, 0);
+    float px, py;
+    int down = 0;
+    CHECK(eng_input_pointer(&px, &py, &down));
+    CHECK(down && (int)px == 400 && (int)py == 300);
+    game_touch(420, 310, 2, 0);
+    CHECK(eng_input_pointer(&px, &py, &down) && down && (int)px == 420);
+    game_touch(420, 310, 1, 0);
+    CHECK(eng_input_pointer(&px, &py, &down) && !down);
+    game_key("w", 0);
+    game_key("ArrowRight", 0);
+    game_key("space", 0);
+    CHECK(!eng_input_is_pressed(ENG_KEY_UP));
+
+    /* Escape and M toggle the launcher; the world freezes behind it */
+    game_key("Escape", 1);
+    CHECK(game_menu_open());
+    CHECK(!eng_input_is_pressed(ENG_KEY_RIGHT));  /* holds are released */
+    step(b, 1);                                   /* draw the launcher once */
+    remember(b);
+    step(b, 30);
+    CHECK(!changed_since(b));                     /* frozen, not re-simulated */
+    float cx2, cy2, cz2;
+    eng_node3d_get_position(camera, &cx2, &cy2, &cz2);
+    CHECK(fabsf(cx2 - cx1) < 1e-6f && fabsf(cz2 - cz1) < 1e-6f);
+    game_key("m", 1);
+    CHECK(!game_menu_open());
+    step(b, 2);
+    CHECK(changed_since(b));
+    puts("PASS running project: scripts animate the scene, input is routed, the launcher pauses it");
 }
-int main(void) {run(960,540);run(2400,1080);return 0;}
+
+static void test_project_switch(Buffer *b) {
+    game_key("Escape", 1);
+    CHECK(game_menu_open());
+    int physics = -1;
+    for (int i = 0; i < game_project_count(); i++)
+        if (!strcmp(game_project_title(i), "Physics Playground")) physics = i;
+    CHECK(physics >= 0);
+    tap_card(physics);
+    CHECK(game_current_project() == physics);
+    CHECK(!strcmp(eng_project_name(), "Physics Playground"));
+
+    EngNode *ball = eng_node_find("Main/Ball");
+    CHECK(ball);
+    float x, y0, z;
+    eng_node3d_get_position(ball, &x, &y0, &z);
+    step(b, 60);
+    float y1;
+    eng_node3d_get_position(ball, &x, &y1, &z);
+    CHECK(y1 < y0 - 0.5f);                        /* gravity pulled the body down */
+    CHECK(eng_body_is_grounded(ball) || y1 < y0);
+    check_stride_guard(b, b->width);
+
+    /* the roller script answers the engine input API */
+    game_key("d", 1);
+    float vx, vy, vz;
+    eng_body_get_linear_velocity(ball, &vx, &vy, &vz);
+    step(b, 30);
+    eng_body_get_linear_velocity(ball, &vx, &vy, &vz);
+    game_key("d", 0);
+    CHECK(vx > 0.05f);                            /* pushed to the right */
+    printf("PASS project switch: '%s' runs, rigid body falls to y=%.2f and rolls on input\n",
+           eng_project_name(), y1);
+}
+
+static void test_free_camera(Buffer *b) {
+    int voxel = -1;
+    game_key("Escape", 1);
+    for (int i = 0; i < game_project_count(); i++)
+        if (!strcmp(game_project_title(i), "Voxel World")) voxel = i;
+    CHECK(voxel >= 0);
+    tap_card(voxel);
+    CHECK(game_current_project() == voxel);
+
+    EngNode *camera = eng_node_find("Main/Camera");
+    CHECK(camera);
+    float yaw0, pitch0, roll, x0, y0, z0;
+    eng_node3d_get_rotation(camera, &yaw0, &pitch0, &roll);
+    eng_node3d_get_position(camera, &x0, &y0, &z0);
+
+    /* this scene scripts nothing: the engine drives the camera instead */
+    game_touch(500, 300, 0, 0);
+    step(b, 1);                                   /* drag begins */
+    game_touch(600, 320, 2, 0);
+    step(b, 2);                                   /* the drag rotates the view */
+    game_touch(600, 320, 1, 0);
+    float yaw1, pitch1;
+    eng_node3d_get_rotation(camera, &yaw1, &pitch1, &roll);
+    CHECK(fabsf(yaw1 - yaw0) > 0.1f);
+    CHECK(fabsf(pitch1 - pitch0) > 0.01f);
+
+    game_key("w", 1);
+    step(b, 30);
+    game_key("w", 0);
+    float x1, y1, z1;
+    eng_node3d_get_position(camera, &x1, &y1, &z1);
+    CHECK(fabsf(x1 - x0) + fabsf(z1 - z0) > 0.5f);
+    step(b, 2);
+    CHECK(distinct_colors(b) > 32);               /* the voxel world rendered */
+    check_stride_guard(b, b->width);
+    puts("PASS free camera: an unscripted Camera3D orbits on drag and flies on WASD");
+}
+
+static void test_reset_and_direct_open(Buffer *b) {
+    /* game_reset reloads the running project from its scene file */
+    int before = game_current_project();
+    game_reset();
+    CHECK(game_current_project() == before);
+    CHECK(eng_project_active());
+    step(b, 3);
+
+    /* --project style start: load a directory that is not in the scanned root */
+    CHECK(game_open_project("projects/demo"));
+    CHECK(!game_menu_open());
+    CHECK(!strcmp(eng_project_name(), "Demo Scene"));
+    step(b, 3);
+    CHECK(!app_failed());
+    puts("PASS reset and direct open: a project reloads from its scene file");
+}
+
+static void run(int w, int h) {
+    Buffer b;
+    screen_w = w;
+    screen_h = h;
+    b.pixels = malloc((size_t)(w + 8) * h * 4);
+    b.width = w;
+    b.height = h;
+    b.stride = w + 8;
+    CHECK(b.pixels);
+    for (int y = 0; y < h; y++)
+        for (int x = w; x < b.stride; x++) b.pixels[y * b.stride + x] = 0x12345678u;
+
+    AAssetManager *am = host_asset_manager("assets");
+    CHECK(gfx_init(am));
+    game_set_project_root("projects");
+    game_init(am);
+    CHECK(!app_failed());
+
+    if (w == 960) {
+        test_launcher(&b);
+        test_running_project(&b);
+        test_project_switch(&b);
+        test_free_camera(&b);
+        test_reset_and_direct_open(&b);
+    } else {
+        /* a second resolution: geometry scales, frames stay complete */
+        tap_card(0);
+        CHECK(!game_menu_open());
+        step(&b, 30);
+        check_stride_guard(&b, w);
+    }
+    game_save();
+    gfx_shutdown();
+    free(b.pixels);
+    printf("PASS %dx%d engine app: launcher, projects, physics, input, %d projects\n",
+           w, h, game_project_count());
+}
+
+int main(void) {
+    run(960, 540);
+    run(1600, 900);
+    free(frame_copy);
+    puts("ENGINE APP SUITE OK");
+    return 0;
+}

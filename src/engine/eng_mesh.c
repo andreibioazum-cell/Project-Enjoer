@@ -105,15 +105,15 @@ int eng_mesh_faces(int kind, const EngFace **out) {
 
 /* ── flat colour materials (palette slot 0 = colour, mip 0 only) ── */
 #define ENG_MAX_FLAT 64
-static GeometriumMaterial flat_materials[ENG_MAX_FLAT];
+static RendMaterial flat_materials[ENG_MAX_FLAT];
 static uint32_t flat_keys[ENG_MAX_FLAT];
 static int flat_count;
 
-GeometriumMaterial *eng_flat_material(uint32_t argb) {
+RendMaterial *eng_flat_material(uint32_t argb) {
     for (int i = 0; i < flat_count; i++)
         if (flat_keys[i] == argb) return &flat_materials[i];
     int i = flat_count < ENG_MAX_FLAT ? flat_count++ : 0;
-    GeometriumMaterial *m = &flat_materials[i];
+    RendMaterial *m = &flat_materials[i];
     memset(m, 0, sizeof(*m));
     m->palette[0] = argb | 0xff000000u; /* every mip texel indexes palette 0 */
     m->colors = 1;

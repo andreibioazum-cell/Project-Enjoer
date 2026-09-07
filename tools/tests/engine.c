@@ -153,7 +153,7 @@ static void test_meshes(void) {
     CHECK(eng_mesh_faces(ENG_MESH_PLANE, &faces) == 1);
     CHECK(eng_mesh_faces(ENG_MESH_SPHERE, &faces) > 10);
     CHECK(eng_mesh_faces(ENG_MESH_CYLINDER, &faces) == 10);
-    GeometriumMaterial *m = eng_flat_material(0xff112233u);
+    RendMaterial *m = eng_flat_material(0xff112233u);
     CHECK(m && m->palette[0] == 0xff112233u && m->colors == 1);
     CHECK(eng_flat_material(0xff112233u) == m); /* cached */
 }

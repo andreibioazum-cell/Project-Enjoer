@@ -1,5 +1,5 @@
 /* Software 3D: perspective cubes with a z-buffer, clipping and fog. */
-#include "geometrium_render_internal.h"
+#include "rend3d_internal.h"
 #include <math.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -10,7 +10,7 @@
 #endif
 
 #define NEAR_Z 0.08f
-#define FAR_Z GEOMETRIUM_FAR_Z
+#define FAR_Z REND_FAR_Z
 
 typedef struct {float x,y,z,u,v,light;} V3;
 
@@ -32,7 +32,6 @@ static float yaw_s, yaw_c, pitch_s, pitch_c;
 static float foc, view_x, view_y, side_x, side_y;
 static uint32_t fog_rgb;
 static float fog_a, fog_b;
-static int viewmodel;
 
 static uint32_t pack(uint32_t c) {
     uint32_t a = (c >> 24) & 0xff, r = (c >> 16) & 0xff, g = (c >> 8) & 0xff, b = c & 0xff;
@@ -46,7 +45,7 @@ static uint32_t shade_fog(uint32_t packed, float z, float shade) {
     if (ir > 255) ir = 255;
     if (ig > 255) ig = 255;
     if (ib > 255) ib = 255;
-    float t = viewmodel ? 0 : (z - fog_a) * fog_b;
+    float t = (z - fog_a) * fog_b;
     if (t < 0) t = 0;
     if (t > 1) t = 1;
     /* Signed channels: subtracting from uint32_t overflowed into rainbows. */
@@ -58,8 +57,8 @@ static uint32_t shade_fog(uint32_t packed, float z, float shade) {
     return (uint32_t)ir | ((uint32_t)ig << 8) | ((uint32_t)ib << 16) | 0xff000000u;
 }
 
-int geometrium3d_begin(Buffer *b, int sc, float cx, float cy, float cz, float yaw, float pitch, float fov_deg) {
-    dst = NULL;viewmodel=0;
+int rend3d_begin(Buffer *b, int sc, float cx, float cy, float cz, float yaw, float pitch, float fov_deg) {
+    dst = NULL;
     if (!b || !b->pixels || b->width <= 0 || b->height <= 0 || b->stride < b->width ||
         !isfinite(cx + cy + cz + yaw + pitch + fov_deg) || fov_deg < 5 || fov_deg > 175)
         return 0;
@@ -113,16 +112,16 @@ int geometrium3d_begin(Buffer *b, int sc, float cx, float cy, float cz, float ya
     return 1;
 }
 
-void geometrium3d_fog(float start,float end) {
+void rend3d_fog(float start,float end) {
     if (!isfinite(start+end) || start<0 || end<=start) return;
     fog_a=start;fog_b=1/(end-start);
 }
-void geometrium3d_sky(uint32_t top, uint32_t bot) {
+void rend3d_sky(uint32_t top, uint32_t bot) {
     if (!dst) return;
     uint32_t t = pack(top), b = pack(bot);
     fog_rgb = b;
-    fog_a = GEOMETRIUM_FOG_START;
-    fog_b = 1.0f / (GEOMETRIUM_FOG_END - GEOMETRIUM_FOG_START);
+    fog_a = REND_FOG_START;
+    fog_b = 1.0f / (REND_FOG_END - REND_FOG_START);
     int tr = t & 0xff, tg = (t >> 8) & 0xff, tb = (t >> 16) & 0xff;
     int br = b & 0xff, bg = (b >> 8) & 0xff, bb = (b >> 16) & 0xff;
     float horizon = rh * .5f + foc * pitch_s / fmaxf(.05f, pitch_c);
@@ -140,9 +139,7 @@ void geometrium3d_sky(uint32_t top, uint32_t bot) {
     }
 }
 
-void geometrium3d_viewmodel(int enabled) {viewmodel=enabled!=0;}
 static int to_view(float wx, float wy, float wz, V3 *o) {
-    if (viewmodel) {*o=(V3){wx,wy,wz,0,0,0};return wz>.01f;}
     float dx = wx - camx, dy = wy - camy, dz = wz - camz;
     float rx = dx * yaw_c - dz * yaw_s;          /* right */
     float rz = dx * yaw_s + dz * yaw_c;          /* forward */
@@ -317,21 +314,21 @@ static void fill_tri(ScreenV a, ScreenV b, ScreenV c, const Paint *paint) {
     }
 }
 
-void geometrium3d_polygon(const GeometriumVertex *w, int n, float nx, float ny, float nz,
-                   uint32_t color, GeometriumMaterial *material, const unsigned char *light) {
+void rend3d_polygon(const RendVertex *w, int n, float nx, float ny, float nz,
+                   uint32_t color, RendMaterial *material, const unsigned char *light) {
     if (!dst || n<3 || n>8) return;
-    float ex=viewmodel ? 0 : camx,ey=viewmodel ? 0 : camy,ez=viewmodel ? 0 : camz;
+    float ex=camx,ey=camy,ez=camz;
     float plane=nx*(ex-w[0].x)+ny*(ey-w[0].y)+nz*(ez-w[0].z);
     if (plane<=0) return;
     V3 buffers[2][16],*in=buffers[0],*out=buffers[1];
     float wx=0,wy=0,wz=0,max_distance2=0;
-    float face=geometrium_face_shade(nx,ny,nz),lo=LIGHT_LEVELS,hi=0;
+    float face=rend_face_shade(nx,ny,nz),lo=LIGHT_LEVELS,hi=0;
     unsigned clip=0,all=63;
     for (int i=0;i<n;i++) {
         to_view(w[i].x,w[i].y,w[i].z,&in[i]);
         in[i].u=w[i].u;in[i].v=w[i].v;
         float ambient=light ? light[i]/255.f : 1;
-        in[i].light=face*(GEOMETRIUM_DARK_FLOOR+(1-GEOMETRIUM_DARK_FLOOR)*ambient)*(LIGHT_LEVELS-1);
+        in[i].light=face*(REND_DARK_FLOOR+(1-REND_DARK_FLOOR)*ambient)*(LIGHT_LEVELS-1);
         if (in[i].light<lo) lo=in[i].light;
         if (in[i].light>hi) hi=in[i].light;
         if (!material) {wx+=in[i].x;wy+=in[i].y;wz+=in[i].z;}
@@ -355,12 +352,12 @@ void geometrium3d_polygon(const GeometriumVertex *w, int n, float nx, float ny, 
         int first=(int)fmaxf(0,lo+.5f),last=(int)fminf(LIGHT_LEVELS-1,hi+.5f);
         if (first>=LIGHT_LEVELS) first=LIGHT_LEVELS-1;
         if (last<first) last=first;
-        for (int level=first;level<=last;level++) geometrium_material_shades(material,level,fog_rgb);
+        for (int level=first;level<=last;level++) rend_material_shades(material,level,fog_rgb);
         paint.palette=material->shades[first];paint.shades=material->shades;
         paint.smooth=first!=last;
         paint.texels=material->mip;paint.plane=plane;
         paint.alpha=material->alpha;
-        paint.fog=!viewmodel && max_distance2>fog_a*fog_a;
+        paint.fog=max_distance2>fog_a*fog_a;
     } else paint.color=shade_fog(pack(color),distance,(lo+hi)*.5f/(LIGHT_LEVELS-1));
     ScreenV v[16];
     for (int i=0;i<n;i++) {
@@ -372,12 +369,12 @@ void geometrium3d_polygon(const GeometriumVertex *w, int n, float nx, float ny, 
     }
     for (int i=1;i<n-1;i++) fill_tri(v[0],v[i],v[i+1],&paint);
 }
-int geometrium3d_face_visible(int face,float plane) {
+int rend3d_face_visible(int face,float plane) {
     float eye=face<2 ? camy : face<4 ? camz : camx;
     return dst && ((face&1) ? eye<plane : eye>plane);
 }
 
-int geometrium3d_visible(float x, float y, float z, float hx, float hy, float hz) {
+int rend3d_visible(float x, float y, float z, float hx, float hy, float hz) {
     if (!dst || !isfinite(x+y+z+hx+hy+hz)) return 0;
     V3 center;
     to_view(x, y, z, &center);
@@ -387,51 +384,6 @@ int geometrium3d_visible(float x, float y, float z, float hx, float hy, float hz
     return center.z + radius >= NEAR_Z && center.z - radius <= FAR_Z &&
            fabsf(center.x) - center.z*view_x <= radius*side_x &&
            fabsf(center.y) - center.z*view_y <= radius*side_y;
-}
-
-/* Screen coordinates of a world point; 0 when it is behind the near plane. */
-int geometrium3d_project(float x, float y, float z, float *sx, float *sy) {
-    if (!dst || !sx || !sy || !isfinite(x + y + z)) return 0;
-    V3 v;
-    to_view(x, y, z, &v);
-    return project_v(v, sx, sy);
-}
-
-/* Overlay above the world (the hand): its screen region always passes the
- * z-test, yet the overlay parts still occlude each other correctly. */
-void geometrium3d_depth_clear(float x0, float y0, float x1, float y1) {
-    if (!dst) return;
-    if (x0 > x1) { float t = x0; x0 = x1; x1 = t; }
-    if (y0 > y1) { float t = y0; y0 = y1; y1 = t; }
-    int ix0 = (int)fmaxf(0, floorf(x0)), iy0 = (int)fmaxf(0, floorf(y0));
-    int ix1 = (int)fminf((float)rw, ceilf(x1)), iy1 = (int)fminf((float)rh, ceilf(y1));
-    if (ix1 <= ix0 || iy1 <= iy0) return;
-    for (int y = iy0; y < iy1; y++)
-        memset(zbuf + (size_t)y*rw + ix0, 0, (size_t)(ix1-ix0)*sizeof(*zbuf));
-}
-
-void geometrium3d_segment(float x,float y,float z,float x2,float y2,float z2,uint32_t color) {
-    if (!dst || !isfinite(x+y+z+x2+y2+z2)) return;
-    V3 a,b;to_view(x,y,z,&a);to_view(x2,y2,z2,&b);
-    for (int p=0;p<6;p++) {
-        float da=plane_distance(a,p),db=plane_distance(b,p);
-        if (da<0 && db<0) return;
-        if ((da<0)!=(db<0)) {
-            V3 v=lerp3(a,b,da/(da-db));
-            if(p==0)v.z=NEAR_Z;
-            if (da<0) a=v;else b=v;
-        }
-    }
-    float ax,ay,bx,by;
-    if (!project_v(a,&ax,&ay) || !project_v(b,&bx,&by)) return;
-    int steps=(int)ceilf(fmaxf(fabsf(bx-ax),fabsf(by-ay)));if(steps<1)steps=1;
-    /* Larger bias so the outline does not half-disappear into z-fighting. */
-    for (int i=0;i<=steps;i++) {
-        float t=(float)i/steps,iz=(1-t)/a.z+t/b.z;
-        int px=(int)floorf(ax+(bx-ax)*t),py=(int)floorf(ay+(by-ay)*t);
-        if (px>=0 && py>=0 && px<rw && py<rh && iz+iz*.010f>=zbuf[py*rw+px])
-            pix[py*rw+px]=pack(color);
-    }
 }
 
 /* Weighted sum instead of unsigned (b-a): channels cannot overflow.
@@ -510,7 +462,7 @@ static void upscale_smooth(void) {
     }
 }
 
-void geometrium3d_end(void) {
+void rend3d_end(void) {
     if (!dst || !pix) return;
     int H = dst->height, st = dst->stride;
     if (scale == 1) {

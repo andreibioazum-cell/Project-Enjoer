@@ -3,7 +3,7 @@
 #define ENG_INTERNAL_H
 #include "engine.h"
 #include "eng_api.h"
-#include "geometrium/geometrium_render_internal.h"
+#include "engine/render/rend3d_internal.h"
 
 enum {
     ENG_NODE, ENG_NODE3D, ENG_MESH, ENG_CAMERA,
@@ -74,16 +74,31 @@ void eng_basis_euler(EngBasis *out, float yaw, float pitch, float roll);
 /* ── mesh.c ── */
 typedef struct { int count; EngVec v[8]; EngVec n; float uv[8][2]; } EngFace;
 int eng_mesh_faces(int kind, const EngFace **out); /* built-in primitives */
-GeometriumMaterial *eng_flat_material(uint32_t argb);
+RendMaterial *eng_flat_material(uint32_t argb);
+
+/* ── fs.c: project/scene IO, host files or APK assets ── */
+#define ENG_FS_NAME_MAX 64
+void eng_fs_set_assets(AAssetManager *assets);
+int eng_fs_read(const char *path, char **out, size_t *len);   /* malloc'd text */
+int eng_fs_list(const char *dir, char names[][ENG_FS_NAME_MAX], int max);
 
 /* ── scene.c ── */
 void eng_scene_set_project_dir(const char *dir);
 int eng_scene_load(const char *path);              /* .escn text scene */
+int eng_scene_node_count(void);                    /* nodes in the live tree */
 void eng_scene_free(void);
 void eng_update(float dt);                          /* scripts + voxel world */
 int eng_draw(Buffer *buffer);                       /* camera, lights, meshes */
 
 /* ── script.c ── */
+/* Scripts that ship inside the engine binary: on a phone there is no compiler
+ * and no writable .so, so the projects' own C files fall back to these. */
+typedef struct {
+    const char *name;
+    void (*ready)(EngNode *);
+    void (*process)(EngNode *, float);
+} EngBuiltinScript;
+const EngBuiltinScript *eng_script_builtin(const char *name);
 EngScript *eng_script_load(const char *name, const char *project_dir);
 void eng_script_ready_run(void);
 void eng_script_process_all(float dt);
@@ -105,13 +120,21 @@ void eng_input_reset(void);
 void eng_input_feed_key(int key, int down);
 void eng_input_feed_pointer(float x, float y, int down);
 
-/* ── project.c ── */
+/* ── project.c: the launcher's project list ── */
+int eng_project_scan(const char *root);        /* returns the project count */
+int eng_project_count(void);
+const char *eng_project_dir(int index);
+const char *eng_project_title(int index);
+const char *eng_project_root(void);
+int eng_project_index(void);                   /* running project, -1 = none */
+int eng_project_open(int index);
 int eng_project_load(const char *directory);
 void eng_project_free(void);
 int eng_project_active(void);
 const char *eng_project_name(void);
 
 /* ── api.c ── */
+int eng_block_from_name(const char *name);   /* "grass" -> BLOCK_GRASS, 0 air */
 int eng_init(AAssetManager *assets);
 void eng_time_internal(double now, double dt);
 

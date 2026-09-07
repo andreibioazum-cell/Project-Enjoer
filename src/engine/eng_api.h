@@ -17,7 +17,7 @@ typedef struct EngNode EngNode;
 /* ── key codes for eng_input_is_pressed ─────────────────────────────────── */
 enum {
     ENG_KEY_LEFT = 1000, ENG_KEY_RIGHT, ENG_KEY_UP, ENG_KEY_DOWN,
-    ENG_KEY_A, ENG_KEY_D, ENG_KEY_W, ENG_KEY_S, ENG_KEY_SPACE
+    ENG_KEY_A, ENG_KEY_D, ENG_KEY_W, ENG_KEY_S, ENG_KEY_SPACE, ENG_KEY_SHIFT
 };
 
 /* ── logging ────────────────────────────────────────────────────────────── */
@@ -75,6 +75,14 @@ void eng_light_set_range(EngNode *omni, float range); /* OmniLight3D only */
 void eng_mesh_set(EngNode *node, const char *mesh);
 void eng_mesh_set_color(EngNode *node, float r, float g, float b);
 void eng_mesh_set_size(EngNode *node, float size);
+
+/* ── VoxelWorld3D ── */
+/* Read and write single cells of the streamed voxel world. Coordinates are
+ * half-block cells (two cells per block); material is "grass", "dirt",
+ * "stone", "sand", "water", "log", "leaves" or "air". Writes only land inside
+ * chunks that are currently streamed in, and return 0 otherwise. */
+int eng_voxel_get_cell(int x, int y, int z);
+int eng_voxel_set_cell(int x, int y, int z, const char *material);
 
 /* ── misc ───────────────────────────────────────────────────────────────── */
 double eng_time(void);        /* seconds since the engine started */
