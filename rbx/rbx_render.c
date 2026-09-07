@@ -277,7 +277,7 @@ static void fill_tri(ScreenV a, ScreenV b, ScreenV c, const Paint *paint) {
 }
 
 void rbx3d_polygon(const RbxVertex *w, int n, float nx, float ny, float nz,
-                   uint32_t color, RbxMaterial *material) {
+                   uint32_t color, RbxMaterial *material, int shadow) {
     if (!dst || n < 3 || n > 8) return;
     float plane=nx*(camx-w[0].x)+ny*(camy-w[0].y)+nz*(camz-w[0].z);
     if (plane<=0) return;
@@ -298,9 +298,11 @@ void rbx3d_polygon(const RbxVertex *w, int n, float nx, float ny, float nz,
         V3 *swap = in; in = out; out = swap;
     }
     float shade = .52f + .5f * fmaxf(0, nx*.32f + ny*.88f + nz*.35f);
+    if (shadow) shade *= RBX_SUN_SHADOW;
     Paint paint = {0};
     if (material) {
         int face=ny>.5f ? 0 : ny<-.5f ? 1 : nz>.5f ? 2 : nz<-.5f ? 3 : nx>.5f ? 4 : 5;
+        if (shadow) face+=SHADE_FACES;
         paint.palette=rbx_material_shades(material,face,fog_rgb);
         paint.texels=material->mip;paint.plane=plane;
         paint.fog=max_distance2>fog_a*fog_a;
@@ -325,6 +327,27 @@ int rbx3d_visible(float x, float y, float z, float hx, float hy, float hz) {
     return center.z + radius >= NEAR_Z && center.z - radius <= FAR_Z &&
            fabsf(center.x) - center.z*view_x <= radius*side_x &&
            fabsf(center.y) - center.z*view_y <= radius*side_y;
+}
+
+/* Экранные координаты мировой точки; 0 — точка за близкой плоскостью. */
+int rbx3d_project(float x, float y, float z, float *sx, float *sy) {
+    if (!dst || !sx || !sy || !isfinite(x + y + z)) return 0;
+    V3 v;
+    to_view(x, y, z, &v);
+    return project_v(v, sx, sy);
+}
+
+/* Оверлей поверх мира (рука): район экрана всегда проходит z-тест,
+ * но сами части оверлея по-прежнему перекрываются корректно. */
+void rbx3d_depth_clear(float x0, float y0, float x1, float y1) {
+    if (!dst) return;
+    if (x0 > x1) { float t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { float t = y0; y0 = y1; y1 = t; }
+    int ix0 = (int)fmaxf(0, floorf(x0)), iy0 = (int)fmaxf(0, floorf(y0));
+    int ix1 = (int)fminf((float)rw, ceilf(x1)), iy1 = (int)fminf((float)rh, ceilf(y1));
+    if (ix1 <= ix0 || iy1 <= iy0) return;
+    for (int y = iy0; y < iy1; y++)
+        memset(zbuf + (size_t)y*rw + ix0, 0, (size_t)(ix1-ix0)*sizeof(*zbuf));
 }
 
 void rbx3d_segment(float x,float y,float z,float x2,float y2,float z2,uint32_t color) {

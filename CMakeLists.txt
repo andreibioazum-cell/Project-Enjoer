@@ -46,6 +46,7 @@ add_library(enjoer SHARED
     rbx/rbx_input.c
     rbx/rbx_scene.c
     rbx/rbx_hud.c
+    rbx/rbx_hand.c
     rbx/rbx_game.c
     ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
 # Filename contract of the existing, unchanged APK workflow and manifest.

@@ -2,8 +2,12 @@
 #include "rbx/rbx_world_internal.h"
 #include <stdio.h>
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"%s:%d: %s\n",__func__,__LINE__,#x);exit(1);}}while(0)
-int rbx3d_visible(float x,float y,float z,float hx,float hy,float hz) {(void)x;(void)y;(void)z;(void)hx;(void)hy;(void)hz;return 0;}
-void rbx3d_surface(int x,int y,int z,int u,int v,int face,int block) {(void)x;(void)y;(void)z;(void)u;(void)v;(void)face;(void)block;}
+int rbx3d_visible(float x,float y,float z,float hx,float hy,float hz) {(void)x;(void)y;(void)z;(void)hx;(void)hy;(void)hz;return 1;}
+static int drawn_lit,drawn_shadow;
+void rbx3d_surface(int x,int y,int z,int u,int v,int face,int block,int shadow) {
+    (void)x;(void)y;(void)z;(void)u;(void)v;(void)face;(void)block;
+    if(shadow) drawn_shadow++;else drawn_lit++;
+}
 static void test_chunks(void) {
     unsigned char a[BASE_CELLS],b[BASE_CELLS];int types[BLOCK_COUNT]={0},low=100,high=0;
     const int coords[][2]={{0,0},{1,-1},{-1,1},{-3,-2},{2,3},{3,-4}};
@@ -100,4 +104,54 @@ static void test_mesh(void) {
     check_mesh(0,0);check_mesh(-1,0);check_mesh(1,0);check_mesh(0,-1);check_mesh(-1,-1);
     puts("PASS exact greedy/partial face coverage: no hidden or duplicate faces, water contacts, chunk edges and interior grass cuts");
 }
-int main(void) {dt=1.0/60;test_chunks();test_streaming();test_mesh();return 0;}
+/* Точная ссылка для теней: 3D-DDA по ячейкам вдоль направления солнца. */
+static int ref_sunlit(float x,float y,float z) {
+    float p[3]={x*2,y*2,z*2},d[3]={.5f,1.f,.75f};
+    int c[3],crossings=0;float tmax[3],tdelta[3];
+    for(int i=0;i<3;i++) {
+        c[i]=(int)floorf(p[i]);tmax[i]=((c[i]+1)-p[i])/d[i];tdelta[i]=1/d[i];
+    }
+    int b0=rbx_world_cell(c[0],c[1],c[2]);
+    if(b0!=BLOCK_AIR&&b0!=BLOCK_WATER) return 0;
+    for(int n=0;n<600;n++) {
+        int a=tmax[0]<=tmax[1]&&tmax[0]<=tmax[2]?0:tmax[1]<=tmax[2]?1:2;
+        tmax[a]+=tdelta[a];c[a]++;
+        if(a!=1&&++crossings>31) return 1; /* дальняя граница тени */
+        if(c[1]<0||c[1]>=WORLD_HEIGHT*2) return 1;
+        int b=rbx_world_cell(c[0],c[1],c[2]);
+        if(b!=BLOCK_AIR&&b!=BLOCK_WATER) return 0;
+    }
+    return 1;
+}
+static void test_shadows(void) {
+    rbx_world_build(RBX_WORLD_SEED);
+    /* Столб 2×2 блоков и постройки вокруг спавна, включая половинные ячейки. */
+    for(int y=26;y<=45;y++) for(int x=32;x<=35;x++) for(int z=32;z<=35;z++)
+        CHECK(rbx_world_set(x,y,z,BLOCK_STONE));
+    CHECK(rbx_world_set(40,25,40,BLOCK_STONE));
+    CHECK(rbx_world_set(44,30,36,BLOCK_GRASS));
+    int checked=0;
+    for(int x=8;x<=56;x++) for(int z=8;z<=56;z++) for(int k=0;k<2;k++) {
+        int h=rbx_terrain_height(x/2,z/2);
+        float y=h+1.f+k*.6f,wx=x*.5f,wz=z*.5f;
+        CHECK(rbx_sunlit(wx,y+.002f,wz)==ref_sunlit(wx,y+.002f,wz));
+        checked++;
+    }
+    for(int i=0;i<2500;i++) { /* детерминированные псевдослучайные точки */
+        float wx=-30.f+60.f*(i*37%401)/401.f,wy=1.5f+30.f*(i*53%397)/397.f,wz=-30.f+60.f*(i*71%409)/409.f;
+        CHECK(rbx_sunlit(wx,wy,wz)==ref_sunlit(wx,wy,wz));
+        checked++;
+    }
+    /* Направление: солнце со стороны +X/+Z, тень уходит в -X/-Z. */
+    CHECK(rbx_sunlit(15.5f,13.002f,15.5f)==0); /* у подножия, сторона тени */
+    CHECK(rbx_sunlit(18.5f,13.002f,18.5f)==1); /* солнечная сторона */
+    CHECK(rbx_sunlit(16.5f,23.5f,16.5f)==1);   /* крыша столба освещена */
+    CHECK(rbx_sunlit(16.5f,12.9f,16.5f)==0);   /* под столбом темно */
+    /* Меш несёт бит тени: видимый мир содержит и lit-, и shadow-грани. */
+    drawn_lit=drawn_shadow=0;
+    rbx_world_draw();
+    CHECK(drawn_lit>100&&drawn_shadow>20);
+    printf("PASS sharp sun shadows: exact match with cell DDA over %d probes, direction, %d lit + %d shadowed faces in mesh\n",
+           checked,drawn_lit,drawn_shadow);
+}
+int main(void) {dt=1.0/60;test_chunks();test_streaming();test_mesh();test_shadows();return 0;}

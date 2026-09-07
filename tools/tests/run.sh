@@ -17,15 +17,15 @@ ACTORS="rbx/rbx_player.c rbx/rbx_input.c rbx/rbx_interact.c"
 # Intentional splitting of source/flag lists, no .c includes or generated runtime.
 $CC $FLAGS $CORE graphics/image.c rbx/rbx_render.c rbx/rbx_shapes.c rbx/rbx_material.c tools/tests/render.c -lm -o "$DIR/render"
 "$DIR/render"
-$CC $FLAGS $CORE $WORLD $ACTORS rbx/rbx_perf.c rbx/rbx_game.c rbx/rbx_scene.c rbx/rbx_hud.c tools/tests/controls.c -lm -o "$DIR/controls"
+$CC $FLAGS $CORE $WORLD $ACTORS rbx/rbx_perf.c rbx/rbx_game.c rbx/rbx_scene.c rbx/rbx_hud.c rbx/rbx_hand.c tools/tests/controls.c -lm -o "$DIR/controls"
 "$DIR/controls"
 $CC $FLAGS $CORE $WORLD tools/tests/world.c -lm -o "$DIR/world"
 "$DIR/world"
-$CC $FLAGS $CORE $WORLD $ACTORS tools/tests/edits.c -lm -o "$DIR/edits"
+$CC $FLAGS $CORE $WORLD $ACTORS rbx/rbx_hand.c tools/tests/edits.c -lm -o "$DIR/edits"
 "$DIR/edits" "$DIR/fixtures"
 $CC $FLAGS -DPREVIEW_EXTERNAL_AUDIO $CORE sound/sound.c tools/tests/audio.c -lm -lpthread -o "$DIR/audio"
 "$DIR/audio"
-$CC $FLAGS $CORE $WORLD $ACTORS rbx/rbx_perf.c rbx/rbx_game.c rbx/rbx_scene.c rbx/rbx_hud.c \
+$CC $FLAGS $CORE $WORLD $ACTORS rbx/rbx_perf.c rbx/rbx_game.c rbx/rbx_scene.c rbx/rbx_hud.c rbx/rbx_hand.c \
     rbx/rbx_render.c rbx/rbx_shapes.c rbx/rbx_material.c graphics/image.c graphics/gfx_frame.c \
     graphics/gfx_draw.c graphics/gfx_text.c graphics/ttf/ttf_font.c graphics/ttf/ttf_outline.c \
     tools/tests/game.c -lm -o "$DIR/game"

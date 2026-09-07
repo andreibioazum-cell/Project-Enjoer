@@ -35,7 +35,7 @@ static void test_box(float x, float y, float z, float hx, float hy, float hz, fl
         }
         float nx = normals[face][0] * c + normals[face][2] * s;
         float nz = -normals[face][0] * s + normals[face][2] * c;
-        rbx3d_polygon(w, 4, nx, normals[face][1], nz, color, NULL);
+        rbx3d_polygon(w, 4, nx, normals[face][1], nz, color, NULL, 0);
     }
 }
 
@@ -237,7 +237,7 @@ static void test_voxel_materials(void) {
     Buffer b = make_buffer(160, 120, 5);
     CHECK(rbx3d_begin(&b, 1, .5f, .5f, -2, 0, 0, 72));
     rbx3d_sky(0xFF6EC5F7u, 0xFF6EC5F7u);
-    rbx3d_surface(0,0,0,2,2,3,BLOCK_STONE);
+    rbx3d_surface(0,0,0,2,2,3,BLOCK_STONE,0);
     rbx3d_end();
     uint32_t colors[16]; int count = 0;
     for (int y = 48; y < 72; y++) for (int x = 68; x < 92; x++) {
@@ -259,9 +259,9 @@ static void test_half_uv(void) {
             Buffer *b=pass ? &parts : &whole;
             CHECK(rbx3d_begin(b,1,origin+extent*.5f,origin+extent*.5f,origin-2,0,0,72));
             rbx3d_sky(0xff6ec5f7u,0xff6ec5f7u);
-            if(!pass)rbx3d_surface(origin*2,origin*2,origin*2,extent*2,extent*2,3,BLOCK_DIRT);
+            if(!pass)rbx3d_surface(origin*2,origin*2,origin*2,extent*2,extent*2,3,BLOCK_DIRT,0);
             else for(int y=0;y<extent*2;y++) for(int x=0;x<extent*2;x++)
-                rbx3d_surface(origin*2+x,origin*2+y,origin*2,1,1,3,BLOCK_DIRT);
+                rbx3d_surface(origin*2+x,origin*2+y,origin*2,1,1,3,BLOCK_DIRT,0);
             rbx3d_end();
         }
         int different=0;
@@ -283,7 +283,7 @@ static void test_merged_fog(void) {
         int step=pass ? 1 : 20;
         for(int z=2;z<22;z+=step)for(int x=-10;x<10;x+=step) {
             RbxVertex v[4]={{x,0,z,0,0},{x,0,z+step,0,step},{x+step,0,z+step,step,step},{x+step,0,z,step,0}};
-            rbx3d_polygon(v,4,0,1,0,0,&flat);
+            rbx3d_polygon(v,4,0,1,0,0,&flat,0);
         }
         rbx3d_end();
     }
