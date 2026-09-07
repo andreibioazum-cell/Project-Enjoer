@@ -1,347 +1,85 @@
-# Enjoer — two playsets, one C99 engine
+# Enjoer — a small C99 3D engine
 
-A landscape first-person block game plus a full 2D platformer, both in
-**C99** on the same 2D/asset/audio core. The launcher menu (top-left button,
-or `Esc` / `M`) switches playsets:
+Enjoer is a general-purpose 3D engine in **C99**: projects with text scene
+files, typed nodes, physics and C scripts, rendered by a software rasterizer
+with a streamed voxel-world backend. There is no hard-coded game behind it
+anymore — the app *is* the engine. At startup a launcher lists every engine
+project it finds; picking one loads its scene and runs it. The same binary
+runs on Android (APK) and in the PC/browser preview.
 
-- **Geometrium** (`src/geometrium/`) — procedural terrain with generated
-  caves, trees, transparent water, walking, jumping, toggleable flight and
-  half-cube building.
-- **Platformium** (`src/platformium/`) — a side-scrolling platformer
-  toolkit: tile levels, coyote time and jump buffering, springs, one-way
-  platforms, moving lifts, walkers and flyers, spikes, lava, coins,
-  checkpoints, a goal flag, particles and a lookahead camera. Four worlds
-  ship in the APK (three built in, one as a text level asset), and more
-  platformers can be added as plain-text levels without recompiling
-  (see `assets/levels/README.md`).
+Three ready projects ship in `projects/`:
 
-Everything in the game — HUD, labels, error screens — is English.
+- **Demo Scene** (`projects/demo`) — meshes, a sun and a lamp, an orbiting
+  camera and two C scripts (`spin`, `orbit`).
+- **Physics Playground** (`projects/bounce`) — a `RigidBody3D` ball you push
+  around `StaticBody3D` colliders with WASD/arrows; Space jumps, a pointer
+  press pops it. Driven by the `roller` script through the engine input API.
+- **Voxel World** (`projects/voxel_world`) — the streamed block terrain as a
+  `VoxelWorld3D` node seen from a scene camera.
+
+Everything in the app — launcher, labels, error screens — is English.
 
 ## Repository layout
 
 ```
-assets/        runtime assets: textures/*.png, fonts/*.ttf, sounds/*.wav,
-               levels/*.txt (extra Platformium worlds)
+assets/        runtime assets: textures/*.png, fonts/*.ttf, sounds/*.wav
 game/          Android packaging: AndroidManifest.xml and the Java activity
-projects/      engine projects: demo scene and the voxel world as a project
+projects/      engine projects (project.eng + scenes/*.escn + scripts/*.c)
 src/           all C sources
   main.c       Android entry point (native activity)
-  engine.h     compact platform/asset/HUD/lifecycle API
-  core/        app state, error handling, logging, asset reads, playset router
+  engine.h     compact platform/asset/immediate-HUD/lifecycle API
+  core/        app state, error handling, logging, asset reads,
+               and game.c — the engine launcher/router every platform calls
   graphics/    2D renderer: primitives, textures, text (+ ttf/)
   sound/       audio: PCM16 mixer and AudioTrack output
-  geometrium/  the 3D playset: render, terrain, water, player, input, HUD
-  platformium/ the 2D platformer: levels, physics, actors, camera, HUD
-  engine/      engine layer: node tree, scenes, projects, C scripting
+  engine/      the engine: projects, scenes, nodes, physics, input, scripting
+    render/    the 3D/voxel render backend (rasterizer, materials, terrain,
+               streamed world, skylight, water)
 third_party/   stb_image / stb_image_write
 tools/         preview server, regression tests, offline art tool, scaffolds
+stage_assets.py  stages assets/ and projects/ into the APK asset tree
 ```
 
-Sounds live with the other assets in `assets/sounds/` (not in a game
-folder); `stage_assets.py` stages the whole `assets/` tree into the APK.
+`stage_assets.py` also writes `projects/index.txt` (one project per line)
+because the Android asset manager cannot enumerate subdirectories; the engine
+reads that index inside the APK and simply scans the folder on the host.
 
-## Controls
-
-### Phone
-
-- Black joystick on the left — movement. Transparent backing, knob without an
-  outline, thick black outer ring.
-- Swipe on the right — camera. A short tap of this area breaks the selected
-  part; swiping or holding the camera alone breaks nothing.
-- **"Break" / "Place"** — text-only round buttons under the white crosshair.
-  Holding a button repeats the action; a short press is processed even
-  between frames.
-- Six slots at the bottom select the material: grass, dirt, stone, sand,
-  wood, leaves.
-- Gravity and collisions are on by default; **"Jump"** sits on the right.
-- The white **"Flight"** button at the top toggles flight. In flight the jump
-  button hides and the joystick moves along the view, including up/down.
-  Release to hover; turn flight off to fall again.
-- Stick, camera, jump and building support independent fingers. Cancelling a
-  gesture neither presses toggles nor leaves actions held.
-
-Android uses `sensorLandscape` — both landscape orientations. The top-right
-corner shows the **measured FPS**, averaged over about half a second. The
-counter uses the real frame interval, not the clamped physics step.
-
-### PC / browser
-
-| Key / action | Binding |
-| --- | --- |
-| `W A S D` | Move |
-| Drag on the right / arrows | Camera |
-| Short left click on the right / `E` | Break part |
-| Right mouse button / `R` | Place part |
-| `1`–`6` / panel slots | Material |
-| `Space` | Jump; swim up in water |
-| `F` | Toggle flight |
-| `Space` / `Shift` in flight | Up / down |
-
-Right mouse works while dragging with the left one. Losing focus and window
-resizes reset all holds.
-
-### Platformium
-
-- Touch: left / right pads on the left, **Jump** on the right; every finger
-  owns one control. Keyboard: `A`/`D` or arrows run, `Space`/`W`/up jumps
-  (hold for a higher arc), `R` restarts the level.
-- The round button in the top-left corner (or `Esc` / `M`) opens the
-  launcher. In the launcher, tap the **Platformium** card to keep playing,
-  or a numbered level chip to start a specific world; locked chips unlock
-  by finishing the previous world. Progress (unlocked worlds and best
-  scores) persists between sessions.
-- Mechanics: run, jump with coyote time and jump buffering, variable jump
-  height, springs (`S`), one-way platforms (`=`), moving lifts (`M`/`V`),
-  stompable walkers, flying enemies, spikes, lava, coins, checkpoints and
-  the goal flag. Falling off the bottom of a sky level ends the run.
-
-## Platformium levels (make your own platformer)
-
-Four worlds ship: *Green Hills*, *Cave Depths*, *Sky Ruins* (compiled in)
-and *River Run* (the text file `assets/levels/bonus.txt`, staged into the
-APK like every other asset). The engine also tries
-`assets/levels/extra1.txt` … `extra8.txt` at startup, so additional
-platformers ship by dropping text files in `assets/levels/` — no C changes.
-The map format, tile legend and design guidelines are documented in
-`assets/levels/README.md`. Levels need a player start `P` and a goal `G`;
-gaps of up to three tiles and one-tile steps keep them clearable with
-touch controls. `tools/tests/platformer.c` proves every shipped world is
-beatable by simulating a simple run-and-jump bot to the flag.
-
-## Eight parts and PNGs
-
-One source block **1×1×1** consists of **2×2×2 parts of size 0.5×0.5×0.5**.
-The camera ray selects exactly one part up to six source blocks away.
-Placement goes into the neighbouring half cell; occupied space and player
-intersection are forbidden. The bottom world layer is protected from
-destruction; the build height is 64 source blocks. Water does not block the
-ray that picks solid blocks.
-
-`assets/textures/` contains nine **original 32×32 RGBA PNGs**. The game reads
-these files instead of generating color patterns at startup. One texture
-still covers one source block: a quarter of a face receives the matching
-**16×16 pixels**, not a downscaled copy of the whole image. UVs are bound to
-the world grid, including negative coordinates. Merged faces repeat the PNG
-once per source block, never stretching it. A horizontal cut inside a grass
-block shows dirt.
-
-The optional offline authoring tool is `python3 tools/art/make_assets.py`.
-It reproduces the PNGs and the short PCM16 jump/break/place effects. Sound
-plays on Android; the browser preview is silent.
-
-## Terrain: gentle hills and caves
-
-- Heights come from two soft value-noise octaves; the slope between
-  neighbouring columns stays well below one block, so the ground climbs in
-  short single steps instead of whole-block walls.
-- **Generated caves** ("holes") are carved by 3D noise inside the stone: a
-  sealed four-block crust keeps the surface intact, the two bottom layers
-  stay bedrock, and lake beds are never carved, so natural water cannot
-  drain into the underground.
-- A small safe clearing surrounds the spawn point.
-
-## Soft lighting
-
-- **Harsh sun and contact shadows are removed, lighting is kept.** Face
-  volume reads through a gentle brightness difference, not black patches
-  under blocks.
-- Instead of binary sun/shadow the engine uses **diffuse skylight**. Open
-  columns get daylight; sideways spread decays gradually. Walls and ceilings
-  hold light back, so sealed mines are truly dark while entrances get a
-  smooth transition. A 0.5×0.5 opening counts.
-- Leaves transmit light partially. No sharp brightness jumps under canopies;
-  water is transparent to light and casts no false black shadow.
-- Light is baked on the half grid **only when opacity changes**. The chunk
-  cache stores the needed height range between solid ground and sky; a
-  shared scratch halo buffer is reused. No per-frame ray tracing.
-- Four light values per quad interpolate perspectively, together with `1/z`.
-  Greedy meshing merges faces only along directions where the light is
-  constant, so gradients never stretch and no seam appears. Opaque neighbour
-  cells are not averaged into black AO. Brightness and fog palettes are
-  cached.
-- Fog on dark surfaces is dark too: a far mine wall does not glow with the
-  daytime sky colour. A small minimum brightness keeps outlines readable; it
-  is not an artificial light source in the mine.
-
-## First-person hand
-
-- The arm is **one solid rectangular cuboid** running from the lower-right
-  screen corner to the held block — a single box, not stacked flat slabs.
-  The held block is a second closed cuboid with six offset faces.
-- The whole model is built in camera space with orthonormal axes: view
-  rotation neither spins the block separately nor distorts it. Textures are
-  chosen by **local** face: grass tops stay on top at any camera rotation.
-- The hand draws after the world with the same rasterizer; only its screen
-  region of the z-buffer is cleared. It does not poke through walls, while
-  its own parts overlap correctly.
-- Swing, material change and walk bob are preserved. Bob fades out smoothly
-  when stopping and is absent in flight. The whole hand's light follows the
-  brightness at the player's eyes smoothly, with no separate harsh patches
-  under trees and no fog on the held block.
-
-## Transparent water
-
-- Water renders **see-through**: all opaque geometry draws first, then water
-  faces blend over the framebuffer (~55% water colour), so lake beds and
-  pool walls show through. Waterfall and spreading behaviour are unchanged.
-- Natural water is a source. Breaking a floor or wall part next to water
-  **fills the freed half cell** instead of leaving a dry hole.
-- The simulation steps at 0.1 s: down first, then lateral faces with support.
-  Water never passes through blocks, never jumps diagonally and never flows
-  uphill. Lateral flow reaches up to seven steps (0.5 block each); a new
-  lateral stream starts at the foot of a waterfall. This is a **blocky
-  source/stream simulation**, not a continuous fluid or volume-conserving
-  one.
-- Covering a source/channel removes the unsupported stream; reopening the
-  channel restarts it. Changing the floor under a source updates neighbouring
-  water as well.
-- Only a queue of active cells near the player is processed, up to 512 per
-  step. The queue is bounded and de-duplicated; overflow has a gradual
-  recovery with its own small budget. Calm water performs no world scans.
-  Spreading remeshes affected chunks **without recomputing light**.
-- Sources, lateral flow and falling water are distinguished in the save.
-  After loading, a stream does not become an infinite source; simulation
-  resumes when returning to an evicted area.
-
-## World, saves and performance
-
-- Generation stores source blocks in **16×16×64** chunks. Splitting into
-  eight parts **does not multiply the whole world in memory by eight**: only
-  modified source blocks are stored separately, eight materials per record.
-- The cache is limited to **11×11 chunks**: the visible 9×9 area plus one
-  prefetch ring. Seed — `GEOMETRIUM_WORLD_SEED` in
-  `src/geometrium/geometrium_internal.h`.
-- View distance is one chunk shorter than before: fog to **64 source
-  blocks**, far plane 80. The initial near area is prepared immediately; the
-  far area completes gradually. Fog retreats as chunks become ready and
-  never exposes unmeshed edges.
-- Generation/meshing are serviced nearest-first: at most two jobs per frame
-  with a soft 2.5 ms budget, no synchronous row rebuilds while moving.
-- Exposed uniform faces merge with **greedy meshing**. Mixed parts and
-  contacts with partially broken neighbours are handled exactly. After an
-  edit only affected chunks and the necessary boundary neighbours rebuild.
-- PNG mip levels and lighting palettes are cached. The detail level stays
-  local even on large merged planes; fog is per pixel distance, not one
-  colour per chunk.
-- Perspective **1/z** for depth/UV and signed colour arithmetic are kept.
-  The bilinear Q8 upscale reuses horizontal rows with the same rounding and
-  no overflow; the exact 2× fast path uses 3:1 weights via adds/shifts.
-  Back faces are culled before the frustum test; fully visible polygons skip
-  extra clipping. The HUD draws at screen resolution.
-- 3D starts with a ~2.2 MP budget and adapts the internal scale from render
-  time with hysteresis. Preview network latency never controls Android
-  quality.
-- The shorter view distance and lighter terrain generator cut real work:
-  the regression scenario now renders **121 chunks / 26 218 quads** instead
-  of 169 / 40 414, and the 180-frame host run dropped from ~6.2 ms to
-  ~5.5 ms per frame at 960×540 (11.0 → 10.3 ms at 2400×1080).
-- Edits survive chunk eviction and restarts. The `world.edits` file is saved
-  periodically and on minimize/close: temp file + atomic rename, version,
-  seed, length and checksum validation. On Android this is the app-private
-  folder; in the preview it is the Git-ignored `data/` folder. The limit is
-  65 536 affected source blocks, including water changes; the player
-  position is not saved.
-- Save format is **EJVOX02**: eight materials and eight flow states per
-  record. Old **EJVOX01 files are read automatically**; the next save writes
-  the new version. An old APK cannot read the new format, so do not open
-  this world in an old build after updating.
-
-## Preview
+## Quick start (PC / browser)
 
 ```sh
 tools/preview/build.sh
-./preview --port 8090 --assets assets
-# Open http://localhost:8090; run from the repository root.
+./preview --port 8090
+# open http://localhost:8090 — the launcher appears; tap a project
 ```
 
-With `--project <dir>` the preview runs the engine instead of the built-in
-game and loads that project's scene tree, e.g.
-`./preview --project projects/demo`.
+`./preview --project projects/demo` skips the launcher and starts one project
+directly; `--projects <dir>` points the launcher at another project root.
+Default frame is **960×540**; `--w`, `--h`, `--port`, `--assets`, `--storage`
+are available. The server listens on `0.0.0.0` and the page uses relative
+URLs, so it works through an external HTTPS proxy.
 
-Default **960×540**; `--w`, `--h`, `--port`, `--storage` are available. The
-server listens on `0.0.0.0`; the browser uses relative URLs and works through
-an external HTTPS proxy. The frame is letterboxed, not stretched. Transport
-is JPEG with at most one frame ahead instead of multi-megabyte RGBA per
-request; uncompressed `/frame.rgba` remains for diagnostics. Events keep
-their order and finger IDs; redundant moves coalesce.
+## Controls
 
-## Tests
+The launcher: tap/click a card to run that project. The round button in the
+top-left corner — or `Esc` / `M` — opens it again at any time.
 
-```sh
-tools/tests/run.sh
-SANITIZE=1 tools/tests/run.sh
-```
+While a project runs:
 
-39 check groups: original PNGs/palettes/mips, quarter UVs, smooth
-perspective light and fog, depth/clipping, bit-exact upscale/stride,
-walk/flight/multitouch/FPS, exact mesh coverage, dark mines and half
-openings, soft leaves and chunk borders, the closed two-box hand and its
-pixel stability across 48 yaw/pitch combinations, water
-fill/spread/cover/save, water queue overflow, edits/collisions/hash indices,
-old-save migration, the PCM mixer and full frames at 960×540 and 2400×1080.
-The `platformer` binary adds the Platformium suite: the launcher router,
-a run-and-jump bot that finishes every shipped world, and mechanics checks
-(one-way platforms, springs, hazards, coins, checkpoints, stomping, lifts,
-progress persistence). The sanitizer build enables ASan, UBSan and
-float-cast-overflow.
+| Input | Effect |
+| --- | --- |
+| `W A S D` / arrows | move (scripts that poll `ENG_KEY_*`, or the free camera) |
+| drag / move pointer | handed to scripts (`eng_input_pointer`), or orbits the free camera |
+| `Space` / `Shift` | up / down for the free camera |
 
-Diagnostic frames for the hand, the mine and the water can be written to a
-folder:
+Scenes whose current `Camera3D` carries **no** script get the engine's free
+camera automatically: dragging orbits it, `W A S D` translates it in the view
+plane, `Space`/`Shift` change altitude. A scripted camera (as in `demo` and
+`bounce`) keeps full control and is never touched by the free camera.
 
-```sh
-mkdir -p build-tests/visual
-ENJOER_TEST_IMAGES=build-tests/visual tools/tests/run.sh
-# Result: PPM frames in the ignored build-tests/visual folder.
-```
+On a phone: touch a card to pick a project; one finger drags the camera; the
+on-screen round button, `Esc` or `M` open the launcher.
 
-`tools/tests/browser.cjs` is an extra check of real Chromium through
-Playwright: four fingers, cancel/blur, FPS, breaking and placing one part,
-save contents, the material panel, mouse button combinations and window
-sizes. Run it on a **separate test world**, never on the user's current game:
-
-```sh
-mkdir -p build-tests/half-voxel/browser-data
-# A fresh empty folder for every independent run.
-./preview --port 8091 --storage build-tests/half-voxel/browser-data
-# In another terminal, with Playwright and Chromium installed:
-NODE_PATH="$PWD/build-tests/node_modules" node tools/tests/browser.cjs
-```
-
-`TEST_URL`, `TEST_OUTPUT`, `TEST_SAVE`, `CHROMIUM_EXECUTABLE_PATH` and
-`CHROMIUM_ARGUMENTS` (a JSON array) are supported for unusual browser
-locations.
-
-## Sources and Android
-
-`engine.h` is the compact platform/asset/immediate-HUD/lifecycle API.
-`src/core/`, `src/graphics/`, `src/sound/` and `src/geometrium/` hold the
-separate C modules. Old APIs/state, DimScript arrays and strings, the text
-IME/JNI layer, the draw command queue, the old sprite loader and unneeded
-scene objects are gone. The Java activity only handles fullscreen.
-
-Every `.c` is its own translation unit; lighting and water are split into
-`geometrium_light.c` and `geometrium_water.c`. `.c` files are never pulled
-in via `#include`. External libraries live in `third_party/`.
-
-Android builds with the existing CMake/NDK flow and `stage_assets.py`; the
-latter copies the whole `assets/` tree (PNGs, font and WAVs) and compiles the
-Java activity from `game/java` into `classes.dex` when an SDK is present. The
-CI workflow still calls `stage_assets.py game/assets staging/assets`; the
-script accepts that legacy path as an alias for `assets/`. Targets are
-`arm64-v8a` and `armeabi-v7a`, Android 10+. The service library name
-`libds_game.so` and the matching manifest field are kept for compatibility
-with the current CI packaging; it is only a library name, not an interpreter.
-The existing workflow and APK artifact names were not renamed either.
-
-## Engine
-
-The block world doubles as a small general-purpose 3D engine
-(`src/engine/`). The classic game stays the built-in default; the engine
-adds **projects**, **typed scene nodes**, **C scripting**, a **physics**
-layer (`StaticBody3D`/`RigidBody3D`) and an **input API** on top of the same
-rasterizer, materials and terrain code.
-
-### Projects
+## Projects
 
 A project is a directory with a `project.eng` manifest:
 
@@ -351,71 +89,12 @@ main_scene = scenes/main.escn
 ```
 
 `tools/project/create.sh <dir>` scaffolds a fresh project (manifest, a scene
-and a spinning-cube C script). Run any project with
-`./preview --project <dir>`. Ready projects ship in `projects/`:
-`demo` (meshes, lights, an orbiting camera and two scripts),
-`voxel_world` (the streamed terrain seen through a scene camera) and
-`bounce` (the Physics Playground — a `RigidBody3D` ball you push around a
-`StaticBody3D` collider with WASD/arrows and jump with Space).
+with an unscripted camera and a spinning-cube C script). Any project runs
+with `./preview --project <dir>` and shows up in the launcher when it lives
+under the scanned root (default `projects/`, or the APK asset folder of the
+same name). The launcher lists projects in folder-name order.
 
-### Node types
-
-Scenes are trees of typed nodes, Godot-style:
-
-| Type | Purpose |
-| --- | --- |
-| `Node` | plain container (scene root) |
-| `Node3D` | positioned container: position, yaw/pitch/roll, uniform scale |
-| `MeshInstance3D` | cube / plane / sphere / cylinder primitives |
-| `Camera3D` | viewpoint; `current = true` activates it, `fov` in degrees |
-| `DirectionalLight3D` | sun-like light along the node's −Z |
-| `OmniLight3D` | point light with `range` falloff |
-| `VoxelWorld3D` | the classic streamed block terrain |
-| `StaticBody3D` | a fixed collider; `shape = box|sphere`, `size` = full edge |
-| `RigidBody3D` | a dynamic sphere collider (gravity, impulses, sleeping) |
-
-Transforms are hierarchical Euler angles (`Ry*Rx*Rz`, parent scale composed
-into children). `MeshInstance3D` — and a `StaticBody3D`/`RigidBody3D` that
-carries a `mesh` — take either a flat `color = r g b` (a palette material
-built at runtime) or `material = grass|dirt|stone|sand|water|log|leaves` to
-reuse the voxel PNG tiles. Lights tint and shade every mesh face; with no
-lights at all meshes render fully lit.
-
-### Physics
-
-`StaticBody3D` nodes are fixed colliders: `box` (the default, an
-axis-aligned box whose half-extent is `size`/2) or `sphere`. A `RigidBody3D`
-is a dynamic **sphere** whose radius matches its drawn sphere mesh
-(`size`/2), so the physics body and the ball you see always coincide. Every
-frame the engine applies gravity, integrates velocity, resolves penetration
-against the static bodies, and puts a still, grounded body to sleep. Bodies
-move in world space, so a `RigidBody3D` must hang from the root or a plain
-`Node` container (no moving transform parent).
-
-```c
-/* from a C script attached to the body */
-if (eng_body_is_grounded(self))
-    eng_body_apply_impulse(self, 0, 8, 0);   /* jump */
-```
-
-Rigid/rigid contact is intentionally left out so the solver stays
-predictable; rigid bodies collide with the static world, which is how
-`RigidBody3D` is normally used. See `projects/bounce` for a full example.
-
-### Input
-
-A tiny polled input state lets scene scripts react to the keyboard and the
-pointer without touching the host. The preview forwards `W A S D`, the arrow
-keys, Space and pointer press/move/release to the engine (scripts never call
-`localhost`). In a script, read it once per frame:
-
-```c
-int down = eng_input_is_pressed(ENG_KEY_SPACE);   /* ENG_KEY_* enum */
-float x, y; int pressed;
-eng_input_pointer(&x, &y, &pressed);              /* window pixels */
-```
-
-### Scene files
+## Scene files
 
 `.escn` is plain text, one section per node:
 
@@ -442,35 +121,144 @@ script = "roller"
 ```
 
 `parent` is a path from the root (`.` = root). Values are floats, vectors,
-quoted strings or `true`/`false`; `#` starts a comment. On body nodes the
-extra keys `shape = box|sphere`, `mass`, `gravity_scale`, `velocity`,
-`restitution` and `friction` configure the collider.
+quoted strings or `true`/`false`; `#` starts a comment. Node types:
 
-### C scripting
+| Type | Purpose |
+| --- | --- |
+| `Node` | plain container (scene root) |
+| `Node3D` | positioned container: position, yaw/pitch/roll, uniform scale |
+| `MeshInstance3D` | cube / plane / sphere / cylinder primitives |
+| `Camera3D` | viewpoint; `current = true` activates it, `fov` in degrees |
+| `DirectionalLight3D` | sun-like light along the node's −Z |
+| `OmniLight3D` | point light with `range` falloff |
+| `VoxelWorld3D` | the streamed block terrain (one per scene) |
+| `StaticBody3D` | a fixed collider; `shape = box\|sphere`, `size` = full edge |
+| `RigidBody3D` | a dynamic sphere collider (gravity, impulses, sleeping) |
 
-A script is ordinary C compiled to a shared object and loaded with
-`dlopen`; the host rebuilds the `.so` automatically when the source is
-newer. Two optional entry points, both receiving the node the script is
-attached to:
+Transforms are hierarchical Euler angles (`Ry*Rx*Rz`, parent scale composed
+into children). `MeshInstance3D` — and a body that carries a `mesh` — take
+either a flat `color = r g b` (a palette material built at runtime) or
+`material = grass|dirt|stone|sand|water|log|leaves` to reuse the voxel PNG
+tiles. `VoxelWorld3D` accepts `seed = N`. Lights tint and shade every mesh
+face; with no lights at all meshes render fully lit.
+
+## C scripting
+
+A script is ordinary C with two optional entry points, both receiving the
+node the script is attached to:
 
 ```c
 #include "eng_api.h"
-void eng_script_ready(EngNode *self);            /* once, after load */
-void eng_script_process(EngNode *self, float dt);/* every frame */
+void eng_script_ready(EngNode *self);             /* once, after load */
+void eng_script_process(EngNode *self, float dt); /* every frame */
 ```
+
+On the host the engine compiles the project's `.c` to a shared object when it
+is newer than the `.so` and loads it with `dlopen` (the binary exports the
+API via `-rdynamic`; scripts build with `cc -shared -fPIC -Isrc/engine`).
+Compiled `.so` files are Git-ignored.
+
+A phone has neither compiler nor writable `.so`, so the scripts that ship
+with the sample projects (`spin`, `orbit`, `roller`) also exist **built into
+the engine** (`src/engine/eng_script_builtin.c`) and are used whenever the
+compiled version is unavailable. A scene that names an unknown script on a
+device logs a warning and runs without it.
 
 `src/engine/eng_api.h` is the whole scripting surface: create/attach/free
 nodes, find them by path, get/set position, rotation and scale, switch the
 current camera, set light energy/colour/range, choose a mesh primitive,
-colour and size, plus the body API (`eng_body_set_shape`, `eng_body_set_mass`,
+colour and size, the body API (`eng_body_set_shape`, `eng_body_set_mass`,
 `eng_body_apply_impulse`, `eng_body_set/get_linear_velocity`,
 `eng_body_is_grounded`), the input API (`eng_input_is_pressed`,
-`eng_input_pointer`) and `eng_time()`/`eng_delta()`/`eng_print()`. The host
-exports the symbols (`-rdynamic`), scripts compile with
-`cc -shared -fPIC -Isrc/engine`. Compiled `.so` files are Git-ignored.
+`eng_input_pointer`), `eng_time()`/`eng_delta()`/`eng_print()` and the voxel
+cell API (`eng_voxel_get_cell` / `eng_voxel_set_cell` — read and write single
+half-block cells of a `VoxelWorld3D` with the material names above).
 
-The engine currently runs in the PC preview; the Android target still ships
-the classic game only. Regression coverage (scene parsing, node-tree math,
-physics, input and rendering) lives in `tools/tests/engine.c`, which now
-reports **9 groups**, including a ball that falls, lands, sleeps, wakes on an
-impulse and is stopped by a static wall.
+Input is a polled state: the platform glue feeds keys and the pointer into
+`eng_input_feed_key` / `eng_input_feed_pointer`; scripts and the free camera
+read it once per frame. The browser page never calls `localhost` — it posts
+events to the preview server, which feeds the same API.
+
+## Physics
+
+`StaticBody3D` nodes are fixed colliders: `box` (the default, an
+axis-aligned box whose half-extent is `size`/2) or `sphere`. A `RigidBody3D`
+is a dynamic **sphere** whose radius matches its drawn sphere mesh
+(`size`/2), so the physics body and the ball you see always coincide. Every
+frame the engine applies gravity, integrates velocity (fixed substeps of at
+most 1/30 s), resolves penetration against the static bodies, and puts a
+still, grounded body to sleep. Bodies move in world space, so a `RigidBody3D`
+must hang from the root or a plain `Node` container (no moving transform
+parent). Rigid/rigid contact is intentionally left out so the solver stays
+predictable. Body nodes also take `mass`, `gravity_scale`, `velocity`,
+`restitution` and `friction` keys.
+
+## The render backend
+
+The engine draws through a software 3D rasterizer with the voxel world as one
+of its backends (`src/engine/render/`):
+
+- `assets/textures/` holds nine **original 32×32 RGBA PNGs**; a quarter of a
+  face receives the matching 16×16 pixels, UVs are bound to the world grid
+  (including negative coordinates), merged faces repeat the PNG once per
+  source block. `python3 tools/art/make_assets.py` regenerates the PNGs and
+  the PCM16 effects offline.
+- **Diffuse skylight** instead of binary sun/shadow: open columns get
+  daylight, sideways spread decays, sealed spaces stay dark, leaves transmit
+  partially, water casts no black shadow. Four light values per quad
+  interpolate perspectively with `1/z`; greedy meshing only merges faces with
+  constant light, so gradients never stretch.
+- Terrain: two soft value-noise octaves, 3D-noise **caves** under a sealed
+  crust, bedrock bottom layers, lake beds never carved.
+- **Transparent water**: opaque geometry first, then ~55 % water blending; a
+  blocky source/stream simulation (down first, then lateral with support, no
+  uphill or diagonal flow) steps at 0.1 s with a bounded active-cell queue.
+- Chunk cache of **11×11** chunks (visible 9×9 plus a prefetch
+  ring), nearest-first meshing with a soft per-frame budget, fog retreating
+  as chunks become ready. Fog on dark surfaces stays dark.
+- Perspective `1/z` depth/UV, signed colour arithmetic, backface culling
+  before frustum tests; a bilinear upscale with an exact 2× fast path. The
+  internal resolution adapts from measured render time with hysteresis
+  (starts at a ~2.2 MP budget); the top-right of the Android HUD and the
+  launcher status line show the measured FPS.
+
+## Tests
+
+```sh
+tools/tests/run.sh
+SANITIZE=1 tools/tests/run.sh
+```
+
+Suites: the rasterizer/material regressions (`render`), voxel generation,
+streaming and mesh coverage (`world`), the water simulation and saves
+(`water`), the PCM mixer (`audio`), the engine layer (`engine`: node-tree
+math, scene parsing, C scripting via `dlopen`, physics — 9 groups), and the
+app (`launcher`: the project list, tap-to-run, script animation, input
+routing, launcher pausing, project switching, the free camera, reset and
+`--project`-style direct open) at two resolutions. The Android-flavoured
+code paths (APK asset IO, no `dlopen`, native-activity glue) are compiled
+with `-D__ANDROID__` against a minimal NDK header stub so they cannot rot.
+The sanitizer build enables ASan, UBSan and float-cast-overflow.
+
+The host suite drives the same `game_*` entry points the platforms call, so
+the launcher, input routing and pausing are covered without a browser.
+
+## Android
+
+```sh
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+      -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 -DANDROID_NDK=$ANDROID_NDK_ROOT
+cmake --build build -j
+python3 stage_assets.py assets staging/assets   # also stages projects/ + index.txt
+```
+
+The CI workflow (`.github/workflows/main.yml`) builds both ABIs, stages
+assets/projects and packages `EnjoerMessenger.apk` (the legacy library name
+`libds_game.so` and the manifest are kept for the existing pipeline). Inside
+the APK the launcher enumerates projects from the staged `projects/index.txt`
+and reads manifests/scenes through the asset manager; the sample projects run
+with the built-in scripts. Targets are `arm64-v8a` and `armeabi-v7a`,
+Android 10+.
+
+Every `.c` is its own translation unit; `.c` files are never pulled in via
+`#include`. External libraries live in `third_party/`.

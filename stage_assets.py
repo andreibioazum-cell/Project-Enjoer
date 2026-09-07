@@ -50,6 +50,52 @@ def stage_assets(source: Path, destination: Path) -> list[Path]:
     return staged
 
 
+def stage_projects(source: Path, destination: Path) -> list[Path]:
+    """Copy the engine projects into the APK asset tree.
+
+    Only what a phone can actually run is shipped: the ``project.eng``
+    manifest and the ``.escn`` scenes (plus script sources for reference;
+    devices use the engine's built-in scripts). A ``index.txt`` is written so
+    the APK can enumerate projects without a directory walk, which the Android
+    asset manager does not support for subdirectories.
+    """
+    source = source.resolve()
+    destination = destination.resolve()
+    if not source.is_dir():
+        return []
+    shutil.rmtree(destination, ignore_errors=True)
+    destination.mkdir(parents=True)
+
+    staged: list[Path] = []
+    names: list[str] = []
+    for project_dir in sorted(p for p in source.iterdir() if p.is_dir()):
+        manifest = project_dir / "project.eng"
+        if not manifest.is_file():
+            continue
+        names.append(project_dir.name)
+        target_dir = destination / project_dir.name
+        target_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(manifest, target_dir / "project.eng")
+        staged.append(Path(project_dir.name) / "project.eng")
+        for sub, patterns in (("scenes", ("*.escn",)), ("scripts", ("*.c",))):
+            src_sub = project_dir / sub
+            if not src_sub.is_dir():
+                continue
+            (target_dir / sub).mkdir(parents=True, exist_ok=True)
+            for file in sorted(src_sub.rglob("*")):
+                if file.is_file() and any(file.match(p) for p in patterns):
+                    rel = file.relative_to(src_sub)
+                    target = target_dir / sub / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(file, target)
+                    staged.append(Path(project_dir.name) / sub / rel)
+
+    index = destination / "index.txt"
+    index.write_text("\n".join(names) + "\n", encoding="utf-8")
+    staged.append(Path("index.txt"))
+    return staged
+
+
 def build_android_activity(source: Path, apk_root: Path) -> Path | None:
     """Compile the optional Java NativeActivity bridge into ``classes.dex``.
 
@@ -122,14 +168,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         destination = Path(args.destination)
         staged = stage_assets(Path(args.source), destination)
+        projects = stage_projects(
+            Path(__file__).resolve().parent / "projects", destination / "projects")
         java_source = Path(__file__).resolve().parent / "game" / "java"
         dex = build_android_activity(java_source, destination.parent)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
 
-    print(f"Staged {len(staged)} asset(s) in {args.destination}")
-    for path in staged:
+    print(f"Staged {len(staged)} asset(s) and {len(projects)} project file(s) in {args.destination}")
+    for path in staged + projects:
         print(f"  {path.as_posix()}")
     if dex:
         print(f"Built Android activity: {dex}")

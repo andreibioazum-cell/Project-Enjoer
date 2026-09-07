@@ -5,11 +5,11 @@
  * at most one block almost everywhere, so the ground climbs in short single
  * steps instead of whole-block walls, and caves ("holes") are carved inside
  * the generated stone below a sealed four-block crust. */
-#include "geometrium_internal.h"
+#include "rend_internal.h"
 #include <math.h>
 #include <string.h>
 
-static uint32_t world_seed = GEOMETRIUM_WORLD_SEED;
+static uint32_t world_seed = REND_WORLD_SEED;
 static uint32_t hash(int x, int z, uint32_t salt) {
     uint32_t h = (uint32_t)x * 0x8da6b343u ^ (uint32_t)z * 0xd8163841u ^ world_seed ^ salt;
     h ^= h >> 16; h *= 0x7feb352du; h ^= h >> 15; h *= 0x846ca68bu;
@@ -48,9 +48,9 @@ static float noise3(float x, float y, float z, uint32_t salt) {
     float y0 = x00 + (x10 - x00) * v, y1 = x01 + (x11 - x01) * v;
     return y0 + (y1 - y0) * w;
 }
-void geometrium_terrain_seed(uint32_t seed) { world_seed = seed; }
+void voxel_terrain_seed(uint32_t seed) { world_seed = seed; }
 
-int geometrium_terrain_height(int x, int z) {
+int voxel_terrain_height(int x, int z) {
     /* Two soft octaves: the slope between neighbours stays well below one
      * block, so hills rise gradually instead of jumping a whole block. */
     float h = 10 + 7 * noise(x * .025f, z * .025f, 11) +
@@ -81,7 +81,7 @@ static Tree tree_at(int gx, int gz) {
     if (h % 100 > 62) return t;
     float dx = (float)t.x - 8, dz = (float)t.z - 8;
     if (dx * dx + dz * dz < 64) return t;
-    t.ground = geometrium_terrain_height(t.x, t.z);
+    t.ground = voxel_terrain_height(t.x, t.z);
     t.valid = t.ground > WATER_LEVEL + 1 && noise(gx * .12f, gz * .12f, 97) > -.45f;
     return t;
 }
@@ -104,10 +104,10 @@ static int ground_block(int x, int y, int z, int height) {
     (void)x; (void)z;
     return y >= height - 3 ? BLOCK_DIRT : BLOCK_STONE;
 }
-int geometrium_terrain_block(int x, int y, int z) {
+int voxel_terrain_block(int x, int y, int z) {
     if (y > 32 || y >= WORLD_HEIGHT) return BLOCK_AIR; /* max generated canopy; edits can build higher */
     if (y < 0) return BLOCK_STONE;
-    int b = ground_block(x, y, z, geometrium_terrain_height(x, z));
+    int b = ground_block(x, y, z, voxel_terrain_height(x, z));
     if (b != BLOCK_AIR) return b;
     int gx = floor_div(x, 8), gz = floor_div(z, 8), result = BLOCK_AIR;
     for (int iz = gz - 1; iz <= gz + 1; iz++) {
@@ -125,12 +125,12 @@ static void put(unsigned char *out, int x, int y, int z, int block) {
     int index = (y * CHUNK_SIZE + z) * CHUNK_SIZE + x;
     if (block == BLOCK_LOG || out[index] == BLOCK_AIR) out[index] = (unsigned char)block;
 }
-void geometrium_terrain_chunk(int cx, int cz, unsigned char *out) {
+void voxel_terrain_chunk(int cx, int cz, unsigned char *out) {
     int ox = cx * CHUNK_SIZE, oz = cz * CHUNK_SIZE;
     memset(out, 0, CHUNK_SIZE * CHUNK_SIZE * WORLD_HEIGHT);
     for (int z = 0; z < CHUNK_SIZE; z++) {
         for (int x = 0; x < CHUNK_SIZE; x++) {
-            int height = geometrium_terrain_height(ox + x, oz + z);
+            int height = voxel_terrain_height(ox + x, oz + z);
             int top = height > WATER_LEVEL ? height : WATER_LEVEL;
             for (int y = 0; y <= top; y++)
                 out[(y * CHUNK_SIZE + z) * CHUNK_SIZE + x] = (unsigned char)ground_block(ox + x, y, oz + z, height);

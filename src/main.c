@@ -1,5 +1,6 @@
 /* Enjoer — main loop for Android (native activity).
- * init/update/draw/touch/reset hooks — the 3D playset lives in geometrium/.
+ * init/update/draw/touch/reset hooks — behind them runs the engine
+ * (src/engine/): projects, scenes, physics and scripts.
  * Engine errors are displayed instead of crashing. */
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
@@ -128,15 +129,6 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             case AKEYCODE_A: mapped = "a"; break;
             case AKEYCODE_S: mapped = "s"; break;
             case AKEYCODE_D: mapped = "d"; break;
-            case AKEYCODE_E: mapped = "break"; break;
-            case AKEYCODE_R: mapped = "place"; break;
-            case AKEYCODE_1: mapped = "1"; break;
-            case AKEYCODE_2: mapped = "2"; break;
-            case AKEYCODE_3: mapped = "3"; break;
-            case AKEYCODE_4: mapped = "4"; break;
-            case AKEYCODE_5: mapped = "5"; break;
-            case AKEYCODE_6: mapped = "6"; break;
-            case AKEYCODE_F: mapped = "f"; break;
             case AKEYCODE_M: mapped = "m"; break;
             case AKEYCODE_ESCAPE: mapped = "Escape"; break;
             case AKEYCODE_DPAD_LEFT: mapped = "ArrowLeft"; break;
@@ -162,7 +154,7 @@ void android_main(struct android_app *app) {
     app->onInputEvent = handle_input;
     audio_set_java_vm((void *)app->activity->vm);
     app_set_storage(app->activity->internalDataPath);
-    app_log("Enjoer: Android, pure-C playsets (Geometrium + Platformium)");
+    app_log("Enjoer: Android, pure-C playsets (Rend + Platformium)");
     for (;;) {
         struct android_poll_source *source = NULL;
         int ident;

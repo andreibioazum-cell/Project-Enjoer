@@ -2,7 +2,7 @@
  * flowing cells remember their distance, never silently become new sources.
  * Evaluate a tick before applying it: water advances through faces, not diagonals
  * or a recursive flood fill in a single frame. No whole-world scans per frame. */
-#include "geometrium_world_internal.h"
+#include "voxel_internal.h"
 
 enum { QUEUE_CAP=32768,HASH_CAP=65536,TICK_BUDGET=512,RECOVERY_BUDGET=8 };
 #define WATER_STEP .10f
@@ -33,20 +33,20 @@ static Pending pop(void) {
     *link=p.next;head=(head+1)&(QUEUE_CAP-1);count--;
     return p;
 }
-void geometrium_water_reset(void) {
+void voxel_water_reset(void) {
     for (int i=0;i<HASH_CAP;i++) buckets[i]=-1;
     head=count=overflow=last_work=0;recovery=-1;timer=0;
 }
-int geometrium_water_level(int sx,int sy,int sz) {
-    if (geometrium_world_cell(sx,sy,sz)!=BLOCK_WATER) return -1;
-    int x=geometrium_floor_div(sx,2),y=geometrium_floor_div(sy,2),z=geometrium_floor_div(sz,2);
-    const GeometriumEdit *e=geometrium_edit_find(x,y,z);
+int voxel_water_level(int sx,int sy,int sz) {
+    if (voxel_world_cell(sx,sy,sz)!=BLOCK_WATER) return -1;
+    int x=voxel_floor_div(sx,2),y=voxel_floor_div(sy,2),z=voxel_floor_div(sz,2);
+    const VoxelEdit *e=voxel_edit_find(x,y,z);
     return e ? e->flow[sx-x*2+(sy-y*2)*2+(sz-z*2)*4] : 0;
 }
-void geometrium_water_wake(int x,int y,int z) {
-    int above=geometrium_world_cell(x,y+1,z)==BLOCK_WATER;
-    int wet=above || geometrium_world_cell(x,y,z)==BLOCK_WATER;
-    for (int i=0;!wet && i<6;i++) wet=geometrium_world_cell(x+dirs[i][0],y+dirs[i][1],z+dirs[i][2])==BLOCK_WATER;
+void voxel_water_wake(int x,int y,int z) {
+    int above=voxel_world_cell(x,y+1,z)==BLOCK_WATER;
+    int wet=above || voxel_world_cell(x,y,z)==BLOCK_WATER;
+    for (int i=0;!wet && i<6;i++) wet=voxel_world_cell(x+dirs[i][0],y+dirs[i][1],z+dirs[i][2])==BLOCK_WATER;
     if (!wet) return;
     enqueue(x,y,z);
     for (int i=0;i<6;i++) enqueue(x+dirs[i][0],y+dirs[i][1],z+dirs[i][2]);
@@ -55,34 +55,34 @@ void geometrium_water_wake(int x,int y,int z) {
      * source itself remains unchanged (opening/closing a drain in a floor). */
     if (above) for (int i=1;i<=4;i++) enqueue(x+dirs[i][0],y+1,z+dirs[i][2]);
 }
-static void activate_edit(const GeometriumEdit *e) {
+static void activate_edit(const VoxelEdit *e) {
     /* Also wakes dry edited holes: an adjacent original lake must refill them. */
     for (int i=0;i<8;i++) {
         int x=e->x*2+(i&1),y=e->y*2+((i>>1)&1),z=e->z*2+(i>>2);
-        if (geometrium_world_active(x,z)) geometrium_water_wake(x,y,z);
+        if (voxel_world_active(x,z)) voxel_water_wake(x,y,z);
     }
 }
-void geometrium_water_activate(int cx,int cz) {
-    for (const GeometriumEdit *e=geometrium_edit_first(cx,cz);e;e=geometrium_edit_next(e)) activate_edit(e);
+void voxel_water_activate(int cx,int cz) {
+    for (const VoxelEdit *e=voxel_edit_first(cx,cz);e;e=voxel_edit_next(e)) activate_edit(e);
 }
 static int supported(int x,int y,int z) {
-    int b=geometrium_world_cell(x,y-1,z);
-    return (b!=BLOCK_AIR && b!=BLOCK_WATER) || (b==BLOCK_WATER && geometrium_water_level(x,y-1,z)==0);
+    int b=voxel_world_cell(x,y-1,z);
+    return (b!=BLOCK_AIR && b!=BLOCK_WATER) || (b==BLOCK_WATER && voxel_water_level(x,y-1,z)==0);
 }
 static int desired(int x,int y,int z,int old) {
     if (old==0) return 0; /* only genuine sources are persistent */
-    if (geometrium_world_cell(x,y+1,z)==BLOCK_WATER) return GEOMETRIUM_WATER_FALLING;
-    int best=GEOMETRIUM_WATER_REACH+1;
+    if (voxel_world_cell(x,y+1,z)==BLOCK_WATER) return VOXEL_WATER_FALLING;
+    int best=VOXEL_WATER_REACH+1;
     for (int i=1;i<=4;i++) {
         int nx=x+dirs[i][0],nz=z+dirs[i][2];
-        int level=geometrium_water_level(nx,y,nz);
+        int level=voxel_water_level(nx,y,nz);
         if (level<0 || !supported(nx,y,nz)) continue;
-        if (level==GEOMETRIUM_WATER_FALLING) level=0; /* a waterfall spreads at its foot */
+        if (level==VOXEL_WATER_FALLING) level=0; /* a waterfall spreads at its foot */
         if (level+1<best) best=level+1;
     }
-    return best<=GEOMETRIUM_WATER_REACH ? best : -1;
+    return best<=VOXEL_WATER_REACH ? best : -1;
 }
-void geometrium_water_update(float d) {
+void voxel_water_update(float d) {
     last_work=0;
     if (!isfinite(d) || d<=0) return;
     timer+=fminf(d,.05f);
@@ -95,7 +95,7 @@ void geometrium_water_update(float d) {
      * alone cannot outgrow the 512-cell consumer and repeatedly overflow. */
     if (recovery>=0) {
         for (int i=0;i<RECOVERY_BUDGET;i++) {
-            const GeometriumEdit *e=geometrium_edit_at(recovery++);
+            const VoxelEdit *e=voxel_edit_at(recovery++);
             if (!e) {recovery=-1;break;}
             activate_edit(e);
         }
@@ -103,14 +103,14 @@ void geometrium_water_update(float d) {
     Change changes[TICK_BUDGET];int n=0,jobs=count<TICK_BUDGET ? count : TICK_BUDGET;
     for (int i=0;i<jobs;i++) {
         Pending p=pop();last_work++;
-        if (!geometrium_world_active(p.x,p.z) || geometrium_cell_solid(p.x,p.y,p.z)) continue;
-        int old=geometrium_water_level(p.x,p.y,p.z),next=desired(p.x,p.y,p.z,old);
+        if (!voxel_world_active(p.x,p.z) || voxel_cell_solid(p.x,p.y,p.z)) continue;
+        int old=voxel_water_level(p.x,p.y,p.z),next=desired(p.x,p.y,p.z,old);
         if (old!=next) changes[n++]=(Change){p.x,p.y,p.z,next};
     }
     for (int i=0;i<n;i++) {
         Change p=changes[i];
-        geometrium_world_water_set(p.x,p.y,p.z,p.level);
+        voxel_world_water_set(p.x,p.y,p.z,p.level);
     }
 }
-int geometrium_water_pending(void) {return count+(overflow || recovery>=0);}
-int geometrium_water_last_work(void) {return last_work;}
+int voxel_water_pending(void) {return count+(overflow || recovery>=0);}
+int voxel_water_last_work(void) {return last_work;}

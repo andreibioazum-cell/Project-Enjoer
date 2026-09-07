@@ -60,10 +60,14 @@ void game_key(const char *name, int down);
 void game_cancel_input(void);
 void game_reset(void);
 void game_save(void);
-/* Launcher menu state and geometry (app router, src/core/game.c). */
+/* Engine launcher (app router, src/core/game.c): the round button, Escape or
+ * M opens the project list; tapping a card runs that project. */
+void game_set_project_root(const char *root);   /* before game_init */
+int game_open_project(const char *directory);   /* run one project right away */
 int game_menu_open(void);
-int game_current_mode(void);          /* 0 Geometrium, 1 Platformium */
+int game_project_count(void);
+int game_current_project(void);       /* index of the running project, -1 none */
+const char *game_project_title(int index);
 void game_menu_button_geom(float *x, float *y, float *r);
 void game_menu_card_geom(int index, float *x, float *y, float *w, float *h);
-void game_menu_chip_geom(int index, float *x, float *y, float *w, float *h);
 #endif

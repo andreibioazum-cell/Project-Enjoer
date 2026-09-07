@@ -1,14 +1,14 @@
 /* Read real PNG assets once, then build palette mipmaps and cached lighting. */
-#include "geometrium_render_internal.h"
+#include "rend3d_internal.h"
 #include <limits.h>
 #include <stdio.h>
 enum { GRASS_TOP,GRASS_SIDE,DIRT,STONE,SAND,WATER,BARK,RINGS,LEAVES,MATERIALS };
 /* Water blends over whatever the opaque pass drew: see-through lakes and
  * waterfalls instead of the old opaque blue sheet. */
 #define WATER_ALPHA 140
-static GeometriumMaterial materials[MATERIALS];
+static RendMaterial materials[MATERIALS];
 static int initialized;
-static int color_index(GeometriumMaterial *m,uint32_t color) {
+static int color_index(RendMaterial *m,uint32_t color) {
     for (int i=0;i<m->colors;i++) if (m->palette[i]==color) return i;
     if (m->colors<PALETTE_SIZE) {m->palette[m->colors]=color;return m->colors++;}
     int best=0,distance=INT_MAX;
@@ -21,7 +21,7 @@ static int color_index(GeometriumMaterial *m,uint32_t color) {
     }
     return best;
 }
-static void build_mips(GeometriumMaterial *m) {
+static void build_mips(RendMaterial *m) {
     int source=0,dest=TEXTURE_SIZE*TEXTURE_SIZE;
     for (int size=TEXTURE_SIZE;size>1;size/=2) {
         int next=size/2;
@@ -37,12 +37,12 @@ static void build_mips(GeometriumMaterial *m) {
         source=dest;dest+=next*next;
     }
 }
-int geometrium_materials_load(AAssetManager *assets) {
+int rend_materials_load(AAssetManager *assets) {
     if (initialized) return 1;
     static const char *names[MATERIALS]={"grass_top","grass_side","dirt","stone","sand","water","log_side","log_top","leaves"};
     for (int t=0;t<MATERIALS;t++) {
         char path[80];snprintf(path,sizeof(path),"textures/%s.png",names[t]);
-        GeometriumMaterial *m=&materials[t];
+        RendMaterial *m=&materials[t];
         image_free(&m->image);memset(m,0,sizeof(*m));
         if (!image_load(assets,path,&m->image)) {app_fail("Could not load %s",path);return 0;}
         if (m->image.width!=TEXTURE_SIZE || m->image.height!=TEXTURE_SIZE) {
@@ -69,9 +69,8 @@ static int texture(int block,int face) {
         default:return STONE;
     }
 }
-GeometriumMaterial *geometrium_material(int block,int face) { return initialized ? &materials[texture(block,face)] : NULL; }
-const Image *geometrium_material_icon(int block) { return initialized ? &materials[texture(block,block==BLOCK_LOG ? 2 : 0)].image : NULL; }
-const uint32_t *geometrium_material_shades(GeometriumMaterial *m,int shade,uint32_t fog) {
+RendMaterial *rend_material(int block,int face) { return initialized ? &materials[texture(block,face)] : NULL; }
+const uint32_t *rend_material_shades(RendMaterial *m,int shade,uint32_t fog) {
     if (shade<0) shade=0;
     if (shade>=LIGHT_LEVELS) shade=LIGHT_LEVELS-1;
     if (m->fog_color!=fog) {m->fog_color=fog;m->ready=0;}

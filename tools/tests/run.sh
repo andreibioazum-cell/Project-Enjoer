@@ -12,48 +12,39 @@ else
     FLAGS="$FLAGS -O2"
 fi
 CORE="src/core/log.c src/core/state.c src/core/assets.c tools/preview/host_compat.c"
-WORLD="src/geometrium/geometrium_world.c src/geometrium/geometrium_light.c src/geometrium/geometrium_water.c src/geometrium/geometrium_terrain.c src/geometrium/geometrium_mesh.c src/geometrium/geometrium_edits.c"
-ACTORS="src/geometrium/geometrium_player.c src/geometrium/geometrium_input.c src/geometrium/geometrium_interact.c"
-# Android-only translation units (main.c, the JNI sound backend) never run on
-# the host, but CI compiles them: syntax-check them against a minimal NDK
-# header stub so shadowing/typing bugs cannot slip past the host suite.
+RENDER3D="src/engine/render/rend3d.c src/engine/render/rend_shapes.c src/engine/render/rend_material.c"
+VOXEL="src/engine/render/voxel_world.c src/engine/render/voxel_light.c src/engine/render/voxel_water.c \
+    src/engine/render/voxel_terrain.c src/engine/render/voxel_mesh.c src/engine/render/voxel_edits.c"
+PERF="src/engine/render/rend_perf.c"
+GFX2D="src/graphics/image.c src/graphics/gfx_frame.c src/graphics/gfx_draw.c src/graphics/gfx_text.c \
+    src/graphics/ttf/ttf_font.c src/graphics/ttf/ttf_outline.c"
+ENGINE="src/engine/eng_api.c src/engine/eng_node.c src/engine/eng_mesh.c src/engine/eng_physics.c \
+    src/engine/eng_input.c src/engine/eng_scene.c src/engine/eng_script.c \
+    src/engine/eng_script_builtin.c src/engine/eng_project.c src/engine/eng_fs.c"
+
+# Android-only or Android-flavoured translation units never run on the host, but
+# CI compiles them: syntax-check them against a minimal NDK header stub so the
+# device code paths (APK asset IO, no dlopen, native activity glue) cannot rot.
 $CC -std=c99 -Wall -Wextra -Werror -D__ANDROID__ \
     -Itools/tests/android_stub -Isrc -I. \
-    -fsyntax-only src/main.c src/sound/sound_android.c
+    -fsyntax-only src/main.c src/sound/sound_android.c src/core/game.c \
+    src/engine/eng_fs.c src/engine/eng_script.c src/engine/eng_scene.c \
+    src/engine/eng_project.c src/engine/eng_api.c
 
 # Intentional splitting of source/flag lists, no .c includes or generated runtime.
-$CC $FLAGS $CORE src/graphics/image.c src/geometrium/geometrium_render.c src/geometrium/geometrium_shapes.c src/geometrium/geometrium_material.c tools/tests/render.c -lm -o "$DIR/render"
+$CC $FLAGS $CORE src/graphics/image.c $RENDER3D tools/tests/render.c -lm -o "$DIR/render"
 "$DIR/render"
-$CC $FLAGS $CORE src/geometrium/geometrium_hand.c tools/tests/hand.c -lm -o "$DIR/hand"
-"$DIR/hand"
-$CC $FLAGS $CORE $WORLD $ACTORS src/geometrium/geometrium_perf.c src/geometrium/geometrium_game.c src/geometrium/geometrium_scene.c src/geometrium/geometrium_hud.c src/geometrium/geometrium_hand.c tools/tests/controls.c -lm -o "$DIR/controls"
-"$DIR/controls"
-$CC $FLAGS $CORE $WORLD tools/tests/world.c -lm -o "$DIR/world"
+$CC $FLAGS $CORE $VOXEL tools/tests/world.c -lm -o "$DIR/world"
 "$DIR/world"
-$CC $FLAGS $CORE $WORLD tools/tests/water.c -lm -o "$DIR/water"
+$CC $FLAGS $CORE $VOXEL tools/tests/water.c -lm -o "$DIR/water"
 "$DIR/water" "$DIR/fixtures/water"
-$CC $FLAGS $CORE $WORLD $ACTORS src/geometrium/geometrium_hand.c tools/tests/edits.c -lm -o "$DIR/edits"
-"$DIR/edits" "$DIR/fixtures"
 $CC $FLAGS -DPREVIEW_EXTERNAL_AUDIO $CORE src/sound/sound.c tools/tests/audio.c -lm -lpthread -o "$DIR/audio"
 "$DIR/audio"
 # Engine layer: node tree, scene files, C scripting via dlopen, generalized rendering.
-$CC $FLAGS -rdynamic $CORE $WORLD src/geometrium/geometrium_perf.c \
-    src/graphics/image.c src/geometrium/geometrium_render.c src/geometrium/geometrium_shapes.c src/geometrium/geometrium_material.c \
-    src/engine/eng_api.c src/engine/eng_node.c src/engine/eng_mesh.c src/engine/eng_physics.c src/engine/eng_input.c src/engine/eng_scene.c src/engine/eng_script.c src/engine/eng_project.c \
+$CC $FLAGS -rdynamic $CORE $VOXEL $PERF $RENDER3D src/graphics/image.c $ENGINE \
     tools/tests/engine.c -lm -ldl -o "$DIR/engine"
 "$DIR/engine"
-$CC $FLAGS $CORE $WORLD $ACTORS src/geometrium/geometrium_perf.c src/geometrium/geometrium_game.c src/geometrium/geometrium_scene.c src/geometrium/geometrium_hud.c src/geometrium/geometrium_hand.c \
-    src/geometrium/geometrium_render.c src/geometrium/geometrium_shapes.c src/geometrium/geometrium_material.c src/graphics/image.c src/graphics/gfx_frame.c \
-    src/graphics/gfx_draw.c src/graphics/gfx_text.c src/graphics/ttf/ttf_font.c src/graphics/ttf/ttf_outline.c \
-    tools/tests/game.c -lm -o "$DIR/game"
-"$DIR/game"
-# Platformium 2D playset + the app router that switches between playsets.
-PLATFORMIUM="src/platformium/platformium_level.c src/platformium/platformium_input.c src/platformium/platformium_camera.c \
-    src/platformium/platformium_particles.c src/platformium/platformium_player.c src/platformium/platformium_actors.c \
-    src/platformium/platformium_render.c src/platformium/platformium_hud.c src/platformium/platformium_game.c"
-$CC $FLAGS $CORE $WORLD $ACTORS src/geometrium/geometrium_perf.c src/geometrium/geometrium_game.c src/geometrium/geometrium_scene.c src/geometrium/geometrium_hud.c src/geometrium/geometrium_hand.c \
-    src/geometrium/geometrium_render.c src/geometrium/geometrium_shapes.c src/geometrium/geometrium_material.c src/graphics/image.c src/graphics/gfx_frame.c \
-    src/graphics/gfx_draw.c src/graphics/gfx_text.c src/graphics/ttf/ttf_font.c src/graphics/ttf/ttf_outline.c \
-    $PLATFORMIUM src/core/game.c \
-    tools/tests/platformer.c -lm -o "$DIR/platformer"
-"$DIR/platformer"
+# The app itself: the engine launcher that lists projects and runs the pick.
+$CC $FLAGS -rdynamic $CORE $VOXEL $PERF $RENDER3D $GFX2D $ENGINE src/core/game.c \
+    tools/tests/game.c -lm -ldl -o "$DIR/launcher"
+"$DIR/launcher"

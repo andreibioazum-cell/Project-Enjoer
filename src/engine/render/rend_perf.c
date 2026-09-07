@@ -1,19 +1,19 @@
 /* FPS counts actual frame intervals. Render quality uses measured CPU cost,
  * never network/vsync delays, with hysteresis to avoid resolution flicker. */
-#include "geometrium_internal.h"
+#include "rend_internal.h"
 static double frame_seconds,render_seconds;
 static int frame_count,render_count,fast_windows,render_scale=1,base_scale=1,last_w,last_h;
 static float fps=-1;
-void geometrium_perf_reset(void) {
+void rend_perf_reset(void) {
     frame_seconds=render_seconds=0;frame_count=render_count=fast_windows=last_w=last_h=0;fps=-1;
 }
-void geometrium_perf_frame(double interval) {
+void rend_perf_frame(double interval) {
     if (!isfinite(interval) || interval<=0) return;
     frame_seconds+=interval;frame_count++;
     if (frame_seconds>=.5) {fps=(float)(frame_count/frame_seconds);frame_seconds=0;frame_count=0;}
 }
-float geometrium_fps(void) { return fps; }
-int geometrium_render_scale(int width,int height) {
+float rend_fps(void) { return fps; }
+int rend_render_scale(int width,int height) {
     if (width!=last_w || height!=last_h) {
         last_w=width;last_h=height;base_scale=1;
         /* Upscale blur is far more noticeable than lag: keep native resolution up to ~2.2 MP (~1920x1080), not 1 MP. */
@@ -22,7 +22,7 @@ int geometrium_render_scale(int width,int height) {
     }
     return render_scale;
 }
-void geometrium_render_time(double elapsed) {
+void rend_render_time(double elapsed) {
     if (!isfinite(elapsed) || elapsed<=0) return;
     render_seconds+=elapsed;render_count++;
     if (render_count<30) return;

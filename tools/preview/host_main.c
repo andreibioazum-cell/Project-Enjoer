@@ -1,13 +1,13 @@
-/* PC preview server for the 3D playset: the same C code, the browser is the
- * window. JPEG transport keeps remote input responsive; PNG assets stay
- * lossless in the game. */
+/* PC preview server for the engine: the same C code as the APK, the browser is
+ * the window. JPEG transport keeps remote input responsive; PNG assets stay
+ * lossless. The launcher in the frame picks the project to run. */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 #include "engine.h"
 #include "engine/eng_api.h"
 #include "engine/eng_internal.h"
-#include "geometrium/geometrium_internal.h"
+#include "engine/render/rend_internal.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -25,8 +25,6 @@
 static Buffer frame;
 static uint64_t last_ns = 0;
 static volatile sig_atomic_t running=1;
-static int project_mode;
-static int eng_pointer_down; /* last known engine pointer press state */
 const unsigned char *preview_jpeg(const Buffer *frame,size_t *length);
 static void shutdown_signal(int signal_number) { (void)signal_number;running=0; }
 
@@ -48,11 +46,7 @@ static void tick(void) {
 static void render_frame(void) {
     tick();
     if (!gfx_begin_frame(&frame)) return;
-    if (project_mode) {
-        eng_time_internal((double)last_ns / 1e9, dt);
-        eng_update((float)dt);
-        eng_draw(&frame);
-    } else game_draw(&frame);
+    game_draw(&frame);
     gfx_end_frame();
 }
 
@@ -139,20 +133,6 @@ static void form_get(const char *body, int blen, const char *key, char *out, int
     }
 }
 
-/* Map the browser key tokens to engine ENG_KEY_* codes; -1 = ignore. */
-static int engine_key_code(const char *k) {
-    if (!strcmp(k, "a") || !strcmp(k, "ArrowLeft")) return ENG_KEY_LEFT;
-    if (!strcmp(k, "d") || !strcmp(k, "ArrowRight")) return ENG_KEY_RIGHT;
-    if (!strcmp(k, "w") || !strcmp(k, "ArrowUp")) return ENG_KEY_UP;
-    if (!strcmp(k, "s") || !strcmp(k, "ArrowDown")) return ENG_KEY_DOWN;
-    if (!strcmp(k, "space")) return ENG_KEY_SPACE;
-    if (!strcmp(k, "A")) return ENG_KEY_A;
-    if (!strcmp(k, "D")) return ENG_KEY_D;
-    if (!strcmp(k, "W")) return ENG_KEY_W;
-    if (!strcmp(k, "S")) return ENG_KEY_S;
-    return -1;
-}
-
 static void handle_event(const char *body, int blen) {
     char t[16], k[16], xs[32], ys[32], ids[32];
     form_get(body, blen, "t", t, sizeof(t));
@@ -160,19 +140,12 @@ static void handle_event(const char *body, int blen) {
         form_get(body, blen, "x", xs, sizeof(xs));
         form_get(body, blen, "y", ys, sizeof(ys));
         int action = strcmp(t, "down") == 0 ? 0 : strcmp(t, "up") == 0 ? 1 : strcmp(t, "cancel-pointer") == 0 ? 4 : 2;
-        if (project_mode) {
-            if (action == 0) eng_pointer_down = 1;
-            else if (action != 2) eng_pointer_down = 0;
-            eng_input_feed_pointer((float)atof(xs), (float)atof(ys), eng_pointer_down);
-            return;
-        }
         form_get(body, blen, "id", ids, sizeof(ids));
         char *end;
         long id = ids[0] ? strtol(ids, &end, 10) : 0;
         if (id < 0 || id > INT_MAX || (ids[0] && *end)) return;
         game_touch((float)atof(xs), (float)atof(ys), action, (int)id);
     } else if (strcmp(t, "cancel") == 0) {
-        if (project_mode) { eng_input_reset(); return; }
         game_cancel_input();
         last_ns=0;game_save();
     } else if (strcmp(t, "key") == 0) {
@@ -180,11 +153,6 @@ static void handle_event(const char *body, int blen) {
         char down_text[8];
         form_get(body, blen, "d", down_text, sizeof(down_text));
         int down = down_text[0] ? atoi(down_text) : 1;
-        if (project_mode) {
-            int code = engine_key_code(k);
-            if (code >= 0) eng_input_feed_key(code, down);
-            return;
-        }
         game_key(k, down);
     }
 
@@ -201,56 +169,6 @@ static void handle_events(const char *body, int len) {
     }
 }
 
-/* Live viewport for engine projects: the pointer and WASD/arrows/space are
- * forwarded to the engine input API so scene scripts can react to them. */
-static const char engine_html[] =
-    "<!doctype html><html lang=en><meta charset=utf-8>"
-    "<title>Enjoer engine</title>"
-    "<style>html,body{margin:0;height:100%;background:#0f141a;overflow:hidden;"
-    "overscroll-behavior:none}canvas{position:fixed;inset:0;width:100%;height:100%;"
-    "image-rendering:pixelated;touch-action:none;cursor:crosshair}"
-    "#ui{position:fixed;top:8px;left:12px;margin:0;z-index:2;font:13px/1.5 monospace;"
-    "color:#9fd3ff;background:#000a;padding:6px 12px;border-radius:8px;max-width:70%}"
-    "#ui b{color:#fff}</style>"
-    "<canvas id=c></canvas><div id=ui><b id=t>engine</b><br>"
-    "<span style=color:#7f93a6>WASD / arrows move a ball · Space jump · "
-    "hold the pointer to push</span></div>"
-    "<script>"
-    "const cv=document.getElementById('c'),ctx=cv.getContext('2d'),ui=document.getElementById('t');"
-    "async function tick(){"
-    "try{const r=await fetch('/frame.jpg',{cache:'no-store'});if(!document.hidden&&r.ok){"
-    "const b=await r.blob(),im=await createImageBitmap(b);"
-    "ctx.imageSmoothingEnabled=false;ctx.drawImage(im,0,0,cv.width,cv.height);im.close();}}catch(e){}"
-    "requestAnimationFrame(tick);}"
-    "fetch('/info').then(r=>r.json()).then(j=>{if(j.project)ui.textContent='Enjoer engine — '+j.project;"
-    "cv.width=innerWidth;cv.height=innerHeight;tick();}).catch(()=>tick());"
-    "function post(body){fetch('/event',{method:'POST',body})}"
-    "function send(batch){post(batch.map(e=>new URLSearchParams(e).toString()).join('\\n'))}"
-    "const Q=[];let sending=false;"
-    "function ev(body){Q.push(body);if(!sending){sending=true;"
-    "post(Q.splice(0,64).map(e=>new URLSearchParams(e).toString()).join('\\n')).then(()=>{"
-    "sending=false;if(Q.length)ev()} ).catch(()=>{sending=false;Q.length=0})}}"
-    "const px=new Set(),keys={};let mx=0,my=0;"
-    "function xy(e){const r=cv.getBoundingClientRect();"
-    "return{x:Math.round((e.clientX-r.left)*cv.width/r.width),y:Math.round((e.clientY-r.top)*cv.height/r.height)}}"
-    "cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);px.add(e.pointerId);"
-    "mx=e.x;my=e.y;const p=xy(e);ev({t:'down',id:e.pointerId,x:p.x,y:p.y})});"
-    "cv.addEventListener('pointermove',e=>{if(!px.has(e.pointerId))return;const p=xy(e);"
-    "ev({t:'move',id:e.pointerId,x:p.x,y:p.y})});"
-    "function up(e){if(px.delete(e.pointerId)){const p=xy(e);ev({t:'up',id:e.pointerId,x:p.x,y:p.y})}}"
-    "cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);"
-    "const map={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',"
-    "ArrowUp:'ArrowUp',ArrowDown:'ArrowDown',Space:'space'};"
-    "window.addEventListener('keydown',e=>{const k=map[e.code];if(!k||e.ctrlKey||e.metaKey||e.altKey)return;"
-    "e.preventDefault();if(!keys[e.code]){keys[e.code]=1;ev({t:'key',k,d:1})}});"
-    "window.addEventListener('keyup',e=>{const k=map[e.code];if(k&&keys[e.code]){keys[e.code]=0;"
-    "ev({t:'key',k,d:0})}});"
-    "function release(){const ids=[...px];px.clear();keys.length=0;ev({t:'cancel'});"
-    "for(const id of ids)if(cv.hasPointerCapture(id))cv.releasePointerCapture(id)}"
-    "window.addEventListener('blur',release);"
-    "window.addEventListener('resize',()=>{cv.width=innerWidth;cv.height=innerHeight})"
-    "</script></html>";
-
 static char *read_html(void) {
     FILE *f=fopen("tools/preview/index.html","rb");if(!f)return NULL;
     if(fseek(f,0,SEEK_END)!=0){fclose(f);return NULL;}
@@ -266,7 +184,7 @@ int main(int argc, char **argv) {
     int port = 8090;
     int w = 960, h = 540;
     const char *assets = "assets", *storage = "data";
-    const char *project = NULL;
+    const char *project = NULL, *projects = "projects";
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--port") && i + 1 < argc) port = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--w") && i + 1 < argc) w = atoi(argv[++i]);
@@ -274,6 +192,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--storage") && i + 1 < argc) storage = argv[++i];
         else if (!strcmp(argv[i], "--assets") && i + 1 < argc) assets = argv[++i];
         else if (!strcmp(argv[i], "--project") && i + 1 < argc) project = argv[++i];
+        else if (!strcmp(argv[i], "--projects") && i + 1 < argc) projects = argv[++i];
     }
     if(w<64 || h<64 || w>4096 || h>4096 || port<1 || port>65535) {
         fprintf(stderr,"Invalid preview size or port\n");return 1;
@@ -296,15 +215,12 @@ int main(int argc, char **argv) {
 
     AAssetManager *am = host_asset_manager(assets);
     if (!gfx_init(am)) { fprintf(stderr, "graphics init failed\n"); return 1; }
-    if (project) {
-        project_mode = 1;
-        if (!eng_init(am) || !eng_project_load(project)) {
-            fprintf(stderr, "engine: failed to load project '%s'\n", project);
-            return 1;
-        }
-    } else {
-        game_init(am);
-        if(app_failed()){fprintf(stderr,"%s\n",app_error());return 1;}
+    game_set_project_root(projects);
+    game_init(am);
+    if (app_failed()) { fprintf(stderr, "%s\n", app_error()); return 1; }
+    if (project && !game_open_project(project)) {
+        fprintf(stderr, "engine: failed to load project '%s'\n", project);
+        return 1;
     }
     render_frame();
 
@@ -321,8 +237,8 @@ int main(int argc, char **argv) {
         return 1;
     }
     listen(srv, 16);
-    fprintf(stderr, "Enjoer 3D preview: http://0.0.0.0:%d (%dx%d, assets=%s)\n",
-            port, w, h, assets);
+    fprintf(stderr, "Enjoer engine preview: http://0.0.0.0:%d (%dx%d, assets=%s, projects=%s)\n",
+            port, w, h, assets, projects);
 
     static char reqbuf[16384];
     while (running) {
@@ -341,25 +257,15 @@ int main(int argc, char **argv) {
         sscanf(reqbuf, "%7s %511s", method, path);
 
         if (strcmp(method, "GET") == 0 && strcmp(path, "/") == 0) {
-            const char *page = project_mode ? engine_html : index_html;
-            http_head(fd, 200, "text/html; charset=utf-8", (int)strlen(page), 0);
-            send_all(fd, page, strlen(page));
+            http_head(fd, 200, "text/html; charset=utf-8", (int)strlen(index_html), 0);
+            send_all(fd, index_html, strlen(index_html));
         } else if (strcmp(method, "GET") == 0 && strcmp(path, "/info") == 0) {
-            if (project_mode) {
-                char info[256];
-                int n = snprintf(info, sizeof(info), "{\"w\":%d,\"h\":%d,\"engine\":true,\"project\":\"%s\"}",
-                                 w, h, eng_project_name());
-                http_head(fd, 200, "application/json", n, 0);
-                send_all(fd, info, (size_t)n);
-                close(fd);
-                continue;
-            }
-            float x,y,z;geometrium_player_pos(&x,&y,&z);
-            GeometriumHit hit;char target[160]="null";
-            if(geometrium_target(&hit))snprintf(target,sizeof(target),"{\"x\":%d,\"y\":%d,\"z\":%d,\"block\":%d}",hit.x,hit.y,hit.z,hit.block);
-            char info[512];
-            int n=snprintf(info,sizeof(info),"{\"w\":%d,\"h\":%d,\"fps\":%.1f,\"distance\":%.1f,\"pending\":%d,\"x\":%.4f,\"y\":%.4f,\"z\":%.4f,\"flying\":%d,\"grounded\":%d,\"selected\":%d,\"target\":%s}",
-                           w,h,geometrium_fps(),geometrium_world_distance(),geometrium_world_pending(),x,y,z,geometrium_player_flying(),geometrium_player_grounded(),geometrium_selected(),target);
+            char info[320];
+            int n = snprintf(info, sizeof(info),
+                             "{\"w\":%d,\"h\":%d,\"engine\":true,\"fps\":%.1f,\"nodes\":%d,"
+                             "\"menu\":%d,\"projects\":%d,\"project\":\"%s\"}",
+                             w, h, rend_fps(), eng_scene_node_count(), game_menu_open(),
+                             game_project_count(), eng_project_name());
             http_head(fd, 200, "application/json", n, 0);
             send_all(fd, info, (size_t)n);
         } else if (!strcmp(method,"GET") && !strcmp(path,"/frame.jpg")) {

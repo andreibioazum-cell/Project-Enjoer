@@ -13,6 +13,9 @@
 
 static char project_dir[4096];
 static int world_built;
+/* Last pointer position of an active camera drag (see freecam_update). */
+static float drag_x, drag_y;
+static int drag_valid;
 static uint32_t world_seed = 1234;
 static int seed_set;
 
@@ -52,17 +55,6 @@ static void unquote(char *s) {
         s[len - 2] = 0;
     }
 }
-static int block_from_name(const char *name) {
-    if (!strcmp(name, "grass")) return BLOCK_GRASS;
-    if (!strcmp(name, "dirt")) return BLOCK_DIRT;
-    if (!strcmp(name, "stone")) return BLOCK_STONE;
-    if (!strcmp(name, "sand")) return BLOCK_SAND;
-    if (!strcmp(name, "water")) return BLOCK_WATER;
-    if (!strcmp(name, "log")) return BLOCK_LOG;
-    if (!strcmp(name, "leaves")) return BLOCK_LEAVES;
-    return 0;
-}
-
 static void apply_property(EngNode *n, const char *key, char *value) {
     float f[3];
     if (!strcmp(key, "position")) {
@@ -82,7 +74,7 @@ static void apply_property(EngNode *n, const char *key, char *value) {
         n->color = 0xff000000u | ((uint32_t)(f[0] * 255 + .5f) << 16) |
                    ((uint32_t)(f[1] * 255 + .5f) << 8) | (uint32_t)(f[2] * 255 + .5f);
         n->has_color = 1;
-    } else if (!strcmp(key, "material")) n->block = block_from_name(trim(value));
+    } else if (!strcmp(key, "material")) n->block = eng_block_from_name(trim(value));
     else if (!strcmp(key, "fov") && parse_floats(value, f, 1) == 1) n->fov = f[0];
     else if (!strcmp(key, "current")) n->current = !strcmp(trim(value), "true");
     else if (!strcmp(key, "energy") && parse_floats(value, f, 1) == 1) n->energy = f[0];
@@ -123,8 +115,12 @@ void eng_scene_set_project_dir(const char *dir) {
 }
 
 int eng_scene_load(const char *path) {
-    FILE *f = fopen(path, "r");
-    if (!f) { fprintf(stderr, "engine: cannot open scene '%s'\n", path); return 0; }
+    char *text = NULL;
+    size_t text_len = 0;
+    if (!eng_fs_read(path, &text, &text_len)) {
+        app_log("engine: cannot open scene '%s'", path);
+        return 0;
+    }
     if (!project_dir[0]) { /* stand-alone scene: fall back to its directory */
         snprintf(project_dir, sizeof(project_dir), "%s", path);
         char *slash = strrchr(project_dir, '/');
@@ -134,7 +130,14 @@ int eng_scene_load(const char *path) {
     eng_scene_free();
     char line[1024];
     EngNode *last = NULL;
-    while (fgets(line, sizeof(line), f)) {
+    const char *cursor = text;
+    while (cursor && *cursor) {
+        const char *nl = strchr(cursor, '\n');
+        size_t n = nl ? (size_t)(nl - cursor) : strlen(cursor);
+        if (n >= sizeof(line)) n = sizeof(line) - 1;
+        memcpy(line, cursor, n);
+        line[n] = 0;
+        cursor = nl ? nl + 1 : NULL;
         char *s = trim(line);
         if (!s[0] || s[0] == '#') continue;
         if (s[0] == '[') {
@@ -142,7 +145,7 @@ int eng_scene_load(const char *path) {
             attr(s, "name", name, sizeof(name));
             if (!attr(s, "type", type, sizeof(type))) continue;
             int t = eng_type_from_name(type);
-            if (t < 0) { fprintf(stderr, "engine: unknown node type '%s'\n", type); continue; }
+            if (t < 0) { app_log("engine: unknown node type '%s'", type); continue; }
             EngNode *n = eng_node_create(t, name);
             attr(s, "parent", parent, sizeof(parent));
             if (!eng_node_root()) {
@@ -165,12 +168,12 @@ int eng_scene_load(const char *path) {
             apply_property(last, key, value);
         }
     }
-    fclose(f);
-    if (!eng_node_root()) { fprintf(stderr, "engine: scene '%s' has no root node\n", path); return 0; }
+    free(text);
+    if (!eng_node_root()) { app_log("engine: scene '%s' has no root node", path); return 0; }
     eng_node_update_transforms();
     if (has_type(eng_node_root(), ENG_VOXEL_WORLD) && !world_built) {
-        geometrium_terrain_seed(seed_set ? world_seed : 1234);
-        geometrium_world_build(seed_set ? world_seed : 1234);
+        voxel_terrain_seed(seed_set ? world_seed : 1234);
+        voxel_world_build(seed_set ? world_seed : 1234);
         world_built = 1;
     }
     eng_physics_reset();       /* fresh scene: wake every rigid body */
@@ -180,6 +183,16 @@ int eng_scene_load(const char *path) {
     return 1;
 }
 
+static int count_nodes(const EngNode *n) {
+    int total = 1;
+    for (const EngNode *c = n->child; c; c = c->next) total += count_nodes(c);
+    return total;
+}
+int eng_scene_node_count(void) {
+    const EngNode *root = eng_node_root();
+    return root ? count_nodes(root) : 0;
+}
+
 void eng_scene_free(void) {
     if (eng_node_root()) {
         EngNode *r = eng_node_root();
@@ -187,10 +200,51 @@ void eng_scene_free(void) {
         eng_node_destroy(r);
     }
     world_built = 0;
+    drag_valid = 0;
     eng_input_reset();
 }
 
 /* ── per-frame update ── */
+static EngNode *find_camera(EngNode *n, int require_current);
+
+/* Inspectable camera: when the current Camera3D carries no script of its own
+ * the engine drives it, so every scene can be looked around in — drag orbits,
+ * WASD moves, Space/Shift change altitude. A scripted camera keeps full
+ * control and is never touched here. */
+static void freecam_update(EngNode *cam, float dt) {
+    float px, py;
+    int down = 0;
+    if (eng_input_pointer(&px, &py, &down) && down) {
+        if (drag_valid) {
+            cam->yaw += (px - drag_x) * 0.005f;
+            cam->pitch += (py - drag_y) * 0.005f;
+            if (cam->pitch > 1.5f) cam->pitch = 1.5f;
+            if (cam->pitch < -1.5f) cam->pitch = -1.5f;
+            cam->dirty = 1;
+        }
+        drag_x = px;
+        drag_y = py;
+        drag_valid = 1;
+    } else {
+        drag_valid = 0;
+    }
+
+    float fwd = 0, side = 0, lift = 0;
+    if (eng_input_is_pressed(ENG_KEY_UP)) fwd += 1;
+    if (eng_input_is_pressed(ENG_KEY_DOWN)) fwd -= 1;
+    if (eng_input_is_pressed(ENG_KEY_RIGHT)) side += 1;
+    if (eng_input_is_pressed(ENG_KEY_LEFT)) side -= 1;
+    if (eng_input_is_pressed(ENG_KEY_SPACE)) lift += 1;
+    if (eng_input_is_pressed(ENG_KEY_SHIFT)) lift -= 1;
+    if (fwd == 0 && side == 0 && lift == 0) return;
+    float step = 6.0f * (dt > 0 ? dt : 0);
+    float sy = sinf(cam->yaw), cy = cosf(cam->yaw);
+    cam->pos.x += (sy * fwd + cy * side) * step;
+    cam->pos.z += (cy * fwd - sy * side) * step;
+    cam->pos.y += lift * step;
+    cam->dirty = 1;
+}
+
 static EngNode *first_of_type(EngNode *n, int type) {
     if (n->type == type) return n;
     for (EngNode *c = n->child; c; c = c->next) {
@@ -204,6 +258,11 @@ void eng_update(float dt) {
     if (!root) return;
     eng_node_update_transforms(); /* scripts see fresh global transforms */
     eng_script_process_all(dt);
+    {
+        EngNode *cam = find_camera(root, 1);
+        if (!cam) cam = find_camera(root, 0);
+        if (cam && !cam->script) freecam_update(cam, dt);
+    }
     eng_node_update_transforms();
     /* physics: split large frame gaps into <= 1/30 s substeps for stability */
     {
@@ -215,9 +274,9 @@ void eng_update(float dt) {
         }
     }
     if (world_built) {
-        geometrium_water_update(dt);
+        voxel_water_update(dt);
         EngNode *cam = first_of_type(root, ENG_CAMERA);
-        geometrium_world_update(cam ? cam->gpos.x : 0, cam ? cam->gpos.z : 0);
+        voxel_world_update(cam ? cam->gpos.x : 0, cam ? cam->gpos.z : 0);
     }
 }
 
@@ -272,14 +331,14 @@ static void draw_mesh(EngNode *n, const DirLight *d, int nd, const OmniLight *o,
     float s = n->size * n->gscale;
     for (int i = 0; i < count; i++) {
         const EngFace *f = &faces[i];
-        GeometriumVertex verts[8];
+        RendVertex verts[8];
         EngVec fc = {0, 0, 0};
         for (int v = 0; v < f->count; v++) {
             EngVec lv = {f->v[v].x * s, f->v[v].y * s, f->v[v].z * s};
             EngVec gv = {b->m[0] * lv.x + b->m[1] * lv.y + b->m[2] * lv.z + n->gpos.x,
                          b->m[3] * lv.x + b->m[4] * lv.y + b->m[5] * lv.z + n->gpos.y,
                          b->m[6] * lv.x + b->m[7] * lv.y + b->m[8] * lv.z + n->gpos.z};
-            verts[v] = (GeometriumVertex){gv.x, gv.y, gv.z, f->uv[v][0], f->uv[v][1]};
+            verts[v] = (RendVertex){gv.x, gv.y, gv.z, f->uv[v][0], f->uv[v][1]};
             fc.x += gv.x; fc.y += gv.y; fc.z += gv.z;
         }
         fc.x /= f->count; fc.y /= f->count; fc.z /= f->count;
@@ -290,11 +349,11 @@ static void draw_mesh(EngNode *n, const DirLight *d, int nd, const OmniLight *o,
         unsigned char light[8];
         for (int v = 0; v < f->count; v++) light[v] = lb;
         if (n->block) {
-            GeometriumMaterial *m = geometrium_material(n->block, face_index(gn));
-            if (m) geometrium3d_polygon(verts, f->count, gn.x, gn.y, gn.z, 0, m, light);
+            RendMaterial *m = rend_material(n->block, face_index(gn));
+            if (m) rend3d_polygon(verts, f->count, gn.x, gn.y, gn.z, 0, m, light);
         } else {
             uint32_t color = n->has_color ? n->color : 0xffc8c8c8u;
-            geometrium3d_polygon(verts, f->count, gn.x, gn.y, gn.z, color,
+            rend3d_polygon(verts, f->count, gn.x, gn.y, gn.z, color,
                                  eng_flat_material(color), light);
         }
     }
@@ -324,18 +383,18 @@ int eng_draw(Buffer *buffer) {
     float yaw = cam->yaw, pitch = cam->pitch;
     if (pitch > 1.5f) pitch = 1.5f;
     if (pitch < -1.5f) pitch = -1.5f;
-    int scale = geometrium_render_scale(buffer->width, buffer->height);
-    if (!geometrium3d_begin(buffer, scale, cam->gpos.x, cam->gpos.y, cam->gpos.z, yaw, pitch, cam->fov))
+    int scale = rend_render_scale(buffer->width, buffer->height);
+    if (!rend3d_begin(buffer, scale, cam->gpos.x, cam->gpos.y, cam->gpos.z, yaw, pitch, cam->fov))
         return 0;
-    geometrium3d_sky(0xff78b8e8u, 0xffc7e5f5u);
-    geometrium3d_fog(40, 90);
+    rend3d_sky(0xff78b8e8u, 0xffc7e5f5u);
+    rend3d_fog(40, 90);
 
     DirLight d[8]; OmniLight o[8];
     int nd = 0, no = 0;
     collect_lights(root, d, &nd, o, &no);
-    if (world_built) geometrium_world_draw();
+    if (world_built) voxel_world_draw();
     draw_tree(root, d, nd, o, no);
-    geometrium3d_end();
+    rend3d_end();
     return 1;
 }
 

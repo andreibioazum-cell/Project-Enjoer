@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Enjoer — block world</title>
+<title>Enjoer — engine preview</title>
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;overscroll-behavior:none}
 .game{position:fixed;inset:0;display:grid;place-items:center}
@@ -12,7 +12,7 @@ canvas:active{cursor:grabbing}
 </style>
 </head>
 <body>
-<main class="game"><canvas id="c" tabindex="0" aria-label="Block world. WASD to move, Space to jump, F for flight, E to break, R or right mouse button to place, 1-6 for materials. Joystick on the left, camera on the right."></canvas></main>
+<main class="game"><canvas id="c" tabindex="0" aria-label="Enjoer engine preview. The launcher lists the projects; WASD and arrows move, Space rises, Shift sinks, drag orbits the camera, Escape or M opens the project list."></canvas></main>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
 let W=960,H=540;
@@ -41,7 +41,7 @@ async function loop(){
 }
 // Keep event ordering while coalescing redundant moves of the same finger.
 const queue=[];
-let sending=false,mousePlace=false;
+let sending=false;
 function ev(body){
   if(body.t==='move'){
     for(let i=queue.length-1;i>=0&&queue[i].t==='move';i--){
@@ -60,20 +60,18 @@ async function flushEvents(){
 }
 function xy(e){const r=cv.getBoundingClientRect();return{x:Math.round((e.clientX-r.left)*W/r.width),y:Math.round((e.clientY-r.top)*H/r.height)}}
 const pointers=new Set(),pressed=new Map();
-function held(k){return [...pressed.values()].includes(k)||(k==='place'&&mousePlace)}
+function held(k){return [...pressed.values()].includes(k)}
 function startPointer(e){
   cv.focus({preventScroll:true});pointers.add(e.pointerId);cv.setPointerCapture(e.pointerId);
   ev({t:'down',id:e.pointerId,...xy(e)});
 }
 // A second mouse button emits pointermove, not pointerdown. Track the buttons
-// bitmask so right-click placement also works while dragging the camera.
+// bitmask so right-drag keeps orbiting the camera while the left button is held.
 function mousePointer(e){
   if(e.pointerType!=='mouse')return false;
   const left=Boolean(e.buttons&1);let began=false;
   if(left&&!pointers.has(e.pointerId)){startPointer(e);began=true}
   else if(!left&&pointers.delete(e.pointerId))ev({t:'up',id:e.pointerId,...xy(e)});
-  const was=held('place');mousePlace=Boolean(e.buttons&2);
-  if(was!==held('place'))ev({t:'key',k:'place',d:held('place')?1:0});
   if(e.buttons&3){cv.focus({preventScroll:true});if(!cv.hasPointerCapture(e.pointerId))cv.setPointerCapture(e.pointerId)}
   if(e.type==='pointermove'&&left&&!began)ev({t:'move',id:e.pointerId,...xy(e)});
   e.preventDefault();return true;
@@ -82,13 +80,13 @@ cv.addEventListener('pointerdown',e=>{if(!mousePointer(e)){startPointer(e);e.pre
 cv.addEventListener('pointermove',e=>{if(!mousePointer(e)&&pointers.has(e.pointerId))ev({t:'move',id:e.pointerId,...xy(e)})});
 cv.addEventListener('pointerup',e=>{if(!mousePointer(e)&&pointers.delete(e.pointerId))ev({t:'up',id:e.pointerId,...xy(e)})});
 function cancelPointer(e){
-  if(e.pointerType==='mouse'){if(mousePlace||pointers.has(e.pointerId))releaseAll();return}
+  if(e.pointerType==='mouse'){if(pointers.has(e.pointerId))releaseAll();return}
   if(pointers.delete(e.pointerId))ev({t:'cancel-pointer',id:e.pointerId});
 }
 cv.addEventListener('pointercancel',cancelPointer);
 cv.addEventListener('lostpointercapture',cancelPointer);
 cv.addEventListener('contextmenu',e=>e.preventDefault());
-const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyF:'f',KeyE:'break',KeyR:'place',Digit1:'1',Digit2:'2',Digit3:'3',Digit4:'4',Digit5:'5',Digit6:'6',Space:'space',ShiftLeft:'Shift',ShiftRight:'Shift',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',ArrowUp:'ArrowUp',ArrowDown:'ArrowDown'};
+const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',Space:'space',ShiftLeft:'Shift',ShiftRight:'Shift',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',ArrowUp:'ArrowUp',ArrowDown:'ArrowDown',Escape:'Escape',KeyM:'m'};
 window.addEventListener('keydown',e=>{
   const k=keyMap[e.code];if(!k||e.ctrlKey||e.metaKey||e.altKey)return;
   e.preventDefault();if(e.repeat||pressed.has(e.code))return;
@@ -99,7 +97,7 @@ window.addEventListener('keyup',e=>{
   pressed.delete(e.code);e.preventDefault();if(!held(k))ev({t:'key',k,d:0});
 });
 function releaseAll(){
-  const ids=[...pointers];pointers.clear();pressed.clear();mousePlace=false;queue.length=0;ev({t:'cancel'});
+  const ids=[...pointers];pointers.clear();pressed.clear();queue.length=0;ev({t:'cancel'});
   for(const id of ids)if(cv.hasPointerCapture(id))cv.releasePointerCapture(id);
 }
 window.addEventListener('blur',releaseAll);
