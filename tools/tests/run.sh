@@ -14,6 +14,13 @@ fi
 CORE="src/core/log.c src/core/state.c src/core/assets.c tools/preview/host_compat.c"
 WORLD="src/geometrium/geometrium_world.c src/geometrium/geometrium_light.c src/geometrium/geometrium_water.c src/geometrium/geometrium_terrain.c src/geometrium/geometrium_mesh.c src/geometrium/geometrium_edits.c"
 ACTORS="src/geometrium/geometrium_player.c src/geometrium/geometrium_input.c src/geometrium/geometrium_interact.c"
+# Android-only translation units (main.c, the JNI sound backend) never run on
+# the host, but CI compiles them: syntax-check them against a minimal NDK
+# header stub so shadowing/typing bugs cannot slip past the host suite.
+$CC -std=c99 -Wall -Wextra -Werror -D__ANDROID__ \
+    -Itools/tests/android_stub -Isrc -I. \
+    -fsyntax-only src/main.c src/sound/sound_android.c
+
 # Intentional splitting of source/flag lists, no .c includes or generated runtime.
 $CC $FLAGS $CORE src/graphics/image.c src/geometrium/geometrium_render.c src/geometrium/geometrium_shapes.c src/geometrium/geometrium_material.c tools/tests/render.c -lm -o "$DIR/render"
 "$DIR/render"
