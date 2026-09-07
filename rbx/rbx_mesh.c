@@ -6,7 +6,7 @@ static int at(int x,int y,int z) { return (y*CHUNK_SIZE+z)*CHUNK_SIZE+x; }
 int rbx_face_exposed(int b,int n) {
     return b!=BLOCK_AIR && (n==BLOCK_AIR || (n==BLOCK_WATER && b!=BLOCK_WATER));
 }
-static void emit(RbxChunk *c,const int origin[3],int u,int v,int face,int block,int shadow) {
+static void emit(RbxChunk *c,const int origin[3],int u,int v,int face,int block,const unsigned char light[4]) {
     if (c->count==c->capacity) {
         int capacity=c->capacity ? c->capacity*2 : 256;
         RbxQuad *p=realloc(c->quads,(size_t)capacity*sizeof(*p));
@@ -15,7 +15,7 @@ static void emit(RbxChunk *c,const int origin[3],int u,int v,int face,int block,
     }
     /* A horizontal cut inside grass reveals soil, not a second grass top. */
     if (block==BLOCK_GRASS && face==0 && origin[1]%2) block=BLOCK_DIRT;
-    c->quads[c->count++]=(RbxQuad){origin[0],origin[1],origin[2],u,v,face,block,(unsigned char)shadow};
+    c->quads[c->count++]=(RbxQuad){origin[0],origin[1],origin[2],u,v,face,block,{light[0],light[1],light[2],light[3]}};
     int top=origin[1]+(face>=2 ? v : 0);
     if (origin[1]<c->min_y) c->min_y=origin[1];
     if (top>c->max_y) c->max_y=top;
@@ -24,13 +24,10 @@ static void half_face(RbxChunk *c,int sx,int sy,int sz,int face,int block) {
     int n=rbx_world_cell(c->cx*CHUNK_SIZE*2+sx+normal[face][0],sy+normal[face][1],
                          c->cz*CHUNK_SIZE*2+sz+normal[face][2]);
     if (!rbx_face_exposed(block,n)) return;
-    /* Точка освещённости — центр половинной грани, чуть наружу по нормали. */
-    float wx=(c->cx*CHUNK_SIZE*2+sx)*.5f+.25f,wy=sy*.5f+.25f,wz=(c->cz*CHUNK_SIZE*2+sz)*.5f+.25f;
-    float push=.25f+.002f;
-    wx+=normal[face][0]*push;wy+=normal[face][1]*push;wz+=normal[face][2]*push;
     int p[3]={sx,sy,sz};
     for (int axis=0;axis<3;axis++) if (normal[face][axis]>0) p[axis]++;
-    emit(c,p,1,1,face,block,!rbx_sunlit(wx,wy,wz));
+    unsigned char light[4];rbx_light_face(c,p,1,1,face,light);
+    emit(c,p,1,1,face,block,light);
 }
 static void split_boundary(RbxChunk *c,const int p[3],int a,int ua,int va,int face,int b) {
     for (int v=0;v<2;v++) for (int u=0;u<2;u++) {
@@ -40,6 +37,8 @@ static void split_boundary(RbxChunk *c,const int p[3],int a,int ua,int va,int fa
     }
 }
 void rbx_chunk_mesh(RbxChunk *c) {
+    rbx_light_bake(c);
+    if (!c->light_valid) return;
     unsigned char resolved[BASE_CELLS];
     const unsigned char *blocks=c->blocks;
     const RbxEdit *first=rbx_edit_first(c->cx,c->cz);
@@ -54,13 +53,13 @@ void rbx_chunk_mesh(RbxChunk *c) {
     }
     c->count=0;c->min_y=WORLD_HEIGHT*2;c->max_y=0;
     const int dims[3]={CHUNK_SIZE,WORLD_HEIGHT,CHUNK_SIZE};
-    unsigned char mask[CHUNK_SIZE*WORLD_HEIGHT];
+    uint64_t mask[CHUNK_SIZE*WORLD_HEIGHT];
     for (int face=0;face<6;face++) {
         int a=face<2 ? 1 : face<4 ? 2 : 0;
         int ua=face<4 ? 0 : 2,va=face<2 ? 2 : 1;
         int width=dims[ua],height=dims[va];
         for (int slice=0;slice<dims[a];slice++) {
-            memset(mask,0,(size_t)width*height);
+            memset(mask,0,(size_t)width*height*sizeof(*mask));
             for (int v=0;v<height;v++) for (int u=0;u<width;u++) {
                 int p[3];p[a]=slice;p[ua]=u;p[va]=v;
                 int b=blocks[at(p[0],p[1],p[2])];
@@ -71,28 +70,35 @@ void rbx_chunk_mesh(RbxChunk *c) {
                     rbx_world_uniform(ox+neighbor[0],neighbor[1],oz+neighbor[2]);
                 if (n==BLOCK_PARTIAL) split_boundary(c,p,a,ua,va,face,b);
                 else if (rbx_face_exposed(b,n)) {
-                    /* Резкая тень решается на уровне ячейки: центр грани + эпсилон. */
-                    float wx=ox+p[0]+.5f,wy=p[1]+.5f,wz=oz+p[2]+.5f;
-                    float push=normal[face][a]>0 ? .501f : -.501f;
-                    if (a==0) wx+=push; else if (a==1) wy+=push; else wz+=push;
-                    mask[v*width+u]=(unsigned char)(b|(rbx_sunlit(wx,wy,wz)?0:0x80));
+                    int origin[3]={p[0]*2,p[1]*2,p[2]*2};
+                    origin[a]+=normal[face][a]>0 ? 2 : 0;
+                    unsigned char light[4];rbx_light_face(c,origin,2,2,face,light);
+                    uint64_t key=(uint64_t)b;
+                    for (int i=0;i<4;i++) key|=(uint64_t)light[i]<<(8+i*8);
+                    mask[v*width+u]=key;
                 }
             }
             for (int v=0;v<height;v++) for (int u=0;u<width;) {
-                int raw=mask[v*width+u];
+                uint64_t raw=mask[v*width+u];
                 if (!raw) { u++;continue; }
-                int b=raw&0x7f,shadow=raw>>7;
+                int b=raw&255;
+                unsigned char light[4];
+                for (int i=0;i<4;i++) light[i]=(unsigned char)(raw>>(8+i*8));
+                /* Merge only along constant-light axes: never stretch a gradient
+                 * across repeated cells or introduce a lighting seam. */
+                int merge_u=light[0]==light[1] && light[2]==light[3];
+                int merge_v=light[0]==light[2] && light[1]==light[3];
                 int w=1,h=1;
-                while (u+w<width && mask[v*width+u+w]==raw) w++;
-                while (v+h<height) {
+                while (merge_u && u+w<width && mask[v*width+u+w]==raw) w++;
+                while (merge_v && v+h<height) {
                     int same=1;
                     for (int k=0;k<w;k++) if (mask[(v+h)*width+u+k]!=raw) {same=0;break;}
                     if (!same) break;
                     h++;
                 }
                 int p[3];p[a]=(slice+(normal[face][a]>0))*2;p[ua]=u*2;p[va]=v*2;
-                emit(c,p,w*2,h*2,face,b,shadow);
-                for (int row=0;row<h;row++) memset(mask+(v+row)*width+u,0,(size_t)w);
+                emit(c,p,w*2,h*2,face,b,light);
+                for (int row=0;row<h;row++) memset(mask+(v+row)*width+u,0,(size_t)w*sizeof(*mask));
                 u+=w;
             }
         }

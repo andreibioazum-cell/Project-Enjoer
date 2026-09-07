@@ -67,23 +67,22 @@ static int texture(int block,int face) {
 }
 RbxMaterial *rbx_material(int block,int face) { return initialized ? &materials[texture(block,face)] : NULL; }
 const Image *rbx_material_icon(int block) { return initialized ? &materials[texture(block,block==BLOCK_LOG ? 2 : 0)].image : NULL; }
-const uint32_t *rbx_material_shades(RbxMaterial *m,int face,uint32_t fog) {
-    /* Вторая шестёрка — те же грани, затемнённые тенью от блоков. */
-    static const float light[SHADE_FACES]={.96f,.52f,.695f,.52f,.68f,.52f,
-        .96f*RBX_SUN_SHADOW,.52f*RBX_SUN_SHADOW,.695f*RBX_SUN_SHADOW,
-        .52f*RBX_SUN_SHADOW,.68f*RBX_SUN_SHADOW,.52f*RBX_SUN_SHADOW};
-    if (face<0 || face>=SHADE_FACES) face=0;
-    if (m->fog_color!=fog) { m->fog_color=fog;m->ready=0; }
-    if (!(m->ready&(1u<<face))) {
-        int fr=fog&255,fg=(fog>>8)&255,fb=(fog>>16)&255;
+const uint32_t *rbx_material_shades(RbxMaterial *m,int shade,uint32_t fog) {
+    if (shade<0) shade=0;
+    if (shade>=LIGHT_LEVELS) shade=LIGHT_LEVELS-1;
+    if (m->fog_color!=fog) {m->fog_color=fog;m->ready=0;}
+    if (!(m->ready&(1u<<shade))) {
+        float light=(float)shade/(LIGHT_LEVELS-1);
+        /* Distant cave surfaces stay dark instead of fading to a glowing sky. */
+        float fog_light=fminf(1,light*2);
+        int fr=(int)((fog&255)*fog_light),fg=(int)(((fog>>8)&255)*fog_light),fb=(int)(((fog>>16)&255)*fog_light);
         for (int level=0;level<FOG_LEVELS;level++) for (int i=0;i<PALETTE_SIZE;i++) {
             uint32_t c=m->palette[i];
-            int r=(int)(((c>>16)&255)*light[face]),g=(int)(((c>>8)&255)*light[face]),b=(int)((c&255)*light[face]);
-            /* Signed differences preserve channel bounds even toward darker fog. */
+            int r=(int)(((c>>16)&255)*light),g=(int)(((c>>8)&255)*light),b=(int)((c&255)*light);
             r+=(fr-r)*level/(FOG_LEVELS-1);g+=(fg-g)*level/(FOG_LEVELS-1);b+=(fb-b)*level/(FOG_LEVELS-1);
-            m->shades[face][level*PALETTE_SIZE+i]=0xff000000u|(uint32_t)r|((uint32_t)g<<8)|((uint32_t)b<<16);
+            m->shades[shade][level*PALETTE_SIZE+i]=0xff000000u|(uint32_t)r|((uint32_t)g<<8)|(uint32_t)b<<16;
         }
-        m->ready|=1u<<face;
+        m->ready|=1u<<shade;
     }
-    return m->shades[face];
+    return m->shades[shade];
 }

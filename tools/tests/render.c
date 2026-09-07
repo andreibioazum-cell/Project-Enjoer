@@ -70,7 +70,7 @@ static void test_color_fog(void) {
                 uint32_t pixel = b.pixels[120 * b.stride + 160];
                 float t = fmaxf(0, fminf(1, (z - .12f - RBX_FOG_START) / (RBX_FOG_END - RBX_FOG_START)));
                 for (int ch = 0; ch < 3; ch++) {
-                    int lit = (int)(((colors[c] >> (16 - ch * 8)) & 255) * .52f);
+                    int lit = (int)(((colors[c] >> (16 - ch * 8)) & 255) * rbx_face_shade(0,0,-1));
                     int expected = (int)(lit + (fog[ch] - lit) * t);
                     CHECK(abs(channel(pixel, ch) - expected) <= 1);
                 }
@@ -298,6 +298,45 @@ static void test_merged_fog(void) {
     puts("PASS per-pixel radial fog stays continuous across greedy / individual face boundaries");
 }
 
+static void test_smooth_light(void) {
+    static RbxMaterial flat;
+    flat.colors=1;flat.palette[0]=0xfff0f0f0u;
+    Buffer a=make_buffer(320,240,5),b=make_buffer(320,240,5);
+    for(int slant=0;slant<2;slant++) {
+        for(int pass=0;pass<2;pass++) {
+            Buffer *out=pass ? &b : &a;
+            CHECK(rbx3d_begin(out,1,0,0,0,0,0,72));rbx3d_sky(0xff000000u,0xff000000u);
+            int pieces=pass ? 4 : 1;
+            for(int i=0;i<pieces;i++) {
+                float x0=-3+6.f*i/pieces,x1=-3+6.f*(i+1)/pieces;
+                float z0=slant ? 6+x0 : 4,z1=slant ? 6+x1 : 4;
+                RbxVertex v[4]={{x0,-1,z0,0,0},{x1,-1,z1,0,0},{x1,1,z1,0,0},{x0,1,z0,0,0}};
+                unsigned char lo=(unsigned char)(255.f*i/pieces+.5f),hi=(unsigned char)(255.f*(i+1)/pieces+.5f);
+                unsigned char light[4]={lo,hi,hi,lo};
+                rbx3d_polygon(v,4,slant ? .70710678f : 0,0,slant ? -.70710678f : -1,0,&flat,light);
+            }
+            rbx3d_end();
+        }
+        for(int y=0;y<a.height;y++)for(int x=0;x<a.width;x++) {
+            int p=channel(a.pixels[y*a.stride+x],0),q=channel(b.pixels[y*b.stride+x],0);
+            CHECK(abs(p-q)<=8); /* at most one palette level at a rounding tie */
+        }
+        int shades=0,last=-1;
+        for(int x=0;x<a.width;x++) {
+            int p=channel(a.pixels[120*a.stride+x],0);
+            if(!p)continue;
+            CHECK(p>=last);if(p!=last)shades++;last=p;
+        }
+        CHECK(shades>=20);
+    }
+    const uint32_t *dark=rbx_material_shades(&flat,1,0xffffffffu);
+    CHECK(channel(dark[(FOG_LEVELS-1)*PALETTE_SIZE],0)<20);
+    const uint32_t *day=rbx_material_shades(&flat,LIGHT_LEVELS-1,0xffffffffu);
+    CHECK(channel(day[(FOG_LEVELS-1)*PALETTE_SIZE],0)==255);
+    check_padding(&a);check_padding(&b);free(a.pixels);free(b.pixels);
+    puts("PASS perspective-correct smooth vertex light, consistent split quads, bounded light palettes and non-glowing cave fog");
+}
+
 int main(void) {
     screen_w=320;screen_h=240;
     CHECK(rbx_materials_load(host_asset_manager("game/assets")));
@@ -306,6 +345,6 @@ int main(void) {
     test_perspective_depth();
     test_clipping_and_camera();
     test_voxel_materials();
-    test_half_uv();test_merged_fog();
+    test_half_uv();test_merged_fog();test_smooth_light();
     return 0;
 }

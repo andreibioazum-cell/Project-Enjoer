@@ -72,17 +72,22 @@ const RbxEdit *rbx_edit_first(int cx,int cz) {
 }
 const RbxEdit *rbx_edit_next(const RbxEdit *e) { return e && e->next ? &edits[e->next-1] : NULL; }
 int rbx_edit_set(int sx,int sy,int sz,int block,int original) {
+    return rbx_edit_set_flow(sx,sy,sz,block,0,original);
+}
+const RbxEdit *rbx_edit_at(int index) {return index>=0 && index<count ? &edits[index] : NULL;}
+int rbx_edit_set_flow(int sx,int sy,int sz,int block,int flow,int original) {
+    if (flow<0 || flow>RBX_WATER_FALLING || (block!=BLOCK_WATER && flow)) return 0;
     int x=rbx_floor_div(sx,2),y=rbx_floor_div(sy,2),z=rbx_floor_div(sz,2);
     int part=sx-x*2+(sy-y*2)*2+(sz-z*2)*4;
     RbxEdit *e=(RbxEdit *)rbx_edit_find(x,y,z);
     if (!e) {
-        if (block==original) return 0;
+        if (block==original && !flow) return 0;
         if (!reserve(count+1)) return 0;
         e=&edits[count]; *e=(RbxEdit){.x=x,.y=y,.z=z};
         memset(e->cells,original,8); index_edit(count++);
     }
-    if (e->cells[part]==block) return 0;
-    e->cells[part]=(unsigned char)block; dirty=1;
+    if (e->cells[part]==block && e->flow[part]==flow) return 0;
+    e->cells[part]=(unsigned char)block;e->flow[part]=(unsigned char)flow;dirty=1;
     return 1;
 }
 int rbx_edits_count(void) { return count; }
@@ -98,14 +103,14 @@ int rbx_edits_save(void) {
     if (!dirty) return 1;
     char path[600],temp[600];
     if (!app_save_path(path,sizeof(path),"world.edits") || !app_save_path(temp,sizeof(temp),"world.edits.tmp")) return 0;
-    size_t length=20+(size_t)count*20;
+    size_t length=20+(size_t)count*28;
     unsigned char *bytes=malloc(length);
     if (!bytes) return 0;
-    memcpy(bytes,"EJVOX01\0",8); put32(bytes+8,seed); put32(bytes+12,(uint32_t)count);
+    memcpy(bytes,"EJVOX02\0",8); put32(bytes+8,seed); put32(bytes+12,(uint32_t)count);
     for (int i=0;i<count;i++) {
-        unsigned char *p=bytes+20+i*20;
+        unsigned char *p=bytes+20+i*28;
         put32(p,(uint32_t)edits[i].x);put32(p+4,(uint32_t)edits[i].y);put32(p+8,(uint32_t)edits[i].z);
-        memcpy(p+12,edits[i].cells,8);
+        memcpy(p+12,edits[i].cells,8);memcpy(p+20,edits[i].flow,8);
     }
     put32(bytes+16,checksum(bytes+20,length-20));
     FILE *f=fopen(temp,"wb");
@@ -124,27 +129,33 @@ int rbx_edits_load(void) {
     FILE *f=fopen(path,"rb"); if (!f) return 0;
     if (fseek(f,0,SEEK_END)!=0) { fclose(f);return 0; }
     long length=ftell(f); rewind(f);
-    if (length<20 || length>20+MAX_EDITS*20) { fclose(f);return 0; }
+    if (length<20 || length>20+MAX_EDITS*28) { fclose(f);return 0; }
     unsigned char *bytes=malloc((size_t)length);
     if (!bytes) { fclose(f);return 0; }
     int ok=fread(bytes,1,(size_t)length,f)==(size_t)length;
     fclose(f);
     uint32_t n=ok ? get32(bytes+12) : 0;
-    ok=ok && !memcmp(bytes,"EJVOX01\0",8) && get32(bytes+8)==seed && n<=MAX_EDITS &&
-       20+n*20==(uint32_t)length && get32(bytes+16)==checksum(bytes+20,(size_t)length-20);
+    int version=ok && !memcmp(bytes,"EJVOX02\0",8) ? 2 : ok && !memcmp(bytes,"EJVOX01\0",8) ? 1 : 0;
+    unsigned record=version==2 ? 28 : 20;
+    ok=ok && version && get32(bytes+8)==seed && n<=MAX_EDITS &&
+       20+n*record==(uint32_t)length && get32(bytes+16)==checksum(bytes+20,(size_t)length-20);
     for (uint32_t i=0;ok && i<n;i++) {
-        const unsigned char *p=bytes+20+i*20;
+        const unsigned char *p=bytes+20+i*record;
         int32_t x=(int32_t)get32(p),y=(int32_t)get32(p+4),z=(int32_t)get32(p+8);
         if (x < -10000000 || x>10000000 || z < -10000000 || z>10000000 || y<1 || y>=WORLD_HEIGHT) ok=0;
-        for (int c=0;c<8;c++) if (p[12+c]>=BLOCK_COUNT) ok=0;
+        for (int c=0;c<8;c++) {
+            if (p[12+c]>=BLOCK_COUNT) ok=0;
+            if (version==2 && (p[20+c]>RBX_WATER_FALLING || (p[12+c]!=BLOCK_WATER && p[20+c]))) ok=0;
+        }
     }
     if (ok) {
         rbx_edits_reset(seed);
         for (uint32_t i=0;i<n;i++) {
-            const unsigned char *p=bytes+20+i*20;
+            const unsigned char *p=bytes+20+i*record;
             int x=(int32_t)get32(p),y=(int32_t)get32(p+4),z=(int32_t)get32(p+8);
             if (rbx_edit_find(x,y,z) || !reserve(count+1)) { ok=0; break; }
             RbxEdit *e=&edits[count];*e=(RbxEdit){.x=x,.y=y,.z=z};memcpy(e->cells,p+12,8);
+            if (version==2) memcpy(e->flow,p+20,8);
             index_edit(count++);
         }
     }

@@ -20,7 +20,7 @@ void game_update(void) {
     if (!isfinite(d) || d<0) d=0;
     if (d>.05f) d=.05f;
     rbx_input_layout();rbx_player_update(d);rbx_actions_update(d);rbx_hand_update(d);
-    float x,z;rbx_player_pos(&x,NULL,&z);rbx_world_update(x,z);
+    float x,z;rbx_player_pos(&x,NULL,&z);rbx_water_update(d);rbx_world_update(x,z);
     /* Debounced atomic autosave; focus loss and shutdown save immediately. */
     if (rbx_edits_dirty()) {
         save_timer+=d;
