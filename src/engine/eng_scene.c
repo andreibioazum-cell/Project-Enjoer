@@ -94,7 +94,10 @@ static void apply_property(EngNode *n, const char *key, char *value) {
     } else if (!strcmp(key, "gravity_scale") && parse_floats(value, f, 1) == 1) {
         eng_body_set_gravity_scale(n, f[0]);
     } else if (!strcmp(key, "velocity") && parse_floats(value, f, 3) == 3) {
-        eng_body_set_linear_velocity(n, f[0], f[1], f[2]);
+        if (n->type == ENG_CHARACTER_BODY) eng_character_set_velocity(n, f[0], f[1], f[2]);
+        else eng_body_set_linear_velocity(n, f[0], f[1], f[2]);
+    } else if (!strcmp(key, "one_way")) {
+        n->one_way = !strcmp(trim(value), "true");
     } else if (!strcmp(key, "restitution") && parse_floats(value, f, 1) == 1) {
         n->restitution = f[0] > 0 ? f[0] : 0;
     } else if (!strcmp(key, "friction") && parse_floats(value, f, 1) == 1) {
@@ -323,7 +326,8 @@ static int face_index(EngVec n) {
 }
 
 static void draw_mesh(EngNode *n, const DirLight *d, int nd, const OmniLight *o, int no) {
-    int visual = n->type == ENG_MESH || n->type == ENG_STATIC_BODY || n->type == ENG_RIGID_BODY;
+    int visual = n->type == ENG_MESH || n->type == ENG_STATIC_BODY ||
+                 n->type == ENG_RIGID_BODY || n->type == ENG_CHARACTER_BODY;
     if (!visual || n->mesh_kind == ENG_MESH_NONE) return;
     const EngFace *faces;
     int count = eng_mesh_faces(n->mesh_kind, &faces);

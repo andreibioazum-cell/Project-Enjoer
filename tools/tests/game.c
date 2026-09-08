@@ -65,13 +65,14 @@ static void test_launcher(Buffer *b) {
     CHECK(game_menu_open());                      /* the engine greets you */
     int count = game_project_count();
     CHECK(count >= 3);
-    int demo = -1, physics = -1, voxel = -1;
+    int demo = -1, physics = -1, voxel = -1, platformer = -1;
     for (int i = 0; i < count; i++) {
         const char *title = game_project_title(i);
         CHECK(title && title[0]);
         if (!strcmp(title, "Demo Scene")) demo = i;
         if (!strcmp(title, "Physics Playground")) physics = i;
         if (!strcmp(title, "Voxel World")) voxel = i;
+        if (!strcmp(title, "Platformer")) platformer = i;
         /* every card sits inside the frame and below the title */
         float x, y, w, h;
         game_menu_card_geom(i, &x, &y, &w, &h);
@@ -82,7 +83,7 @@ static void test_launcher(Buffer *b) {
             CHECK(y > py + ph - 1.0f);            /* no overlap */
         }
     }
-    CHECK(demo >= 0 && physics >= 0 && voxel >= 0);
+    CHECK(demo >= 0 && physics >= 0 && voxel >= 0 && platformer >= 0);
 
     step(b, 1);
     CHECK(distinct_colors(b) > 32);               /* the launcher really drew */
@@ -257,6 +258,48 @@ static void test_reset_and_direct_open(Buffer *b) {
     puts("PASS reset and direct open: a project reloads from its scene file");
 }
 
+static void test_platformer(Buffer *b) {
+    CHECK(game_open_project("projects/platformer"));
+    CHECK(!game_menu_open());
+    CHECK(!strcmp(eng_project_name(), "Platformer"));
+    EngNode *hero = eng_node_find("Main/Hero");
+    CHECK(hero && hero->type == ENG_CHARACTER_BODY);
+    EngNode *camera = eng_node_find("Main/Camera");
+    CHECK(camera && camera->script);            /* follow script owns the camera */
+
+    step(b, 30);
+    CHECK(eng_character_is_grounded(hero));     /* gravity settled the hero */
+
+    float x0, y0, z0;
+    eng_node3d_get_position(hero, &x0, &y0, &z0);
+    (void)z0;
+
+    /* D walks right */
+    game_key("d", 1);
+    step(b, 40);
+    game_key("d", 0);
+    float x1, y1, z1;
+    eng_node3d_get_position(hero, &x1, &y1, &z1);
+    CHECK(x1 > x0 + 0.5f);
+    CHECK(eng_character_is_grounded(hero));
+
+    /* Space jumps; the hero rises off the floor */
+    game_key("space", 1);
+    step(b, 8);
+    game_key("space", 0);
+    float x2, y2, z2;
+    eng_node3d_get_position(hero, &x2, &y2, &z2);
+    CHECK(y2 > y1 + 0.5f);
+
+    /* the follow camera tracks the hero along X */
+    float cx2, cy2, cz2;
+    eng_node3d_get_position(camera, &cx2, &cy2, &cz2);
+    CHECK(fabsf(cx2 - x2) < 2.0f);
+    (void)y1; (void)z1; (void)x2; (void)cy2; (void)cz2;
+    check_stride_guard(b, b->width);
+    puts("PASS platformer: CharacterBody3D grounds, walks, jumps and the camera follows");
+}
+
 static void run(int w, int h) {
     Buffer b;
     screen_w = w;
@@ -281,6 +324,7 @@ static void run(int w, int h) {
         test_project_switch(&b);
         test_free_camera(&b);
         test_reset_and_direct_open(&b);
+        test_platformer(&b);
     } else {
         /* a second resolution: geometry scales, frames stay complete */
         tap_card(0);

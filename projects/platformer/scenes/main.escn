@@ -1,0 +1,165 @@
+# Platformer — a CharacterBody3D running through a block level.
+#
+# The camera is a fixed side view (it follows the Hero along X), so the level
+# reads left-to-right: the Hero starts on the ground, hops the stone steps and
+# the one-way log platforms, grabs the spinning coins and reaches the Goal.
+# The `player` C script implements run, coyote-time jump, jump buffering and
+# variable jump height; copy this project and reshape the level in minutes.
+
+[node name="Main" type="Node"]
+
+# The camera looks along +Z, so the faces it sees point -Z. yaw = pi turns the
+# sun around to shine from the camera side (toward +Z), slightly downward,
+# lighting the visible faces and the tops of the blocks.
+[node name="Sun" type="DirectionalLight3D" parent="."]
+yaw = 3.1416
+pitch = -0.5
+energy = 1.0
+light_color = 1 0.98 0.94
+
+# Side-view camera; the `follow` script tracks the Hero on the X axis and
+# keeps the authored height and distance. yaw = 0 looks along +Z, so the
+# camera sits behind the action at -Z, at mid-playfield height.
+[node name="Camera" type="Camera3D" parent="."]
+position = 0 3.5 -14
+pitch = -0.05
+fov = 66
+current = true
+script = "follow"
+
+# ── level geometry ────────────────────────────────────────────────────────
+
+# Ground: a long box, its top face at y = 0.
+[node name="Ground" type="StaticBody3D" parent="."]
+mesh = cube
+material = grass
+shape = box
+size = 36
+position = 0 -18 0
+
+# Stone steps rising to the right (each box top is listed in a comment).
+[node name="Step1" type="StaticBody3D" parent="."]
+mesh = cube
+material = grass
+shape = box
+size = 3
+position = 3.5 -0.25 0      # top y = 1.25
+
+[node name="Step2" type="StaticBody3D" parent="."]
+mesh = cube
+material = grass
+shape = box
+size = 3
+position = 7 1.25 0         # top y = 2.75
+
+[node name="Step3" type="StaticBody3D" parent="."]
+mesh = cube
+material = grass
+shape = box
+size = 3
+position = 10.5 2.75 0      # top y = 4.25
+
+# Goal platform (green Goal block sits on top of it).
+[node name="Top" type="StaticBody3D" parent="."]
+mesh = cube
+material = stone
+shape = box
+size = 4
+position = 14 4.25 0        # top y = 6.25
+
+# One-way platforms: jump up through them, land on them from above.
+[node name="Plank1" type="StaticBody3D" parent="."]
+mesh = cube
+material = log
+shape = box
+size = 3
+one_way = true
+position = 5 3.5 0          # top y = 5.0
+
+[node name="Plank2" type="StaticBody3D" parent="."]
+mesh = cube
+material = log
+shape = box
+size = 3
+one_way = true
+position = 9 5 0            # top y = 6.5
+
+# End walls keep the Hero inside the arena.
+[node name="WallL" type="StaticBody3D" parent="."]
+mesh = cube
+material = stone
+shape = box
+size = 2
+position = -19 5 0
+
+[node name="WallR" type="StaticBody3D" parent="."]
+mesh = cube
+material = stone
+shape = box
+size = 2
+position = 19 5 0
+
+# ── the player ────────────────────────────────────────────────────────────
+
+[node name="Hero" type="CharacterBody3D" parent="."]
+mesh = cube
+color = 0.95 0.35 0.25
+shape = box
+size = 2
+position = 0 1 0
+script = "player"
+
+# ── collectibles ──────────────────────────────────────────────────────────
+
+[node name="Coins" type="Node3D" parent="."]
+
+[node name="CoinA" type="MeshInstance3D" parent="Coins"]
+mesh = cube
+color = 1 0.84 0.2
+size = 0.6
+position = 3.5 1.8 0
+script = "coin"
+
+[node name="CoinB" type="MeshInstance3D" parent="Coins"]
+mesh = cube
+color = 1 0.84 0.2
+size = 0.6
+position = 7 3.3 0
+script = "coin"
+
+[node name="CoinC" type="MeshInstance3D" parent="Coins"]
+mesh = cube
+color = 1 0.84 0.2
+size = 0.6
+position = 10.5 4.8 0
+script = "coin"
+
+[node name="CoinD" type="MeshInstance3D" parent="Coins"]
+mesh = cube
+color = 1 0.84 0.2
+size = 0.6
+position = 5 6.2 0
+script = "coin"
+
+[node name="CoinE" type="MeshInstance3D" parent="Coins"]
+mesh = cube
+color = 1 0.84 0.2
+size = 0.6
+position = 9 7.2 0
+script = "coin"
+
+[node name="CoinF" type="MeshInstance3D" parent="Coins"]
+mesh = cube
+color = 1 0.84 0.2
+size = 0.6
+position = 14 7.6 0
+script = "coin"
+
+# ── the goal ──────────────────────────────────────────────────────────────
+
+[node name="Goal" type="MeshInstance3D" parent="."]
+mesh = cube
+color = 0.25 0.85 0.35
+size = 1.5
+position = 14 7.2 0
+script = "spin"

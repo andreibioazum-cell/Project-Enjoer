@@ -17,6 +17,7 @@ int eng_type_from_name(const char *t) {
     if (!strcmp(t, "VoxelWorld3D")) return ENG_VOXEL_WORLD;
     if (!strcmp(t, "StaticBody3D")) return ENG_STATIC_BODY;
     if (!strcmp(t, "RigidBody3D")) return ENG_RIGID_BODY;
+    if (!strcmp(t, "CharacterBody3D")) return ENG_CHARACTER_BODY;
     return -1;
 }
 const char *eng_type_name(int type) {
@@ -29,6 +30,7 @@ const char *eng_type_name(int type) {
         case ENG_VOXEL_WORLD: return "VoxelWorld3D";
         case ENG_STATIC_BODY: return "StaticBody3D";
         case ENG_RIGID_BODY: return "RigidBody3D";
+        case ENG_CHARACTER_BODY: return "CharacterBody3D";
         default: return "Node";
     }
 }
@@ -61,9 +63,9 @@ EngNode *eng_node_create(int type, const char *name) {
     n->gravity_scale = 1;
     n->restitution = 0.1f;
     n->friction = 0.6f;
-    /* sensible default shapes: a static body is a solid box, a rigid body is
-     * a dynamic sphere whose radius matches its drawn sphere mesh. */
-    n->shape = (type == ENG_STATIC_BODY) ? ENG_SHAPE_BOX
+    /* sensible default shapes: static and character bodies are solid boxes, a
+     * rigid body is a dynamic sphere whose radius matches its sphere mesh. */
+    n->shape = (type == ENG_STATIC_BODY || type == ENG_CHARACTER_BODY) ? ENG_SHAPE_BOX
              : (type == ENG_RIGID_BODY) ? ENG_SHAPE_SPHERE : ENG_SHAPE_NONE;
     return n;
 }
@@ -170,8 +172,16 @@ EngNode *eng_node_new(const char *type, const char *name) {
 }
 void eng_node_add_child(EngNode *parent, EngNode *child) { eng_node_attach(parent, child); }
 void eng_node_free(EngNode *node) { eng_node_destroy(node); }
+EngNode *eng_node_first_child(const EngNode *n) { return n ? n->child : NULL; }
+EngNode *eng_node_next_sibling(const EngNode *n) { return n ? n->next : NULL; }
 const char *eng_node_name(const EngNode *n) { return n ? n->name : ""; }
 const char *eng_node_type(const EngNode *n) { return n ? eng_type_name(n->type) : ""; }
+void eng_node_udata_set(EngNode *n, int slot, float value) {
+    if (n && slot >= 0 && slot < 8) n->udata[slot] = value;
+}
+float eng_node_udata_get(const EngNode *n, int slot) {
+    return n && slot >= 0 && slot < 8 ? n->udata[slot] : 0.0f;
+}
 void eng_node3d_set_position(EngNode *n, float x, float y, float z) {
     if (!n) return;
     n->pos = (EngVec){x, y, z};
@@ -207,7 +217,8 @@ void eng_light_set_color(EngNode *n, float r, float g, float b) {
 }
 void eng_light_set_range(EngNode *n, float r) { if (n && n->type == ENG_OMNI_LIGHT && r > 0) n->range = r; }
 static int can_draw_mesh(const EngNode *n) {
-    return n && (n->type == ENG_MESH || n->type == ENG_STATIC_BODY || n->type == ENG_RIGID_BODY);
+    return n && (n->type == ENG_MESH || n->type == ENG_STATIC_BODY ||
+                 n->type == ENG_RIGID_BODY || n->type == ENG_CHARACTER_BODY);
 }
 void eng_mesh_set(EngNode *n, const char *mesh) {
     if (!can_draw_mesh(n) || !mesh) return;
