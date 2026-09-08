@@ -7,7 +7,7 @@ anymore — the app *is* the engine. At startup a launcher lists every engine
 project it finds; picking one loads its scene and runs it. The same binary
 runs on Android (APK) and in the PC/browser preview.
 
-Three ready projects ship in `projects/`:
+Four ready projects ship in `projects/`:
 
 - **Demo Scene** (`projects/demo`) — meshes, a sun and a lamp, an orbiting
   camera and two C scripts (`spin`, `orbit`).
@@ -16,6 +16,11 @@ Three ready projects ship in `projects/`:
   press pops it. Driven by the `roller` script through the engine input API.
 - **Voxel World** (`projects/voxel_world`) — the streamed block terrain as a
   `VoxelWorld3D` node seen from a scene camera.
+- **Platformer** (`projects/platformer`) — a complete run-and-jump side view
+  built on the `CharacterBody3D` node: coyote-time jumps, jump buffering,
+  one-way platforms, collectible coins, a goal and a follow camera
+  (`docs/platformer_preview.jpg` shows a frame of it). Copy it and reshape
+  the level — see *A platformer in ~15 minutes* below.
 
 Everything in the app — launcher, labels, error screens — is English.
 
@@ -71,6 +76,10 @@ While a project runs:
 | drag / move pointer | handed to scripts (`eng_input_pointer`), or orbits the free camera |
 | `Space` / `Shift` | up / down for the free camera |
 
+In the **Platformer** project `A` / `D` (or the arrow keys) run and `Space`
+jumps — a short tap gives a small hop, holding it rises higher, and the
+coyote time + jump buffer make the jumps forgiving.
+
 Scenes whose current `Camera3D` carries **no** script get the engine's free
 camera automatically: dragging orbits it, `W A S D` translates it in the view
 plane, `Space`/`Shift` change altitude. A scripted camera (as in `demo` and
@@ -121,7 +130,31 @@ script = "roller"
 ```
 
 `parent` is a path from the root (`.` = root). Values are floats, vectors,
-quoted strings or `true`/`false`; `#` starts a comment. Node types:
+quoted strings or `true`/`false`; `#` starts a comment.
+
+A platformer hero and a pass-through platform look like this:
+
+```
+[node name="Hero" type="CharacterBody3D" parent="."]
+mesh = cube
+color = 0.95 0.35 0.25
+shape = box
+size = 2
+position = 0 1 0
+script = "player"
+
+[node name="Plank" type="StaticBody3D" parent="."]
+mesh = cube
+material = log
+shape = box
+size = 3
+one_way = true
+position = 5 3.5 0
+```
+
+`one_way = true` on a box `StaticBody3D` turns it into a platform that only
+blocks from above: a `CharacterBody3D` jumps up through it and lands on its
+top. Node types:
 
 | Type | Purpose |
 | --- | --- |
@@ -134,6 +167,7 @@ quoted strings or `true`/`false`; `#` starts a comment. Node types:
 | `VoxelWorld3D` | the streamed block terrain (one per scene) |
 | `StaticBody3D` | a fixed collider; `shape = box\|sphere`, `size` = full edge |
 | `RigidBody3D` | a dynamic sphere collider (gravity, impulses, sleeping) |
+| `CharacterBody3D` | a kinematic platformer character: script-driven `velocity` + `move_and_slide` |
 
 Transforms are hierarchical Euler angles (`Ry*Rx*Rz`, parent scale composed
 into children). `MeshInstance3D` — and a body that carries a `mesh` — take
@@ -165,14 +199,26 @@ compiled version is unavailable. A scene that names an unknown script on a
 device logs a warning and runs without it.
 
 `src/engine/eng_api.h` is the whole scripting surface: create/attach/free
-nodes, find them by path, get/set position, rotation and scale, switch the
-current camera, set light energy/colour/range, choose a mesh primitive,
-colour and size, the body API (`eng_body_set_shape`, `eng_body_set_mass`,
-`eng_body_apply_impulse`, `eng_body_set/get_linear_velocity`,
-`eng_body_is_grounded`), the input API (`eng_input_is_pressed`,
-`eng_input_pointer`), `eng_time()`/`eng_delta()`/`eng_print()` and the voxel
-cell API (`eng_voxel_get_cell` / `eng_voxel_set_cell` — read and write single
-half-block cells of a `VoxelWorld3D` with the material names above).
+nodes, find them by path (`eng_node_find`) and walk their children
+(`eng_node_first_child` / `eng_node_next_sibling`), get/set position,
+rotation and scale, switch the current camera, set light energy/colour/range,
+choose a mesh primitive, colour and size, the body API (`eng_body_set_shape`,
+`eng_body_set_mass`, `eng_body_apply_impulse`,
+`eng_body_set/get_linear_velocity`, `eng_body_is_grounded`), the character
+API (`eng_character_set/get_velocity`, `eng_character_move_and_slide`,
+`eng_character_is_grounded`), the input API (`eng_input_is_pressed`,
+`eng_input_pointer`), `eng_time()`/`eng_delta()`/`eng_print()`,
+`eng_play_sound("jump.wav")` and the voxel cell API (`eng_voxel_get_cell` /
+`eng_voxel_set_cell` — read and write single half-block cells of a
+`VoxelWorld3D` with the material names above). Every node also carries eight
+`eng_node_udata_set/get` floats for a script to keep per-instance state
+between frames (a coin's rest height, a player's spawn point, …).
+
+A `CharacterBody3D` is kinematic, Godot-style: the script owns gravity and
+writes `velocity`, then calls `eng_character_move_and_slide(self, dt)` once a
+frame. The body slides along walls, lands on floors (including `one_way`
+platforms) and reports `eng_character_is_grounded`. Like a `RigidBody3D`, it
+must hang from the root or a plain `Node` container.
 
 Input is a polled state: the platform glue feeds keys and the pointer into
 `eng_input_feed_key` / `eng_input_feed_pointer`; scripts and the free camera
@@ -192,6 +238,73 @@ must hang from the root or a plain `Node` container (no moving transform
 parent). Rigid/rigid contact is intentionally left out so the solver stays
 predictable. Body nodes also take `mass`, `gravity_scale`, `velocity`,
 `restitution` and `friction` keys.
+
+A `CharacterBody3D` is a kinematic body driven by its script through
+`eng_character_move_and_slide`; the physics step never touches it. The move
+collides with `StaticBody3D` boxes and spheres, slides along walls, classifies
+floor and ceiling contacts and reports `grounded`, with a floor snap so a
+body resting with zero vertical velocity keeps its grounding. Displacement is
+sub-stepped (and one frame's `dt` is clamped) so fast falls cannot tunnel
+through thin platforms. A `one_way = true` box platform only collides with a
+character whose previous bottom edge was above its top face, which is what
+lets you jump up through a plank and land back on it.
+
+## A platformer in ~15 minutes
+
+The fastest start is to copy the shipped project and reshape its level:
+
+```sh
+cp -r projects/platformer projects/my_game
+tools/preview/build.sh && ./preview --project projects/my_game
+```
+
+Then edit `projects/my_game/scenes/main.escn`. The level is blocks: every
+platform is a `StaticBody3D` box (its top face is `position.y + size/2`), the
+hero is the `CharacterBody3D`, coins are `MeshInstance3D` cubes under the
+`Coins` node, and the `Goal` block ends the run. Move a block, duplicate a
+platform, change a `color`, add a `one_way = true` plank, drop in a couple
+more coins — and run again. The `player`, `coin` and `follow` scripts already
+handle run/jump/coyote/buffer, spin-and-bob and camera tracking, so tweaking
+tuning values in `scripts/player.c` (speed, gravity, jump height) is all that
+is needed to change the feel. The scripts rebuild automatically when the `.c`
+file is newer than its `.so`.
+
+A minimal project from scratch looks like this:
+
+```
+# project.eng
+name = My Game
+main_scene = scenes/main.escn
+```
+
+```
+[node name="Main" type="Node"]
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+yaw = 3.1416
+pitch = -0.5
+
+[node name="Camera" type="Camera3D" parent="."]
+position = 0 3.5 -14
+current = true
+script = "follow"
+
+[node name="Ground" type="StaticBody3D" parent="."]
+mesh = cube
+material = grass
+size = 36
+position = 0 -18 0
+
+[node name="Hero" type="CharacterBody3D" parent="."]
+mesh = cube
+color = 0.95 0.35 0.25
+size = 2
+position = 0 1 0
+script = "player"
+```
+
+with `scripts/player.c` and `scripts/follow.c` copied from
+`projects/platformer/scripts/`.
 
 ## The render backend
 
@@ -232,10 +345,12 @@ SANITIZE=1 tools/tests/run.sh
 Suites: the rasterizer/material regressions (`render`), voxel generation,
 streaming and mesh coverage (`world`), the water simulation and saves
 (`water`), the PCM mixer (`audio`), the engine layer (`engine`: node-tree
-math, scene parsing, C scripting via `dlopen`, physics — 9 groups), and the
-app (`launcher`: the project list, tap-to-run, script animation, input
-routing, launcher pausing, project switching, the free camera, reset and
-`--project`-style direct open) at two resolutions. The Android-flavoured
+math, scene parsing, C scripting via `dlopen`, physics and the
+`CharacterBody3D` move-and-slide solver — 11 groups), and the app
+(`launcher`: the project list, tap-to-run, script animation, input routing,
+launcher pausing, project switching, the free camera, the platformer
+run/jump/camera-follow path, reset and `--project`-style direct open) at two
+resolutions. The Android-flavoured
 code paths (APK asset IO, no `dlopen`, native-activity glue) are compiled
 with `-D__ANDROID__` against a minimal NDK header stub so they cannot rot.
 The sanitizer build enables ASan, UBSan and float-cast-overflow.

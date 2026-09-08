@@ -39,6 +39,14 @@ static double time_now, time_delta, time_origin = -1;
 
 void eng_print(const char *message) { app_log("%s", message ? message : ""); }
 
+/* Load-on-demand so project scripts can just name an effect under
+ * assets/sounds/; the host preview stubs snd_* to no-ops. */
+void eng_play_sound(const char *name) {
+    if (!name || !name[0]) return;
+    snd_load(name);
+    snd_play(name);
+}
+
 void eng_time_internal(double now, double dt) {
     if (time_origin < 0) time_origin = now;
     time_now = now - time_origin;

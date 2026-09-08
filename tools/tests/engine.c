@@ -266,6 +266,143 @@ static void test_body_scene_parse(void) {
     CHECK(eng_node_root() == NULL);
 }
 
+/* ── CharacterBody3D: kinematic collide-and-slide ──────────────────────── */
+
+static void hero_reset(EngNode *hero) {
+    eng_node3d_set_position(hero, 0, 1, 0);
+    eng_character_set_velocity(hero, 0, 0, 0);
+    hero->grounded = 0;
+    eng_node_update_transforms();
+}
+
+static void test_character_body(void) {
+    EngNode *root = eng_node_create(ENG_NODE, "Root");
+    eng_node_set_root(root);
+    EngNode *floor = eng_node_create(ENG_STATIC_BODY, "Floor");
+    eng_mesh_set_size(floor, 20);              /* top face at y=0 */
+    eng_node3d_set_position(floor, 0, -10, 0);
+    eng_node_attach(root, floor);
+
+    EngNode *hero = eng_node_create(ENG_CHARACTER_BODY, "Hero");
+    eng_mesh_set(hero, "cube");
+    eng_mesh_set_size(hero, 2);                /* box half-extent 1 */
+    eng_node3d_set_position(hero, 0, 3, 0);
+    eng_node_attach(root, hero);
+    eng_node_update_transforms();
+
+    /* gravity (script-style) pulls the hero onto the floor: centre at y=1 */
+    for (int i = 0; i < 180; i++) {
+        float vx, vy, vz;
+        eng_character_get_velocity(hero, &vx, &vy, &vz);
+        vy -= 22.0f / 60.0f;
+        eng_character_set_velocity(hero, vx, vy, vz);
+        eng_character_move_and_slide(hero, 1.0f / 60.0f);
+    }
+    float x, y, z;
+    CHECK(eng_character_is_grounded(hero));
+    eng_node3d_get_position(hero, &x, &y, &z);
+    CHECK(NEAR(y, 1.0f) && NEAR(x, 0.0f) && NEAR(z, 0.0f));
+
+    /* a diagonal down-forward push slides along the floor, not into it */
+    hero_reset(hero);
+    for (int i = 0; i < 60; i++) {
+        eng_character_set_velocity(hero, 3, -10, 0);
+        eng_character_move_and_slide(hero, 1.0f / 60.0f);
+    }
+    eng_node3d_get_position(hero, &x, &y, &z);
+    CHECK(NEAR(y, 1.0f));                      /* stayed on top of the floor */
+    CHECK(x > 2.0f);                           /* and slid forward */
+    CHECK(eng_character_is_grounded(hero));
+
+    /* a head-on wall blocks the hero but leaves it standing */
+    EngNode *wall = eng_node_create(ENG_STATIC_BODY, "Wall");
+    eng_mesh_set_size(wall, 2);                /* x in [3,5], y in [0,2] */
+    eng_node3d_set_position(wall, 4, 1, 0);
+    eng_node_attach(root, wall);
+    hero_reset(hero);
+    for (int i = 0; i < 120; i++) {
+        eng_character_set_velocity(hero, 3, -1, 0);
+        eng_character_move_and_slide(hero, 1.0f / 60.0f);
+    }
+    eng_node3d_get_position(hero, &x, &y, &z);
+    CHECK(x < 2.0f + 0.02f);                   /* face at x=3: hero half 1 */
+    CHECK(eng_character_is_grounded(hero));
+    CHECK(NEAR(y, 1.0f) && NEAR(z, 0.0f));
+
+    /* one-way platform spanning y in [2,6]: up through, then land on top */
+    EngNode *plank = eng_node_create(ENG_STATIC_BODY, "Plank");
+    eng_mesh_set_size(plank, 4);
+    eng_node3d_set_position(plank, 0, 4, 0);
+    plank->one_way = 1;
+    eng_node_attach(root, plank);
+
+    hero_reset(hero);
+    for (int i = 0; i < 30; i++) {             /* rise straight up through it */
+        eng_character_set_velocity(hero, 0, 12, 0);
+        eng_character_move_and_slide(hero, 1.0f / 60.0f);
+    }
+    eng_node3d_get_position(hero, &x, &y, &z);
+    CHECK(y > 6.0f);                           /* passed cleanly through */
+    CHECK(!eng_character_is_grounded(hero));
+
+    for (int i = 0; i < 180; i++) {            /* gravity drops it onto the top */
+        float vx, vy, vz;
+        eng_character_get_velocity(hero, &vx, &vy, &vz);
+        vy -= 22.0f / 60.0f;
+        eng_character_set_velocity(hero, vx, vy, vz);
+        eng_character_move_and_slide(hero, 1.0f / 60.0f);
+    }
+    CHECK(eng_character_is_grounded(hero));
+    eng_node3d_get_position(hero, &x, &y, &z);
+    CHECK(NEAR(y, 7.0f));                      /* resting on the top face (y=6) */
+    eng_node_destroy(root);
+    eng_node_set_root(NULL);
+}
+
+/* The whole pipeline: a .escn with a CharacterBody3D + one-way platform and a
+ * C script compiled via dlopen drive the character down onto the floor. */
+static void test_character_scene_parse(void) {
+    make_dirs("build-tests/fixtures/charproj/scenes");
+    make_dirs("build-tests/fixtures/charproj/scripts");
+    write_file("build-tests/fixtures/charproj/project.eng",
+               "name = Character Test\nmain_scene = scenes/main.escn\n");
+    write_file("build-tests/fixtures/charproj/scenes/main.escn",
+               "[node name=\"Root\" type=\"Node\"]\n"
+               "[node name=\"Floor\" type=\"StaticBody3D\" parent=\".\"]\n"
+               "mesh = cube\nshape = box\nsize = 12\nposition = 0 -6 0\n"
+               "[node name=\"Plank\" type=\"StaticBody3D\" parent=\".\"]\n"
+               "mesh = cube\nshape = box\nsize = 4\none_way = true\nposition = 0 2 0\n"
+               "[node name=\"Hero\" type=\"CharacterBody3D\" parent=\".\"]\n"
+               "mesh = cube\nshape = box\nsize = 2\nvelocity = 1 0 0\nposition = 0 3 0\n"
+               "script = \"hero\"\n");
+    write_file("build-tests/fixtures/charproj/scripts/hero.c",
+               "#include \"eng_api.h\"\n"
+               "void eng_script_process(EngNode *self, float dt) {\n"
+               "    float vx, vy, vz;\n"
+               "    eng_character_get_velocity(self, &vx, &vy, &vz);\n"
+               "    vy -= 22.0f * dt;\n"
+               "    eng_character_set_velocity(self, vx, vy, vz);\n"
+               "    eng_character_move_and_slide(self, dt);\n"
+               "}\n");
+
+    CHECK(eng_project_load("build-tests/fixtures/charproj"));
+    EngNode *hero = eng_node_find("Hero");
+    CHECK(hero && hero->type == ENG_CHARACTER_BODY);
+    CHECK(hero->shape == ENG_SHAPE_BOX);
+    CHECK(NEAR(hero->vel[0], 1.0f));           /* scene `velocity` parsed */
+    EngNode *plank = eng_node_find("Plank");
+    CHECK(plank && plank->one_way);            /* scene `one_way = true` parsed */
+
+    for (int i = 0; i < 240; i++) eng_update(1.0f / 60.0f);
+    CHECK(eng_character_is_grounded(hero));    /* script fell through the plank */
+    float x, y, z;
+    eng_node3d_get_position(hero, &x, &y, &z);
+    CHECK(fabsf(y - 1.0f) < 0.02f);            /* settled on the floor (top y=0) */
+    CHECK(x > 0.5f);                           /* and kept drifting +X */
+    eng_project_free();
+    CHECK(eng_node_root() == NULL);
+}
+
 int main(void) {
     test_types();
     test_tree();
@@ -276,6 +413,8 @@ int main(void) {
     test_physics_fall();
     test_physics_obstacle();
     test_body_scene_parse();
-    printf("engine: %d groups ok\n", 9);
+    test_character_body();
+    test_character_scene_parse();
+    printf("engine: %d groups ok\n", 11);
     return 0;
 }

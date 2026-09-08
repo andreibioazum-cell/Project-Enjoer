@@ -8,7 +8,7 @@
 enum {
     ENG_NODE, ENG_NODE3D, ENG_MESH, ENG_CAMERA,
     ENG_DIR_LIGHT, ENG_OMNI_LIGHT, ENG_VOXEL_WORLD,
-    ENG_STATIC_BODY, ENG_RIGID_BODY
+    ENG_STATIC_BODY, ENG_RIGID_BODY, ENG_CHARACTER_BODY
 };
 
 /* Body shapes for StaticBody3D / RigidBody3D (see eng_node_shape_name). */
@@ -36,13 +36,15 @@ struct EngNode {
     float fov; int current;
     /* lights */
     float energy, range; float lcol[3];
-    /* physics: StaticBody3D / RigidBody3D */
+    /* physics: StaticBody3D / RigidBody3D / CharacterBody3D */
     int shape;                     /* ENG_SHAPE_* */
     float mass, gravity_scale, restitution, friction;
-    float vel[3];                  /* RigidBody3D world-space velocity */
-    int grounded;                  /* RigidBody3D resting on a support */
+    float vel[3];                  /* RigidBody3D / CharacterBody3D velocity */
+    int grounded;                  /* RigidBody3D resting / CharacterBody3D on floor */
     float sleep_t;                 /* frames of near-zero motion */
     int asleep;                    /* RigidBody3D fully resting (not stepped) */
+    int one_way;                   /* StaticBody3D: only collide from above */
+    float udata[8];                /* per-node scratch floats for scripts */
     /* scripting */
     struct EngScript *script;
 };
@@ -114,6 +116,12 @@ float eng_body_world_size(const EngNode *node);
 void eng_body_apply_impulse(EngNode *body, float x, float y, float z);
 void eng_body_set_linear_velocity(EngNode *body, float x, float y, float z);
 void eng_body_sync_scene(void);          /* push body transforms to the tree */
+
+/* ── physics.c: CharacterBody3D (kinematic, script-driven) ── */
+void eng_character_set_velocity(EngNode *body, float x, float y, float z);
+void eng_character_get_velocity(EngNode *body, float *x, float *y, float *z);
+int eng_character_move_and_slide(EngNode *body, float dt); /* returns grounded */
+int eng_character_is_grounded(EngNode *body);
 
 /* ── input.c ── */
 void eng_input_reset(void);

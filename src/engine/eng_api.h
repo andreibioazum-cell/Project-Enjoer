@@ -25,13 +25,22 @@ void eng_print(const char *message);
 
 /* ── node tree ──────────────────────────────────────────────────────────── */
 /* Create a node of the given type ("Node3D", "MeshInstance3D", "Camera3D",
- * "DirectionalLight3D", "OmniLight3D", "VoxelWorld3D"). Not attached yet. */
+ * "DirectionalLight3D", "OmniLight3D", "VoxelWorld3D", "StaticBody3D",
+ * "RigidBody3D", "CharacterBody3D"). Not attached yet. */
 EngNode *eng_node_new(const char *type, const char *name);
 void eng_node_add_child(EngNode *parent, EngNode *child);
 void eng_node_free(EngNode *node);              /* detaches and frees subtree */
 EngNode *eng_node_find(const char *path);       /* "Root/Cube", from the root */
+EngNode *eng_node_first_child(const EngNode *node);   /* NULL when no children */
+EngNode *eng_node_next_sibling(const EngNode *node);  /* NULL at the list end */
 const char *eng_node_name(const EngNode *node);
 const char *eng_node_type(const EngNode *node);
+
+/* Per-node scratch floats a script can use to remember state between frames
+ * (eight slots, all zero until written). Useful for per-instance data such as
+ * a coin's rest height or the player's spawn point. */
+void eng_node_udata_set(EngNode *node, int slot, float value);
+float eng_node_udata_get(const EngNode *node, int slot);
 
 /* ── Node3D transform ───────────────────────────────────────────────────── */
 void eng_node3d_set_position(EngNode *node, float x, float y, float z);
@@ -53,8 +62,8 @@ int eng_input_pointer(float *x, float *y, int *down);
 
 /* ── StaticBody3D / RigidBody3D ─────────────────────────────────────────── */
 /* Set which collision shape a body uses: "box" or "sphere" (default box for
- * StaticBody3D, sphere for RigidBody3D). Only meaningful on the two body
- * node types; others are ignored. */
+ * StaticBody3D and CharacterBody3D, sphere for RigidBody3D). Only meaningful
+ * on body node types; others are ignored. */
 void eng_body_set_shape(EngNode *node, const char *shape);
 void eng_body_set_mass(EngNode *body, float mass);
 void eng_body_set_gravity_scale(EngNode *body, float scale);
@@ -63,6 +72,18 @@ void eng_body_apply_impulse(EngNode *body, float x, float y, float z);
 void eng_body_set_linear_velocity(EngNode *body, float x, float y, float z);
 void eng_body_get_linear_velocity(EngNode *body, float *x, float *y, float *z);
 int eng_body_is_grounded(EngNode *body);
+
+/* ── CharacterBody3D (kinematic platformer character) ───────────────────── */
+/* Godot-style move-and-collide. The script writes `velocity` (world units per
+ * second — gravity is the script's job, see projects/platformer), then calls
+ * eng_character_move_and_slide once a frame. The node slides along walls and
+ * lands on floors, reporting `grounded` (also returned by the call). The
+ * stored velocity is updated to the slid result. A CharacterBody3D must hang
+ * from the root or a plain Node container. */
+void eng_character_set_velocity(EngNode *body, float x, float y, float z);
+void eng_character_get_velocity(EngNode *body, float *x, float *y, float *z);
+int eng_character_move_and_slide(EngNode *body, float dt);
+int eng_character_is_grounded(EngNode *body);
 
 /* ── lights ─────────────────────────────────────────────────────────────── */
 void eng_light_set_energy(EngNode *light, float energy);
@@ -83,6 +104,11 @@ void eng_mesh_set_size(EngNode *node, float size);
  * chunks that are currently streamed in, and return 0 otherwise. */
 int eng_voxel_get_cell(int x, int y, int z);
 int eng_voxel_set_cell(int x, int y, int z, const char *material);
+
+/* ── audio ──────────────────────────────────────────────────────────────── */
+/* Play a short effect from assets/sounds/ (e.g. "jump.wav"). Loads the file
+ * on first use. Silently does nothing when the platform has no audio. */
+void eng_play_sound(const char *name);
 
 /* ── misc ───────────────────────────────────────────────────────────────── */
 double eng_time(void);        /* seconds since the engine started */
