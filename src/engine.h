@@ -61,10 +61,14 @@ void game_cancel_input(void);
 void game_reset(void);
 void game_save(void);
 /* Engine launcher (app router, src/core/game.c): the round button, Escape or
- * M opens the project list; tapping a card runs that project. */
+ * M opens the playset list; card 0 is the Geometrium block world, the rest
+ * are engine projects — tapping a card runs it. */
 void game_set_project_root(const char *root);   /* before game_init */
 int game_open_project(const char *directory);   /* run one project right away */
 int game_menu_open(void);
+int game_menu_card_count(void);                 /* 1 (Geometrium) + projects */
+const char *game_menu_title(int card);
+int game_in_geometrium(void);                   /* block world is the active playset */
 int game_project_count(void);
 int game_current_project(void);       /* index of the running project, -1 none */
 const char *game_project_title(int index);

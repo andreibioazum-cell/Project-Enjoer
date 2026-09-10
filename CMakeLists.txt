@@ -13,6 +13,8 @@ set(CMAKE_C_STANDARD 99)
 #                         and the engine launcher router (game.c)
 #   src/graphics/         2D rendering: primitives, textures, text (+ ttf/)
 #   src/sound/            audio: PCM mixer and AudioTrack output
+#   src/geometrium/       the first-person block world playset (player, hand,
+#                         picking, touch layout, HUD) on the voxel renderer
 #   src/engine/           the engine: nodes, scenes, projects, physics,
 #                         input, scripting (+ render/ 3D & voxel backend)
 # Runtime assets (PNG tiles, font, WAV effects) and the staged projects live
@@ -39,6 +41,13 @@ add_library(enjoer SHARED
     src/graphics/ttf/ttf_font.c
     src/sound/sound.c
     src/sound/sound_android.c
+    src/geometrium/geometrium_game.c
+    src/geometrium/geometrium_hand.c
+    src/geometrium/geometrium_hud.c
+    src/geometrium/geometrium_input.c
+    src/geometrium/geometrium_interact.c
+    src/geometrium/geometrium_player.c
+    src/geometrium/geometrium_scene.c
     src/engine/render/rend3d.c
     src/engine/render/rend_shapes.c
     src/engine/render/rend_material.c

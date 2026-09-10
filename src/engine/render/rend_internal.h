@@ -26,6 +26,7 @@ void rend3d_end(void);
 
 /* ── materials (rend_material.c) ── */
 int rend_materials_load(AAssetManager *assets);
+const Image *rend_material_icon(int block); /* hotbar preview of a block */
 
 /* ── procedural terrain (voxel_terrain.c) ── */
 void voxel_terrain_seed(uint32_t seed);

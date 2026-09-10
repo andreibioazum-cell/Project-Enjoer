@@ -4,6 +4,7 @@
 #include "engine.h"
 #include "engine/eng_api.h"
 #include "engine/eng_internal.h"
+#include "geometrium/geometrium_internal.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,29 +62,36 @@ static void tap_card(int index) {
     game_touch(x + w * .5f, y + h * .5f, 1, 0);
 }
 
+static int card_with_title(const char *title) {
+    for (int card = 0; card < game_menu_card_count(); card++)
+        if (!strcmp(game_menu_title(card), title)) return card;
+    return -1;
+}
+
 static void test_launcher(Buffer *b) {
-    CHECK(game_menu_open());                      /* the engine greets you */
-    int count = game_project_count();
-    CHECK(count >= 3);
+    CHECK(game_menu_open());                      /* the app greets you */
+    CHECK(game_menu_card_count() == game_project_count() + 1);
+    CHECK(game_project_count() >= 3);
+    CHECK(!strcmp(game_menu_title(0), "Geometrium"));   /* the restored block world */
     int demo = -1, physics = -1, voxel = -1, platformer = -1;
-    for (int i = 0; i < count; i++) {
-        const char *title = game_project_title(i);
+    for (int card = 0; card < game_menu_card_count(); card++) {
+        const char *title = game_menu_title(card);
         CHECK(title && title[0]);
-        if (!strcmp(title, "Demo Scene")) demo = i;
-        if (!strcmp(title, "Physics Playground")) physics = i;
-        if (!strcmp(title, "Voxel World")) voxel = i;
-        if (!strcmp(title, "Platformer")) platformer = i;
+        if (!strcmp(title, "Demo Scene")) demo = card;
+        if (!strcmp(title, "Physics Playground")) physics = card;
+        if (!strcmp(title, "Voxel World")) voxel = card;
+        if (!strcmp(title, "Platformer")) platformer = card;
         /* every card sits inside the frame and below the title */
         float x, y, w, h;
-        game_menu_card_geom(i, &x, &y, &w, &h);
+        game_menu_card_geom(card, &x, &y, &w, &h);
         CHECK(x > 0 && y > 0 && w > 0 && h > 0 && x + w < screen_w && y + h < screen_h);
-        if (i > 0) {
+        if (card > 0) {
             float py, ph;
-            game_menu_card_geom(i - 1, NULL, &py, NULL, &ph);
+            game_menu_card_geom(card - 1, NULL, &py, NULL, &ph);
             CHECK(y > py + ph - 1.0f);            /* no overlap */
         }
     }
-    CHECK(demo >= 0 && physics >= 0 && voxel >= 0 && platformer >= 0);
+    CHECK(demo >= 1 && physics >= 1 && voxel >= 1 && platformer >= 1);
 
     step(b, 1);
     CHECK(distinct_colors(b) > 32);               /* the launcher really drew */
@@ -101,11 +109,11 @@ static void test_launcher(Buffer *b) {
     tap_card(demo);
     CHECK(!game_menu_open());
     CHECK(eng_project_active());
-    CHECK(game_current_project() == demo);
+    CHECK(game_current_project() == demo - 1);
     CHECK(!strcmp(eng_project_name(), "Demo Scene"));
     CHECK(eng_scene_node_count() > 5);
-    printf("PASS launcher: %d engine projects listed, tap starts '%s' (%d nodes)\n",
-           count, eng_project_name(), eng_scene_node_count());
+    printf("PASS launcher: Geometrium + %d engine projects listed, tap starts '%s' (%d nodes)\n",
+           game_project_count(), eng_project_name(), eng_scene_node_count());
 }
 
 static void test_running_project(Buffer *b) {
@@ -172,12 +180,10 @@ static void test_running_project(Buffer *b) {
 static void test_project_switch(Buffer *b) {
     game_key("Escape", 1);
     CHECK(game_menu_open());
-    int physics = -1;
-    for (int i = 0; i < game_project_count(); i++)
-        if (!strcmp(game_project_title(i), "Physics Playground")) physics = i;
-    CHECK(physics >= 0);
+    int physics = card_with_title("Physics Playground");
+    CHECK(physics >= 1);
     tap_card(physics);
-    CHECK(game_current_project() == physics);
+    CHECK(game_current_project() == physics - 1);
     CHECK(!strcmp(eng_project_name(), "Physics Playground"));
 
     EngNode *ball = eng_node_find("Main/Ball");
@@ -204,13 +210,11 @@ static void test_project_switch(Buffer *b) {
 }
 
 static void test_free_camera(Buffer *b) {
-    int voxel = -1;
+    int voxel = card_with_title("Voxel World");
     game_key("Escape", 1);
-    for (int i = 0; i < game_project_count(); i++)
-        if (!strcmp(game_project_title(i), "Voxel World")) voxel = i;
-    CHECK(voxel >= 0);
+    CHECK(voxel >= 1);
     tap_card(voxel);
-    CHECK(game_current_project() == voxel);
+    CHECK(game_current_project() == voxel - 1);
 
     EngNode *camera = eng_node_find("Main/Camera");
     CHECK(camera);
@@ -256,6 +260,61 @@ static void test_reset_and_direct_open(Buffer *b) {
     step(b, 3);
     CHECK(!app_failed());
     puts("PASS reset and direct open: a project reloads from its scene file");
+}
+
+/* The restored first-person block world: streaming terrain, hand, controls. */
+static void test_geometrium(Buffer *b) {
+    game_key("Escape", 1);
+    CHECK(game_menu_open());
+    tap_card(0);
+    CHECK(!game_menu_open());
+    CHECK(game_in_geometrium());
+    CHECK(game_current_project() == -1);
+
+    /* chunks stream in around the spawn; world, hand and HUD all draw */
+    step(b, 60);
+    int chunks = 0, quads = 0;
+    voxel_world_stats(&chunks, &quads);
+    CHECK(chunks > 0 && quads > 50);
+    CHECK(distinct_colors(b) > 32);
+    check_stride_guard(b, b->width);
+
+    /* WASD walks on the terrain */
+    float x0, y0, z0;
+    geometrium_player_pos(&x0, &y0, &z0);
+    game_key("w", 1);
+    step(b, 30);
+    game_key("w", 0);
+    float x1, y1, z1;
+    geometrium_player_pos(&x1, &y1, &z1);
+    CHECK(fabsf(x1 - x0) + fabsf(z1 - z0) > 1.0f);
+
+    /* the hotbar answers digit keys; F toggles flight */
+    game_key("1", 1); game_key("1", 0);
+    CHECK(geometrium_selected() == 0);
+    game_key("3", 1); game_key("3", 0);
+    CHECK(geometrium_selected() == 2);
+    game_key("f", 1); game_key("f", 0);
+    CHECK(geometrium_player_flying());
+
+    /* the launcher pauses the world: frames freeze, the player stops */
+    game_key("Escape", 1);
+    CHECK(game_menu_open());
+    step(b, 1);                                   /* draw the launcher once */
+    remember(b);
+    step(b, 30);
+    CHECK(!changed_since(b));
+    float x2, y2, z2;
+    geometrium_player_pos(&x2, &y2, &z2);
+    CHECK(x2 == x1 && y2 == y1 && z2 == z1);
+
+    /* switching to an engine project from the block world works */
+    int demo = card_with_title("Demo Scene");
+    tap_card(demo);
+    CHECK(eng_project_active());
+    CHECK(!game_in_geometrium());
+    step(b, 3);
+    puts("PASS geometrium: the restored block world streams, walks, flies and pauses in the launcher");
 }
 
 static void test_platformer(Buffer *b) {
@@ -323,6 +382,7 @@ static void run(int w, int h) {
         test_running_project(&b);
         test_project_switch(&b);
         test_free_camera(&b);
+        test_geometrium(&b);
         test_reset_and_direct_open(&b);
         test_platformer(&b);
     } else {

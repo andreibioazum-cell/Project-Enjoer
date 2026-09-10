@@ -2,10 +2,11 @@
 
 Enjoer is a general-purpose 3D engine in **C99**: projects with text scene
 files, typed nodes, physics and C scripts, rendered by a software rasterizer
-with a streamed voxel-world backend. There is no hard-coded game behind it
-anymore — the app *is* the engine. At startup a launcher lists every engine
-project it finds; picking one loads its scene and runs it. The same binary
-runs on Android (APK) and in the PC/browser preview.
+with a streamed voxel-world backend. At startup a launcher lists every
+playset it can run: the **Geometrium** first-person block world — dig, build,
+fly, with a 3D hand, diffuse skylight and flowing water — plus every engine
+project it finds; picking one loads it and runs it. The same binary runs on
+Android (APK) and in the PC/browser preview.
 
 Four ready projects ship in `projects/`:
 
@@ -34,12 +35,14 @@ src/           all C sources
   main.c       Android entry point (native activity)
   engine.h     compact platform/asset/immediate-HUD/lifecycle API
   core/        app state, error handling, logging, asset reads,
-               and game.c — the engine launcher/router every platform calls
+               and game.c — the launcher/router every platform calls
   graphics/    2D renderer: primitives, textures, text (+ ttf/)
   sound/       audio: PCM16 mixer and AudioTrack output
+  geometrium/  the first-person block world playset: player, picking,
+               touch layout, HUD and the 3D hand (on the voxel renderer)
   engine/      the engine: projects, scenes, nodes, physics, input, scripting
     render/    the 3D/voxel render backend (rasterizer, materials, terrain,
-               streamed world, skylight, water)
+               streamed world, skylight, water, camera-space viewmodel)
 third_party/   stb_image / stb_image_write
 tools/         preview server, regression tests, offline art tool, scaffolds
 stage_assets.py  stages assets/ and projects/ into the APK asset tree
@@ -54,7 +57,7 @@ reads that index inside the APK and simply scans the folder on the host.
 ```sh
 tools/preview/build.sh
 ./preview --port 8090
-# open http://localhost:8090 — the launcher appears; tap a project
+# open http://localhost:8090 — the launcher appears; tap Geometrium or a project
 ```
 
 `./preview --project projects/demo` skips the launcher and starts one project
@@ -65,10 +68,26 @@ URLs, so it works through an external HTTPS proxy.
 
 ## Controls
 
-The launcher: tap/click a card to run that project. The round button in the
+The launcher: tap/click a card to run that playset — **Geometrium** (the
+block world) first, then the engine projects. The round button in the
 top-left corner — or `Esc` / `M` — opens it again at any time.
 
-While a project runs:
+While **Geometrium** runs (mouse + keyboard):
+
+| Input | Effect |
+| --- | --- |
+| `W A S D` / arrows | walk / fly |
+| mouse move | look around |
+| `Space` | jump (swim / rise in flight) |
+| `1`–`6` | hotbar block |
+| `E` (Break) / `R` (Place) | break / place the aimed block |
+| `F` | toggle flight |
+
+On a phone: left thumb is the joystick, right side looks; the round **Break**
+and **Place** buttons, the hotbar, **Jump** and the **Flight** pill are
+on-screen. World edits autosave to `world.edits` (atomic, debounced).
+
+While an engine project runs:
 
 | Input | Effect |
 | --- | --- |
@@ -85,8 +104,8 @@ camera automatically: dragging orbits it, `W A S D` translates it in the view
 plane, `Space`/`Shift` change altitude. A scripted camera (as in `demo` and
 `bounce`) keeps full control and is never touched by the free camera.
 
-On a phone: touch a card to pick a project; one finger drags the camera; the
-on-screen round button, `Esc` or `M` open the launcher.
+On a phone in a project: touch a card to pick a playset; one finger drags the
+camera; the on-screen round button, `Esc` or `M` open the launcher.
 
 ## Projects
 
@@ -329,6 +348,10 @@ of its backends (`src/engine/render/`):
 - Chunk cache of **11×11** chunks (visible 9×9 plus a prefetch
   ring), nearest-first meshing with a soft per-frame budget, fog retreating
   as chunks become ready. Fog on dark surfaces stays dark.
+- **Camera-space viewmodel**: `rend3d_viewmodel` switches the rasterizer to
+  screen-locked, fog-free projection with its own overlay depth, so the
+  Geometrium first-person hand (arm cuboid + held block) sways and swings
+  without inheriting world rotation.
 - Perspective `1/z` depth/UV, signed colour arithmetic, backface culling
   before frustum tests; a bilinear upscale with an exact 2× fast path. The
   internal resolution adapts from measured render time with hysteresis
@@ -344,10 +367,14 @@ SANITIZE=1 tools/tests/run.sh
 
 Suites: the rasterizer/material regressions (`render`), voxel generation,
 streaming and mesh coverage (`world`), the water simulation and saves
-(`water`), the PCM mixer (`audio`), the engine layer (`engine`: node-tree
-math, scene parsing, C scripting via `dlopen`, physics and the
-`CharacterBody3D` move-and-slide solver — 11 groups), and the app
-(`launcher`: the project list, tap-to-run, script animation, input routing,
+(`water`), the PCM mixer (`audio`), the **Geometrium** hand viewmodel
+topology/animation (`hand`), its controls — walking, toggleable flight,
+multitouch, HUD geometry (`controls`) — and breaking/building with ray
+picking, half-block collisions and edit saves (`edits`), the engine layer
+(`engine`: node-tree math, scene parsing, C scripting via `dlopen`, physics
+and the `CharacterBody3D` move-and-slide solver — 11 groups), and the app
+(`launcher`: the Geometrium + project card list, tap-to-run, the block
+world streaming/walking/flying/pausing, script animation, input routing,
 launcher pausing, project switching, the free camera, the platformer
 run/jump/camera-follow path, reset and `--project`-style direct open) at two
 resolutions. The Android-flavoured

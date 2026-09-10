@@ -21,6 +21,9 @@ GFX2D="src/graphics/image.c src/graphics/gfx_frame.c src/graphics/gfx_draw.c src
 ENGINE="src/engine/eng_api.c src/engine/eng_node.c src/engine/eng_mesh.c src/engine/eng_physics.c \
     src/engine/eng_input.c src/engine/eng_scene.c src/engine/eng_script.c \
     src/engine/eng_script_builtin.c src/engine/eng_project.c src/engine/eng_fs.c"
+ACTORS="src/geometrium/geometrium_player.c src/geometrium/geometrium_input.c src/geometrium/geometrium_interact.c"
+GEOM="src/geometrium/geometrium_game.c $ACTORS src/geometrium/geometrium_scene.c \
+    src/geometrium/geometrium_hud.c src/geometrium/geometrium_hand.c"
 
 # Android-only or Android-flavoured translation units never run on the host, but
 # CI compiles them: syntax-check them against a minimal NDK header stub so the
@@ -28,6 +31,10 @@ ENGINE="src/engine/eng_api.c src/engine/eng_node.c src/engine/eng_mesh.c src/eng
 $CC -std=c99 -Wall -Wextra -Werror -D__ANDROID__ \
     -Itools/tests/android_stub -Isrc -I. \
     -fsyntax-only src/main.c src/sound/sound_android.c src/core/game.c \
+    src/geometrium/geometrium_game.c src/geometrium/geometrium_hand.c \
+    src/geometrium/geometrium_hud.c src/geometrium/geometrium_input.c \
+    src/geometrium/geometrium_interact.c src/geometrium/geometrium_player.c \
+    src/geometrium/geometrium_scene.c \
     src/engine/eng_fs.c src/engine/eng_script.c src/engine/eng_scene.c \
     src/engine/eng_project.c src/engine/eng_api.c
 
@@ -38,13 +45,22 @@ $CC $FLAGS $CORE $VOXEL tools/tests/world.c -lm -o "$DIR/world"
 "$DIR/world"
 $CC $FLAGS $CORE $VOXEL tools/tests/water.c -lm -o "$DIR/water"
 "$DIR/water" "$DIR/fixtures/water"
+# The first-person hand: viewmodel topology and swing/equip animation, stubbed.
+$CC $FLAGS $CORE src/geometrium/geometrium_hand.c tools/tests/hand.c -lm -o "$DIR/hand"
+"$DIR/hand"
+# Game layer against the real voxel world: walking, flight, multitouch, HUD.
+$CC $FLAGS $CORE $VOXEL $PERF $GEOM tools/tests/controls.c -lm -o "$DIR/controls"
+"$DIR/controls"
+# Breaking/building, ray picking, half-block collisions and world edits saves.
+$CC $FLAGS $CORE $VOXEL src/geometrium/geometrium_hand.c $ACTORS tools/tests/edits.c -lm -o "$DIR/edits"
+"$DIR/edits" "$DIR/fixtures"
 $CC $FLAGS -DPREVIEW_EXTERNAL_AUDIO $CORE src/sound/sound.c tools/tests/audio.c -lm -lpthread -o "$DIR/audio"
 "$DIR/audio"
 # Engine layer: node tree, scene files, C scripting via dlopen, generalized rendering.
 $CC $FLAGS -rdynamic $CORE $VOXEL $PERF $RENDER3D src/graphics/image.c $ENGINE \
     tools/tests/engine.c -lm -ldl -o "$DIR/engine"
 "$DIR/engine"
-# The app itself: the engine launcher that lists projects and runs the pick.
-$CC $FLAGS -rdynamic $CORE $VOXEL $PERF $RENDER3D $GFX2D $ENGINE src/core/game.c \
+# The app itself: launcher with the Geometrium block world and the engine projects.
+$CC $FLAGS -rdynamic $CORE $VOXEL $PERF $RENDER3D $GFX2D $ENGINE $GEOM src/core/game.c \
     tools/tests/game.c -lm -ldl -o "$DIR/launcher"
 "$DIR/launcher"

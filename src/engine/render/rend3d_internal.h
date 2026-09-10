@@ -19,4 +19,10 @@ typedef struct {
 RendMaterial *rend_material(int block,int face);
 const uint32_t *rend_material_shades(RendMaterial *material,int level,uint32_t fog);
 void rend3d_polygon(const RendVertex *vertices,int n,float nx,float ny,float nz,uint32_t color,RendMaterial *material,const unsigned char *light);
+/* Camera-space overlay: stable projection/lighting, no world fog, own depth.
+ * Used by the first-person hand in src/geometrium/. */
+void rend3d_viewmodel(int enabled);
+int rend3d_project(float x,float y,float z,float *sx,float *sy);
+void rend3d_depth_clear(float x0,float y0,float x1,float y1);
+void rend3d_segment(float x,float y,float z,float x2,float y2,float z2,uint32_t color);
 #endif
