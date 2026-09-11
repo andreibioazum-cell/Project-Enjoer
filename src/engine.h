@@ -24,6 +24,9 @@ void app_log(const char *format, ...);
 void app_log_error(const char *format, ...);
 double app_now(void);
 void app_set_storage(const char *directory);
+void app_quit(void);
+void app_set_activity(void *activity);
+void app_set_java_vm(void *vm);
 int app_save_path(char *out, size_t size, const char *name);
 int asset_read(AAssetManager *assets, const char *name, uint8_t **data, size_t *size);
 int image_load(AAssetManager *assets, const char *name, Image *out);
@@ -46,6 +49,7 @@ int text_width(const char *string);
 
 int snd_load(const char *name);
 int snd_play(const char *name);
+void snd_set_volume(int percent);   /* 0..100, default 80 */
 int audio_init(AAssetManager *assets);
 void audio_shutdown(void);
 void audio_pause(void);
@@ -60,18 +64,20 @@ void game_key(const char *name, int down);
 void game_cancel_input(void);
 void game_reset(void);
 void game_save(void);
-/* Engine launcher (app router, src/core/game.c): the round button, Escape or
- * M opens the playset list; card 0 is the Geometrium block world, the rest
- * are engine projects — tapping a card runs it. */
-void game_set_project_root(const char *root);   /* before game_init */
-int game_open_project(const char *directory);   /* run one project right away */
-int game_menu_open(void);
-int game_menu_card_count(void);                 /* 1 (Geometrium) + projects */
-const char *game_menu_title(int card);
-int game_in_geometrium(void);                   /* block world is the active playset */
-int game_project_count(void);
-int game_current_project(void);       /* index of the running project, -1 none */
-const char *game_project_title(int index);
-void game_menu_button_geom(float *x, float *y, float *r);
-void game_menu_card_geom(int index, float *x, float *y, float *w, float *h);
+/*
+ * Screens (src/core/game.c): a Minecraft-style main menu with flat beveled
+ * buttons — Play / Servers / Options / Quit — plus a placeholder Servers
+ * screen and an Options screen (sound volume, render quality). "Play"
+ * starts the Geometrium block world; the round button, Escape, M or the
+ * Android back key return to the menu.
+ */
+enum { GAME_SCREEN_MAIN = 0, GAME_SCREEN_SERVERS, GAME_SCREEN_OPTIONS, GAME_SCREEN_GAME };
+int  game_menu_open(void);
+int  game_in_geometrium(void);
+int  game_screen(void);
+const char *game_screen_name(void);
+void game_menu_button_geom(int index, float *x, float *y, float *w, float *h);
+void game_menu_button_geom2(float *x, float *y, float *r);  /* round in-game button */
+int  game_settings_volume(void);
+int  game_settings_quality(void);
 #endif

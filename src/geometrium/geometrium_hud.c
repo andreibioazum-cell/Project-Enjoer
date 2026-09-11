@@ -13,6 +13,10 @@ void geometrium_hud_draw(void) {
     circle(cx+jx*r*.56f,cy+jy*r*.56f,r*.38f,0xff000000u);
     float x,y,w,h;geometrium_input_flight_geom(&x,&y,&w,&h);
     roundrect(x,y,w,h,7*u,0xffffffffu);centered("Flight",x+w*.5f,y+h*.5f-9*u,.48f*u);
+    if (!geometrium_player_flying()) {
+        geometrium_input_crouch_geom(&x,&y,&w,&h);
+        roundrect(x,y,w,h,7*u,0xffffffffu);centered("Crouch",x+w*.5f,y+h*.5f-9*u,.48f*u);
+    }
     char label[32];
     if(rend_fps()<0) snprintf(label,sizeof(label),"FPS —");
     else snprintf(label,sizeof(label),"FPS %.0f",rend_fps());

@@ -9,7 +9,7 @@
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"%s:%d: %s\n",__func__,__LINE__,#x); exit(1); } } while(0)
 #define CLOSE(a,b) CHECK(fabsf((a)-(b)) < .0004f)
 static float scene_x,scene_y,scene_z,scene_yaw,scene_pitch;
-static int scene_scale,drawn_faces,jump_labels,flight_labels,joy_rings,knobs,backgrounds,cross_rects;
+static int scene_scale,drawn_faces,jump_labels,flight_labels,crouch_labels,joy_rings,knobs,backgrounds,cross_rects;
 
 int rend_materials_load(AAssetManager *assets) {(void)assets;return 1;}
 const Image *rend_material_icon(int block) {static Image image;CHECK(block>0 && block<BLOCK_COUNT);return &image;}
@@ -50,9 +50,12 @@ void rect(float x,float y,float w,float h,uint32_t c) {
     CHECK(c==0xFFFFFFFFu); CHECK(w<=20 && h<=20); CHECK(fabsf(x-screen_w*.5f)<20 && fabsf(y-screen_h*.5f)<20); cross_rects++;
 }
 void roundrect(float x,float y,float w,float h,float r,uint32_t c) {
-    float bx,by,bw,bh; geometrium_input_flight_geom(&bx,&by,&bw,&bh);
-    if(fabsf(x-bx)<.01f && fabsf(y-by)<.01f) {CLOSE(w,bw);CLOSE(h,bh);CHECK(r>0&&c==0xffffffffu);}
-    else CHECK(x>screen_w*.2f && y>screen_h*.75f && w==h && r>0 && (c==0xffffffffu || c==0xb3222929u));
+    float bx,by,bw,bh;
+    geometrium_input_flight_geom(&bx,&by,&bw,&bh);
+    if(fabsf(x-bx)<.01f && fabsf(y-by)<.01f) {CLOSE(w,bw);CLOSE(h,bh);CHECK(r>0&&c==0xffffffffu);return;}
+    geometrium_input_crouch_geom(&bx,&by,&bw,&bh);
+    if(fabsf(x-bx)<.01f && fabsf(y-by)<.01f) {CLOSE(w,bw);CLOSE(h,bh);CHECK(r>0&&c==0xffffffffu);return;}
+    CHECK(x>screen_w*.2f && y>screen_h*.75f && w==h && r>0 && (c==0xffffffffu || c==0xb3222929u));
 }
 void ring(float x,float y,float r,float th,uint32_t c) {
     float jx,jy,jr; geometrium_input_joy_geom(&jx,&jy,&jr);
@@ -80,6 +83,7 @@ void text_scaled(const char *s,float x,float y,uint32_t c,float scale) {
     else {
         CHECK(c==0xff000000u);
         if(!strcmp(s,"Flight"))flight_labels++;
+        else if(!strcmp(s,"Crouch"))crouch_labels++;
         else if(!strcmp(s,"Jump"))jump_labels++;
         else if(!strcmp(s,"Break") || !strcmp(s,"Place"))action_labels++;
         else CHECK(!"Unexpected HUD text");
@@ -156,7 +160,7 @@ static void test_touch_lifetimes(void) {
     puts("PASS simultaneous jump/look/move, toggle while held, cancelled taps, blur and resize reset");
 }
 static void no_overlap(void) {
-    Pos p=pos(); float r=GEOMETRIUM_PLAYER_RADIUS,h=GEOMETRIUM_PLAYER_HEIGHT;
+    Pos p=pos(); float r=GEOMETRIUM_PLAYER_RADIUS,h=geometrium_player_crouching()?GEOMETRIUM_CROUCH_HEIGHT:GEOMETRIUM_PLAYER_HEIGHT;
     for(int y=(int)floorf((p.y+.001f)*2);y<=(int)floorf((p.y+h-.001f)*2);y++)
         for(int z=(int)floorf((p.z-r+.001f)*2);z<=(int)floorf((p.z+r-.001f)*2);z++)
             for(int x=(int)floorf((p.x-r+.001f)*2);x<=(int)floorf((p.x+r-.001f)*2);x++) CHECK(!voxel_cell_solid(x,y,z));
@@ -175,14 +179,87 @@ static void test_voxel_collisions(void) {
     puts("PASS voxel walls, terrain steps and vertical flight never penetrate solid blocks");
 }
 
+static void test_crouch(void) {
+    fresh();
+    float x0,y0,z0; geometrium_player_pos(&x0,&y0,&z0);
+    int fy0=(int)floorf(y0*2); /* first air cell above the feet (floor top) */
+    /* Build a room: solid floor (top = fy0), then a one-block (1.0 unit)
+     * clearance, then a solid ceiling from z=10 to z=20. Open sky at the start. */
+    for (int sy=fy0-10;sy<=fy0+12;sy++)
+      for (int sz=16;sz<=44;sz++)
+        for (int sx=12;sx<=24;sx++) voxel_world_set(sx,sy,sz,BLOCK_AIR);
+    for (int sy=fy0-8;sy<fy0;sy++)
+      for (int sz=16;sz<=44;sz++)
+        for (int sx=12;sx<=24;sx++) voxel_world_set(sx,sy,sz,BLOCK_STONE);
+    for (int sy=fy0+2;sy<=fy0+10;sy++)
+      for (int sz=20;sz<=40;sz++)
+        for (int sx=12;sx<=24;sx++) voxel_world_set(sx,sy,sz,BLOCK_STONE);
+    aim(0,-0.1f); /* face +z into the tunnel */
+    /* Crawl is slower than walking, measured in the open start area. */
+    {
+        Pos a=pos(); geometrium_key("w",1);
+        for (int i=0;i<3;i++) geometrium_player_update(.016f);
+        float dz_walk=pos().z-a.z;
+        geometrium_key("w",0);
+        Pos b=pos(); geometrium_key("c",1); geometrium_player_update(.016f);
+        geometrium_key("w",1);
+        for (int i=0;i<3;i++) geometrium_player_update(.016f);
+        float dz_crouch=pos().z-b.z;
+        geometrium_key("w",0);
+        CHECK(dz_walk>0 && dz_crouch>0 && dz_crouch<dz_walk);
+    }
+    /* Standing: the one-block ceiling blocks forward movement. */
+    geometrium_key("c",0);
+    for (int i=0;i<30;i++) geometrium_player_update(.016f); /* stand back up in the open */
+    CHECK(!geometrium_player_crouching());
+    geometrium_key("w",1);
+    for (int i=0;i<200;i++) geometrium_player_update(.016f);
+    CHECK(pos().z<9.95f);
+    CHECK(!geometrium_player_crouching());
+    /* Crouch and crawl into the one-block tunnel. */
+    geometrium_key("c",1); geometrium_player_update(.016f);
+    CHECK(geometrium_player_crouching());
+    CLOSE(geometrium_player_eye(),GEOMETRIUM_CROUCH_EYE);
+    for (int i=0;i<200 && pos().z<10.6f;i++) geometrium_player_update(.016f);
+    CHECK(pos().z>10.6f);
+    CHECK(geometrium_player_crouching());
+    Pos under=pos();
+    drawn_faces=0; geometrium_scene_draw(NULL);
+    CLOSE(scene_y,under.y+GEOMETRIUM_CROUCH_EYE);
+    /* Releasing under the ceiling keeps the crawl box (cannot stand up). */
+    geometrium_key("c",0);
+    for (int i=0;i<60;i++) geometrium_player_update(.016f);
+    CHECK(geometrium_player_crouching());
+    CLOSE(geometrium_player_eye(),GEOMETRIUM_CROUCH_EYE);
+    no_overlap();
+    /* No jump while crouched: the head never rises off the floor. */
+    float peak=pos().y;
+    geometrium_key("space",1);
+    for (int i=0;i<40;i++) { geometrium_player_update(.016f); if(pos().y>peak)peak=pos().y; }
+    geometrium_key("space",0);
+    CHECK(peak<under.y+0.35f);
+    /* Walk out past the ceiling, then stand up in the open. */
+    geometrium_key("c",1); geometrium_key("w",1);
+    for (int i=0;i<600 && pos().z<21.0f;i++) geometrium_player_update(.016f);
+    CHECK(pos().z>21.0f);
+    geometrium_key("c",0); geometrium_key("w",0);
+    for (int i=0;i<60;i++) geometrium_player_update(.016f);
+    CHECK(!geometrium_player_crouching());
+    CLOSE(geometrium_player_eye(),GEOMETRIUM_PLAYER_EYE_HEIGHT);
+    Pos out=pos(); drawn_faces=0; geometrium_scene_draw(NULL);
+    CLOSE(scene_y,out.y+GEOMETRIUM_PLAYER_EYE_HEIGHT);
+    /* Rebuild the seeded terrain so later tests see the original world. */
+    voxel_world_build(GEOMETRIUM_WORLD_SEED);
+    puts("PASS crouch: holds the one-block crawl box, slow crawl, no jump, drop camera, stand on exit");
+}
 static void test_clean_hud_and_camera(void) {
     fresh();
-    joy_rings=knobs=backgrounds=cross_rects=flight_labels=jump_labels=0;
+    joy_rings=knobs=backgrounds=cross_rects=flight_labels=jump_labels=crouch_labels=0;
     geometrium_hud_draw();
     CHECK(images==6 && fps_labels==1 && action_labels==2);
-    CHECK(joy_rings==1&&knobs==1&&backgrounds==0&&cross_rects==2&&flight_labels==1&&jump_labels==1);
-    tap_flight(100); geometrium_hud_draw(); CHECK(jump_labels==1&&flight_labels==2);
-    tap_flight(100); geometrium_hud_draw(); CHECK(jump_labels==2&&flight_labels==3);
+    CHECK(joy_rings==1&&knobs==1&&backgrounds==0&&cross_rects==2&&flight_labels==1&&jump_labels==1&&crouch_labels==1);
+    tap_flight(100); geometrium_hud_draw(); CHECK(jump_labels==1&&flight_labels==2&&crouch_labels==1);
+    tap_flight(100); geometrium_hud_draw(); CHECK(jump_labels==2&&flight_labels==3&&crouch_labels==2);
     Pos p=pos(); float yaw,pitch; geometrium_camera_angles(&yaw,&pitch);
     drawn_faces=0; geometrium_scene_draw(NULL); CHECK(drawn_faces>0&&scene_scale==1);
     CLOSE(scene_x,p.x); CLOSE(scene_y,p.y+GEOMETRIUM_PLAYER_EYE_HEIGHT); CLOSE(scene_z,p.z);
@@ -193,6 +270,8 @@ static void test_clean_hud_and_camera(void) {
         screen_w=sizes[i][0]; screen_h=sizes[i][1]; geometrium_input_layout();
         float x,y,r; geometrium_input_joy_geom(&x,&y,&r); CHECK(x-r>0&&x+r<screen_w*.5f&&y+r<screen_h);
         float w,h; geometrium_input_flight_geom(&x,&y,&w,&h); CHECK(x>screen_w*.5f&&y>0&&x+w<screen_w&&y+h<screen_h*.5f);
+        geometrium_input_crouch_geom(&x,&y,&w,&h);
+        CHECK(x>screen_w*.5f&&y>0&&x+w<screen_w&&y+h<screen_h*.5f);
     }
     geometrium_key("w",1); geometrium_game_reset(); CHECK(!geometrium_player_flying());
     dt=-1; p=pos(); geometrium_game_update(); CLOSE(pos_dist(p,pos()),0);
@@ -212,6 +291,6 @@ static void test_fps_and_quality(void) {
 }
 int main(void) {
     screen_w=960;screen_h=540;dt=1.0/60;geometrium_game_init(NULL);
-    test_walk_jump(); test_toggle_and_flight(); test_touch_lifetimes(); test_voxel_collisions(); test_clean_hud_and_camera();test_fps_and_quality();
+    test_walk_jump(); test_toggle_and_flight(); test_touch_lifetimes(); test_voxel_collisions(); test_crouch(); test_clean_hud_and_camera();test_fps_and_quality();
     return 0;
 }

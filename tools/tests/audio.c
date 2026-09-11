@@ -9,6 +9,7 @@ void snd_backend_resume(void) {}
 void snd_set_java_vm(void *vm) {(void)vm;}
 int main(void) {
     CHECK(audio_init(host_asset_manager("assets")));
+    snd_set_volume(100);   /* test the mixer's raw clipping at full volume */
     CHECK(snd_load("jump.wav") && snd_load("break.wav") && snd_load("place.wav"));
     CHECK(snd_load("jump.wav"));CHECK(!snd_load("../jump.wav"));CHECK(!snd_load("missing.wav"));
     CHECK(!snd_play("missing.wav"));

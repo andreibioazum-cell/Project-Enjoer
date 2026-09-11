@@ -17,7 +17,7 @@ void geometrium_hand_reset(void) {
 void geometrium_hand_swing(void) {swing_left=SWING_TIME;}
 void geometrium_hand_equip(void) {equip_left=EQUIP_TIME;}
 static void update_light(float x,float y,float z,float d) {
-    float target=voxel_world_light(x,y+GEOMETRIUM_PLAYER_EYE_HEIGHT,z);
+    float target=voxel_world_light(x,y+geometrium_player_eye(),z);
     if (!light_tracked) {hand_light=target;light_tracked=1;}
     else hand_light+=(target-hand_light)*(1-expf(-d*9));
 }

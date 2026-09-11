@@ -1,12 +1,11 @@
-/* PC preview server for the engine: the same C code as the APK, the browser is
- * the window. JPEG transport keeps remote input responsive; PNG assets stay
- * lossless. The launcher in the frame picks the project to run. */
+/* PC preview server: the same C code as the APK, the browser is the window.
+ * JPEG transport keeps remote input responsive; PNG assets stay lossless.
+ * The app boots into the Minecraft-style main menu; tap "Play" for the
+ * Geometrium block world. */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 #include "engine.h"
-#include "engine/eng_api.h"
-#include "engine/eng_internal.h"
 #include "engine/render/rend_internal.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -184,15 +183,12 @@ int main(int argc, char **argv) {
     int port = 8090;
     int w = 960, h = 540;
     const char *assets = "assets", *storage = "data";
-    const char *project = NULL, *projects = "projects";
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--port") && i + 1 < argc) port = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--w") && i + 1 < argc) w = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--h") && i + 1 < argc) h = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--storage") && i + 1 < argc) storage = argv[++i];
         else if (!strcmp(argv[i], "--assets") && i + 1 < argc) assets = argv[++i];
-        else if (!strcmp(argv[i], "--project") && i + 1 < argc) project = argv[++i];
-        else if (!strcmp(argv[i], "--projects") && i + 1 < argc) projects = argv[++i];
     }
     if(w<64 || h<64 || w>4096 || h>4096 || port<1 || port>65535) {
         fprintf(stderr,"Invalid preview size or port\n");return 1;
@@ -215,13 +211,8 @@ int main(int argc, char **argv) {
 
     AAssetManager *am = host_asset_manager(assets);
     if (!gfx_init(am)) { fprintf(stderr, "graphics init failed\n"); return 1; }
-    game_set_project_root(projects);
     game_init(am);
     if (app_failed()) { fprintf(stderr, "%s\n", app_error()); return 1; }
-    if (project && !game_open_project(project)) {
-        fprintf(stderr, "engine: failed to load project '%s'\n", project);
-        return 1;
-    }
     render_frame();
 
     int srv = socket(AF_INET, SOCK_STREAM, 0);
@@ -237,8 +228,8 @@ int main(int argc, char **argv) {
         return 1;
     }
     listen(srv, 16);
-    fprintf(stderr, "Enjoer engine preview: http://0.0.0.0:%d (%dx%d, assets=%s, projects=%s)\n",
-            port, w, h, assets, projects);
+    fprintf(stderr, "Enjoer preview: http://0.0.0.0:%d (%dx%d, assets=%s)\n",
+            port, w, h, assets);
 
     static char reqbuf[16384];
     while (running) {
@@ -260,12 +251,12 @@ int main(int argc, char **argv) {
             http_head(fd, 200, "text/html; charset=utf-8", (int)strlen(index_html), 0);
             send_all(fd, index_html, strlen(index_html));
         } else if (strcmp(method, "GET") == 0 && strcmp(path, "/info") == 0) {
-            char info[320];
+            char info[256];
             int n = snprintf(info, sizeof(info),
-                             "{\"w\":%d,\"h\":%d,\"engine\":true,\"fps\":%.1f,\"nodes\":%d,"
-                             "\"menu\":%d,\"projects\":%d,\"project\":\"%s\"}",
-                             w, h, rend_fps(), eng_scene_node_count(), game_menu_open(),
-                             game_project_count(), eng_project_name());
+                             "{\"w\":%d,\"h\":%d,\"fps\":%.1f,\"menu\":%d,\"screen\":\"%s\","
+                             "\"volume\":%d,\"quality\":%d}",
+                             w, h, rend_fps(), game_menu_open(), game_screen_name(),
+                             game_settings_volume(), game_settings_quality());
             http_head(fd, 200, "application/json", n, 0);
             send_all(fd, info, (size_t)n);
         } else if (!strcmp(method,"GET") && !strcmp(path,"/frame.jpg")) {

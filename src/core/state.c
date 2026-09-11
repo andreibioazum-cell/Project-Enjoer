@@ -5,6 +5,40 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <time.h>
+#ifdef __ANDROID__
+#include <jni.h>
+#include <unistd.h>
+static void *app_activity;
+static JavaVM *app_java_vm;
+void app_set_activity(void *activity) { app_activity = activity; }
+void app_set_java_vm(void *vm) { app_java_vm = (JavaVM *)vm; }
+#else
+#include <unistd.h>
+void app_set_activity(void *activity) { (void)activity; }
+void app_set_java_vm(void *vm) { (void)vm; }
+#endif
+
+/* The Quit button ends the process: Activity.finish() on Android,
+ * _exit() on the host preview. */
+void app_quit(void) {
+#ifdef __ANDROID__
+    if (app_java_vm && app_activity) {
+        JNIEnv *env = NULL;
+        int attached = 0;
+        if ((*app_java_vm)->GetEnv(app_java_vm, (void **)&env, JNI_VERSION_1_6) == JNI_OK ||
+            ((*app_java_vm)->AttachCurrentThread(app_java_vm, (void **)&env, NULL) == JNI_OK)) {
+            jclass cls = (*env)->GetObjectClass(env, (jobject)app_activity);
+            jmethodID finish = cls ? (*env)->GetMethodID(env, cls, "finish", "()V") : NULL;
+            if (finish) {
+                (*env)->CallVoidMethod(env, (jobject)app_activity, finish);
+                if (attached) (*app_java_vm)->DetachCurrentThread(app_java_vm);
+                return;
+            }
+        }
+    }
+#endif
+    _exit(0);
+}
 
 int screen_w, screen_h;
 double dt;

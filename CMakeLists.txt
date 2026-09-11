@@ -3,22 +3,24 @@ project(Enjoer C)
 set(CMAKE_C_STANDARD 99)
 
 # The only shipping platform is Android: libds_game.so, packaged by the APK
-# described in game/AndroidManifest.xml. The app is the Enjoer engine:
-# projects with .escn scenes, typed nodes, physics and C scripts, rendered by
-# the software 3D / voxel backend in src/engine/render/.
+# described in game/AndroidManifest.xml. The app is a Minecraft-style main
+# menu (Play / Servers / Options / Quit) over the Geometrium first-person
+# block world, rendered by the software voxel backend in src/engine/render/.
+# The scene-graph engine in src/engine/eng_*.c stays in the repository for
+# the PC preview and its tests but is not shipped in the APK.
 #
 # Source layout (every file is its own translation unit):
 #   src/main.c            Android entry point (native activity)
 #   src/core/             app state, error handling, logging, asset reads,
-#                         and the engine launcher router (game.c)
+#                         settings, and the menu/game router (game.c)
 #   src/graphics/         2D rendering: primitives, textures, text (+ ttf/)
 #   src/sound/            audio: PCM mixer and AudioTrack output
-#   src/geometrium/       the first-person block world playset (player, hand,
+#   src/geometrium/       the first-person block world (player, hand,
 #                         picking, touch layout, HUD) on the voxel renderer
-#   src/engine/           the engine: nodes, scenes, projects, physics,
-#                         input, scripting (+ render/ 3D & voxel backend)
-# Runtime assets (PNG tiles, font, WAV effects) and the staged projects live
-# in assets/ and assets/projects/ (see stage_assets.py).
+#   src/engine/           the voxel/3D renderer (render/) plus the
+#                         scene-graph engine (eng_*, not in the APK)
+# Runtime assets (PNG tiles, font, WAV effects) live in assets/
+# (see stage_assets.py).
 if(NOT ANDROID)
     message(FATAL_ERROR
         "Enjoer builds for Android only. Run CMake through the NDK toolchain "
@@ -58,17 +60,8 @@ add_library(enjoer SHARED
     src/engine/render/voxel_water.c
     src/engine/render/voxel_mesh.c
     src/engine/render/voxel_edits.c
-    src/engine/eng_api.c
-    src/engine/eng_node.c
-    src/engine/eng_mesh.c
-    src/engine/eng_physics.c
-    src/engine/eng_input.c
-    src/engine/eng_scene.c
-    src/engine/eng_script.c
-    src/engine/eng_script_builtin.c
-    src/engine/eng_project.c
-    src/engine/eng_fs.c
     src/core/game.c
+    src/core/settings.c
     ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
 # Filename contract of the existing, unchanged APK workflow and manifest.
 set_target_properties(enjoer PROPERTIES OUTPUT_NAME ds_game)

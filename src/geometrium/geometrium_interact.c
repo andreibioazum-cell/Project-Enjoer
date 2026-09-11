@@ -70,7 +70,7 @@ int geometrium_action_apply(int action,const GeometriumHit *h) {
 }
 static void pick(void) {
     float x,y,z,yaw,pitch;geometrium_player_pos(&x,&y,&z);geometrium_camera_angles(&yaw,&pitch);
-    has_target=geometrium_raycast(x,y+GEOMETRIUM_PLAYER_EYE_HEIGHT,z,sinf(yaw)*cosf(pitch),sinf(pitch),cosf(yaw)*cosf(pitch),6,&target);
+    has_target=geometrium_raycast(x,y+geometrium_player_eye(),z,sinf(yaw)*cosf(pitch),sinf(pitch),cosf(yaw)*cosf(pitch),6,&target);
 }
 void geometrium_actions_update(float d) {
     if (!isfinite(d) || d<0) d=0;

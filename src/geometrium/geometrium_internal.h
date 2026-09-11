@@ -11,6 +11,10 @@
 #define GEOMETRIUM_PLAYER_RADIUS .30f
 #define GEOMETRIUM_PLAYER_HEIGHT 1.80f
 #define GEOMETRIUM_PLAYER_EYE_HEIGHT 1.62f
+/* Crouch (crawl): the hitbox flattens to ~1 block tall with a longer
+ * profile, so it fits through the one-block openings in the terrain. */
+#define GEOMETRIUM_CROUCH_HEIGHT .90f
+#define GEOMETRIUM_CROUCH_EYE .45f
 #define GEOMETRIUM_FOG_START 32.0f
 #define GEOMETRIUM_FOG_END 64.0f
 #define GEOMETRIUM_FAR_Z 80.0f
@@ -25,6 +29,9 @@ void geometrium_player_update(float d);
 void geometrium_player_pos(float *x,float *y,float *z);
 int geometrium_player_overlaps(int sx,int sy,int sz);
 void geometrium_player_jump(int down);
+void geometrium_player_crouch_touch(int down);
+int  geometrium_player_crouching(void);
+float geometrium_player_eye(void);
 int geometrium_player_flying(void);
 int geometrium_player_grounded(void);
 void geometrium_player_toggle_flight(void);
@@ -54,6 +61,7 @@ void geometrium_input_joy(float *x,float *y);
 void geometrium_input_joy_geom(float *x,float *y,float *r);
 void geometrium_input_jump_geom(float *x,float *y,float *r);
 void geometrium_input_flight_geom(float *x,float *y,float *w,float *h);
+void geometrium_input_crouch_geom(float *x,float *y,float *w,float *h);
 void geometrium_input_action_geom(int action,float *x,float *y,float *r);
 void geometrium_input_slot_geom(int index,float *x,float *y,float *size);
 void geometrium_input_touch(float x,float y,int action,int pointer_id);

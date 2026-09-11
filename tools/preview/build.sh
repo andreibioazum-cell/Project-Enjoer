@@ -14,9 +14,6 @@ ${CC:-gcc} -O2 -std=c99 -Itools/preview/compat -Isrc -I. \
     src/geometrium/geometrium_hud.c src/geometrium/geometrium_input.c \
     src/geometrium/geometrium_interact.c src/geometrium/geometrium_player.c \
     src/geometrium/geometrium_scene.c \
-    src/engine/eng_api.c src/engine/eng_node.c src/engine/eng_mesh.c src/engine/eng_physics.c \
-    src/engine/eng_input.c src/engine/eng_scene.c src/engine/eng_script.c \
-    src/engine/eng_script_builtin.c src/engine/eng_project.c src/engine/eng_fs.c \
-    src/core/game.c \
+    src/core/game.c src/core/settings.c \
     tools/preview/host_compat.c tools/preview/host_main.c tools/preview/frame_jpeg.c \
     -rdynamic -lm -lpthread -ldl -o preview

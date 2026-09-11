@@ -3,8 +3,10 @@
  *
  * The height field is deliberately low-frequency: neighbour columns differ by
  * at most one block almost everywhere, so the ground climbs in short single
- * steps instead of whole-block walls, and caves ("holes") are carved inside
- * the generated stone below a sealed four-block crust. */
+ * steps instead of whole-block walls. Most stone stays sealed under a
+ * four-block crust, but scarred columns are carved by surface holes and cave
+ * mouths, so the landscape is a hollowed, pockmarked rock body instead of a
+ * solid slab. */
 #include "rend_internal.h"
 #include <math.h>
 #include <string.h>
@@ -62,13 +64,36 @@ int voxel_terrain_height(int x, int z) {
     return result < 3 ? 3 : result > 25 ? 25 : result;
 }
 
+/* Surface scar of a column: -1 near the spawn (the landing stays clean),
+ * otherwise a 2D noise value. Columns with a high scar are pockmarked —
+ * open holes in the ground and caves that break the crust, so the terrain
+ * spawns with holes instead of being solid everywhere. */
+static float scar(int x, int z) {
+    int dx = x - 8, dz = z - 8;
+    if (dx * dx + dz * dz < 30) return -1.0f;
+    return .60f * noise(x * .055f, z * .055f, 913) +
+           .40f * noise(x * .11f, z * .11f, 947);
+}
+
+/* Depth in blocks of the open hole at the top of a scarred column; 0 = intact. */
+static int surface_hole(int x, int z, int height) {
+    if (height <= WATER_LEVEL + 1) return 0;
+    float s = scar(x, z);
+    if (s < .52f) return 0;
+    int depth = 1 + (int)((s - .52f) * 8.0f);
+    return depth > 3 ? 3 : depth;
+}
+
 /* Generated caves: pockets and tunnels inside the stone. The four top blocks
- * of every dry column stay solid (a sealed crust under grass), the two bottom
- * layers are bedrock, and lake beds (height <= WATER_LEVEL + 1) are never
- * carved so natural water can never drain into the underground. */
+ * of an unscarred dry column stay solid (a sealed crust under grass); a
+ * scarred column keeps only a one-block crust, so cave air can break through
+ * to the surface. The two bottom layers are bedrock, and lake beds
+ * (height <= WATER_LEVEL + 1) are never carved so natural water can never
+ * drain into the underground. */
 static int cave(int x, int y, int z, int height) {
     if (height <= WATER_LEVEL + 1) return 0;
-    if (y < 2 || y > height - 4) return 0;
+    float s = scar(x, z);
+    if (y < 2 || y > height - (s > .40f ? 1 : 4)) return 0;
     float n = .72f * noise3(x * .08f, y * .11f, z * .08f, 313) +
               .28f * noise3(x * .16f, y * .22f, z * .16f, 547);
     return n > .5f;
@@ -82,7 +107,10 @@ static Tree tree_at(int gx, int gz) {
     float dx = (float)t.x - 8, dz = (float)t.z - 8;
     if (dx * dx + dz * dz < 64) return t;
     t.ground = voxel_terrain_height(t.x, t.z);
-    t.valid = t.ground > WATER_LEVEL + 1 && noise(gx * .12f, gz * .12f, 97) > -.45f;
+    /* No trees on scarred ground: the top block there may be carved away,
+     * which would leave the trunk floating. */
+    t.valid = t.ground > WATER_LEVEL + 1 && noise(gx * .12f, gz * .12f, 97) > -.45f &&
+              scar(t.x, t.z) <= .40f;
     return t;
 }
 static int tree_block(const Tree *t, int x, int y, int z) {
@@ -98,6 +126,7 @@ static int tree_block(const Tree *t, int x, int y, int z) {
 static int ground_block(int x, int y, int z, int height) {
     if (y < 0) return BLOCK_STONE;
     if (y > height) return y <= WATER_LEVEL ? BLOCK_WATER : BLOCK_AIR;
+    if (y > height - surface_hole(x, z, height)) return BLOCK_AIR;   /* open hole */
     if (cave(x, y, z, height)) return BLOCK_AIR;
     if (height <= WATER_LEVEL + 1 && y >= height - 2) return BLOCK_SAND;
     if (y == height) return height > 20 ? BLOCK_STONE : BLOCK_GRASS;

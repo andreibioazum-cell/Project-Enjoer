@@ -10,6 +10,7 @@ static float px=8.5f,py=13,pz=8.5f,environment=1;
 void geometrium_player_pos(float *x,float *y,float *z) {if(x)*x=px;if(y)*y=py;if(z)*z=pz;}
 int geometrium_player_flying(void) {return flying;}
 int geometrium_player_grounded(void) {return grounded;}
+float geometrium_player_eye(void) {return GEOMETRIUM_PLAYER_EYE_HEIGHT;}
 int geometrium_selected(void) {return 0;}
 int geometrium_slot_block(int i) {CHECK(i==0);return BLOCK_GRASS;}
 float voxel_world_light(float x,float y,float z) {CLOSE(x,px);CLOSE(y,py+GEOMETRIUM_PLAYER_EYE_HEIGHT);CLOSE(z,pz);return environment;}

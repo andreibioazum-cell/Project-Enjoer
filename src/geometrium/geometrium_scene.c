@@ -4,7 +4,7 @@ void geometrium_scene_draw(Buffer *buffer) {
     geometrium_player_pos(&x,&y,&z);geometrium_camera_angles(&yaw,&pitch);
     int scale=rend_render_scale(screen_w,screen_h);
     double start=app_now();
-    if (!rend3d_begin(buffer,scale,x,y+GEOMETRIUM_PLAYER_EYE_HEIGHT,z,yaw,pitch,66)) return;
+    if (!rend3d_begin(buffer,scale,x,y+geometrium_player_eye(),z,yaw,pitch,66)) return;
     rend3d_sky(0xff78b8e8u,0xffc7e5f5u);
     float distance=voxel_world_distance();rend3d_fog(distance*.5f,distance);
     voxel_world_draw();geometrium_target_draw();geometrium_hand_draw();rend3d_end();

@@ -80,6 +80,7 @@ void AAsset_close(AAsset *a) {
 #ifndef PREVIEW_EXTERNAL_AUDIO
 int snd_load(const char *name) { (void)name; return 1; }
 int snd_play(const char *name) { (void)name; return 1; }
+void snd_set_volume(int percent) { (void)percent; }
 int audio_init(AAssetManager *assets) { (void)assets; return 1; }
 void audio_shutdown(void) {}
 void audio_pause(void) {}

@@ -60,7 +60,7 @@ $CC $FLAGS -DPREVIEW_EXTERNAL_AUDIO $CORE src/sound/sound.c tools/tests/audio.c 
 $CC $FLAGS -rdynamic $CORE $VOXEL $PERF $RENDER3D src/graphics/image.c $ENGINE \
     tools/tests/engine.c -lm -ldl -o "$DIR/engine"
 "$DIR/engine"
-# The app itself: launcher with the Geometrium block world and the engine projects.
-$CC $FLAGS -rdynamic $CORE $VOXEL $PERF $RENDER3D $GFX2D $ENGINE $GEOM src/core/game.c \
-    tools/tests/game.c -lm -ldl -o "$DIR/launcher"
+# The app itself: the Minecraft-style main menu and the Geometrium block world.
+$CC $FLAGS -rdynamic $CORE $VOXEL $PERF $RENDER3D $GFX2D $GEOM src/core/game.c \
+    src/core/settings.c tools/tests/game.c -lm -o "$DIR/launcher"
 "$DIR/launcher"

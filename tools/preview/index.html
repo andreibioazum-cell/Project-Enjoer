@@ -12,7 +12,7 @@ canvas:active{cursor:grabbing}
 </style>
 </head>
 <body>
-<main class="game"><canvas id="c" tabindex="0" aria-label="Enjoer engine preview. The launcher lists the projects; WASD and arrows move, Space rises, Shift sinks, drag orbits the camera, Escape or M opens the project list."></canvas></main>
+<main class="game"><canvas id="c" tabindex="0" aria-label="Enjoer preview. Main menu: arrows or W/S select, Enter or click selects a button. In the world: WASD and arrows move, Space rises, Shift sinks, hold C to crouch, drag the camera, the round button or Escape or M opens the menu."></canvas></main>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
 let W=960,H=540;
@@ -86,7 +86,7 @@ function cancelPointer(e){
 cv.addEventListener('pointercancel',cancelPointer);
 cv.addEventListener('lostpointercapture',cancelPointer);
 cv.addEventListener('contextmenu',e=>e.preventDefault());
-const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',Space:'space',ShiftLeft:'Shift',ShiftRight:'Shift',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',ArrowUp:'ArrowUp',ArrowDown:'ArrowDown',Escape:'Escape',KeyM:'m'};
+const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',Space:'space',Enter:'Enter',ShiftLeft:'Shift',ShiftRight:'Shift',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',ArrowUp:'ArrowUp',ArrowDown:'ArrowDown',Escape:'Escape',KeyM:'m',KeyC:'c',KeyF:'f',KeyE:'e',KeyR:'r'};
 window.addEventListener('keydown',e=>{
   const k=keyMap[e.code];if(!k||e.ctrlKey||e.metaKey||e.altKey)return;
   e.preventDefault();if(e.repeat||pressed.has(e.code))return;

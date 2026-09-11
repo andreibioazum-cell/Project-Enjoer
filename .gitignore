@@ -4,5 +4,3 @@
 /build*/
 /preview
 /staging/
-# compiled engine scripts (built on demand from the .c sources)
-projects/*/scripts/*.so
