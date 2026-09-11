@@ -32,6 +32,7 @@ static float yaw_s, yaw_c, pitch_s, pitch_c;
 static float foc, view_x, view_y, side_x, side_y;
 static uint32_t fog_rgb;
 static float fog_a, fog_b;
+static int viewmodel; /* camera-space overlay (the hand): no world transform */
 
 static uint32_t pack(uint32_t c) {
     uint32_t a = (c >> 24) & 0xff, r = (c >> 16) & 0xff, g = (c >> 8) & 0xff, b = c & 0xff;
@@ -45,7 +46,7 @@ static uint32_t shade_fog(uint32_t packed, float z, float shade) {
     if (ir > 255) ir = 255;
     if (ig > 255) ig = 255;
     if (ib > 255) ib = 255;
-    float t = (z - fog_a) * fog_b;
+    float t = viewmodel ? 0 : (z - fog_a) * fog_b;
     if (t < 0) t = 0;
     if (t > 1) t = 1;
     /* Signed channels: subtracting from uint32_t overflowed into rainbows. */
@@ -58,7 +59,7 @@ static uint32_t shade_fog(uint32_t packed, float z, float shade) {
 }
 
 int rend3d_begin(Buffer *b, int sc, float cx, float cy, float cz, float yaw, float pitch, float fov_deg) {
-    dst = NULL;
+    dst = NULL;viewmodel=0;
     if (!b || !b->pixels || b->width <= 0 || b->height <= 0 || b->stride < b->width ||
         !isfinite(cx + cy + cz + yaw + pitch + fov_deg) || fov_deg < 5 || fov_deg > 175)
         return 0;
@@ -139,7 +140,9 @@ void rend3d_sky(uint32_t top, uint32_t bot) {
     }
 }
 
+void rend3d_viewmodel(int enabled) {viewmodel=enabled!=0;}
 static int to_view(float wx, float wy, float wz, V3 *o) {
+    if (viewmodel) {*o=(V3){wx,wy,wz,0,0,0};return wz>.01f;}
     float dx = wx - camx, dy = wy - camy, dz = wz - camz;
     float rx = dx * yaw_c - dz * yaw_s;          /* right */
     float rz = dx * yaw_s + dz * yaw_c;          /* forward */
@@ -317,7 +320,7 @@ static void fill_tri(ScreenV a, ScreenV b, ScreenV c, const Paint *paint) {
 void rend3d_polygon(const RendVertex *w, int n, float nx, float ny, float nz,
                    uint32_t color, RendMaterial *material, const unsigned char *light) {
     if (!dst || n<3 || n>8) return;
-    float ex=camx,ey=camy,ez=camz;
+    float ex=viewmodel ? 0 : camx,ey=viewmodel ? 0 : camy,ez=viewmodel ? 0 : camz;
     float plane=nx*(ex-w[0].x)+ny*(ey-w[0].y)+nz*(ez-w[0].z);
     if (plane<=0) return;
     V3 buffers[2][16],*in=buffers[0],*out=buffers[1];
@@ -357,7 +360,7 @@ void rend3d_polygon(const RendVertex *w, int n, float nx, float ny, float nz,
         paint.smooth=first!=last;
         paint.texels=material->mip;paint.plane=plane;
         paint.alpha=material->alpha;
-        paint.fog=max_distance2>fog_a*fog_a;
+        paint.fog=!viewmodel && max_distance2>fog_a*fog_a;
     } else paint.color=shade_fog(pack(color),distance,(lo+hi)*.5f/(LIGHT_LEVELS-1));
     ScreenV v[16];
     for (int i=0;i<n;i++) {
@@ -384,6 +387,54 @@ int rend3d_visible(float x, float y, float z, float hx, float hy, float hz) {
     return center.z + radius >= NEAR_Z && center.z - radius <= FAR_Z &&
            fabsf(center.x) - center.z*view_x <= radius*side_x &&
            fabsf(center.y) - center.z*view_y <= radius*side_y;
+}
+
+/* Screen coordinates of a point in the active space (world or viewmodel);
+ * 0 when it is behind the near plane. */
+int rend3d_project(float x, float y, float z, float *sx, float *sy) {
+    if (!dst || !sx || !sy || !isfinite(x + y + z)) return 0;
+    V3 v;
+    to_view(x, y, z, &v);
+    return project_v(v, sx, sy);
+}
+
+/* Overlay above the world (the hand): its screen region always passes the
+ * z-test, yet the overlay parts still occlude each other correctly. */
+void rend3d_depth_clear(float x0, float y0, float x1, float y1) {
+    if (!dst) return;
+    if (x0 > x1) { float t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { float t = y0; y0 = y1; y1 = t; }
+    int ix0 = (int)fmaxf(0, floorf(x0)), iy0 = (int)fmaxf(0, floorf(y0));
+    int ix1 = (int)fminf((float)rw, ceilf(x1)), iy1 = (int)fminf((float)rh, ceilf(y1));
+    if (ix1 <= ix0 || iy1 <= iy0) return;
+    for (int y = iy0; y < iy1; y++)
+        memset(zbuf + (size_t)y*rw + ix0, 0, (size_t)(ix1-ix0)*sizeof(*zbuf));
+}
+
+/* Near-to-far segmented 3D line (block outlines); the 1% z-bias keeps it
+ * readable against faces it grazes. */
+void rend3d_segment(float x,float y,float z,float x2,float y2,float z2,uint32_t color) {
+    if (!dst || !isfinite(x+y+z+x2+y2+z2)) return;
+    V3 a,b;to_view(x,y,z,&a);to_view(x2,y2,z2,&b);
+    for (int p=0;p<6;p++) {
+        float da=plane_distance(a,p),db=plane_distance(b,p);
+        if (da<0 && db<0) return;
+        if ((da<0)!=(db<0)) {
+            V3 v=lerp3(a,b,da/(da-db));
+            if(p==0)v.z=NEAR_Z;
+            if (da<0) a=v;else b=v;
+        }
+    }
+    float ax,ay,bx,by;
+    if (!project_v(a,&ax,&ay) || !project_v(b,&bx,&by)) return;
+    int steps=(int)ceilf(fmaxf(fabsf(bx-ax),fabsf(by-ay)));if(steps<1)steps=1;
+    /* Larger bias so the outline does not half-disappear into z-fighting. */
+    for (int i=0;i<=steps;i++) {
+        float t=(float)i/steps,iz=(1-t)/a.z+t/b.z;
+        int px=(int)floorf(ax+(bx-ax)*t),py=(int)floorf(ay+(by-ay)*t);
+        if (px>=0 && py>=0 && px<rw && py<rh && iz+iz*.010f>=zbuf[py*rw+px])
+            pix[py*rw+px]=pack(color);
+    }
 }
 
 /* Weighted sum instead of unsigned (b-a): channels cannot overflow.

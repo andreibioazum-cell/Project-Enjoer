@@ -70,6 +70,7 @@ static int texture(int block,int face) {
     }
 }
 RendMaterial *rend_material(int block,int face) { return initialized ? &materials[texture(block,face)] : NULL; }
+const Image *rend_material_icon(int block) { return initialized ? &materials[texture(block,block==BLOCK_LOG ? 2 : 0)].image : NULL; }
 const uint32_t *rend_material_shades(RendMaterial *m,int shade,uint32_t fog) {
     if (shade<0) shade=0;
     if (shade>=LIGHT_LEVELS) shade=LIGHT_LEVELS-1;

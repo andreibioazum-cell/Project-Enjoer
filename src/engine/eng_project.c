@@ -5,9 +5,11 @@
  *   name = Demo Scene
  *   main_scene = scenes/main.escn
  *
- * The launcher (src/core/game.c) scans a root directory — `projects/` in the
- * repository, the staged `projects/` asset folder inside the APK — and opens
- * whichever project the user picks.
+ * The registry scans a root directory for `project.eng` manifests (on the
+ * host, plain folders; inside an APK, the staged asset folder plus an
+ * index.txt) and opens whichever project the caller picks. The shipped app
+ * no longer embeds the engine, but the API and its test suite remain for
+ * host use.
  */
 #include "eng_internal.h"
 #include <stdio.h>

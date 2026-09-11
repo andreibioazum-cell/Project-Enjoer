@@ -26,6 +26,7 @@ void rend3d_end(void);
 
 /* ── materials (rend_material.c) ── */
 int rend_materials_load(AAssetManager *assets);
+const Image *rend_material_icon(int block); /* hotbar preview of a block */
 
 /* ── procedural terrain (voxel_terrain.c) ── */
 void voxel_terrain_seed(uint32_t seed);
@@ -49,9 +50,11 @@ float voxel_world_light(float x,float y,float z);
 void voxel_water_update(float d);
 
 /* ── frame cost / render scale (rend_perf.c) ── */
+enum { REND_QUALITY_AUTO=0,REND_QUALITY_HIGH=1,REND_QUALITY_MEDIUM=2,REND_QUALITY_LOW=3 };
 void rend_perf_reset(void);
 void rend_perf_frame(double interval);
 float rend_fps(void);
 int rend_render_scale(int width,int height);
 void rend_render_time(double elapsed);
+void rend_set_quality(int quality);   /* REND_QUALITY_*; AUTO adapts to ~60 fps */
 #endif

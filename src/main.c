@@ -120,7 +120,15 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
     } else if (type == AINPUT_EVENT_TYPE_KEY) {
         int32_t action = AKeyEvent_getAction(event);
         int32_t key = AKeyEvent_getKeyCode(event);
-        if (key == AKEYCODE_BACK) return 0;
+        /* Back steps out one level: in-game -> menu, sub-screen -> main
+         * menu, main menu -> quit the app. */
+        if (key == AKEYCODE_BACK) {
+            if (app_active && action == AKEY_EVENT_ACTION_DOWN) {
+                if (game_screen() == GAME_SCREEN_MAIN) app_quit();
+                else game_key("Escape", 1);
+            }
+            return 1;
+        }
         /* Note: the local must not be named game_key (shadows the router
          * function of the same name declared in engine.h). */
         const char *mapped = NULL;
@@ -136,6 +144,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             case AKEYCODE_DPAD_UP: mapped = "ArrowUp"; break;
             case AKEYCODE_DPAD_DOWN: mapped = "ArrowDown"; break;
             case AKEYCODE_SPACE: mapped = "space"; break;
+            case AKEYCODE_C: mapped = "c"; break;
             case AKEYCODE_SHIFT_LEFT:
             case AKEYCODE_SHIFT_RIGHT: mapped = "Shift"; break;
             default: break;
@@ -153,8 +162,10 @@ void android_main(struct android_app *app) {
     app->onAppCmd = handle_cmd;
     app->onInputEvent = handle_input;
     audio_set_java_vm((void *)app->activity->vm);
+    app_set_activity((void *)app->activity);
+    app_set_java_vm((void *)app->activity->vm);
     app_set_storage(app->activity->internalDataPath);
-    app_log("Enjoer: Android, pure-C playsets (Rend + Platformium)");
+    app_log("Enjoer: Android, Minecraft-style menu + Geometrium block world");
     for (;;) {
         struct android_poll_source *source = NULL;
         int ident;

@@ -52,6 +52,14 @@ int snd_load(const char *name) {
     pthread_mutex_unlock(&lock);
     return 1;
 }
+/* Master volume, 0..100 percent; applied to the mixed output in snd_frame. */
+static int volume = 80;
+void snd_set_volume(int percent) {
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+    volume = percent;
+}
+int snd_volume(void) { return volume; }
 int snd_play(const char *name) {
     if (!name) return 0;
     pthread_mutex_lock(&lock);
@@ -80,6 +88,11 @@ void snd_frame(int16_t *out,int frames) {
             int r=s->samples[p*s->channels+s->channels-1],rn=s->samples[next*s->channels+s->channels-1];
             left+=(int)(l+(ln-l)*t); right+=(int)(r+(rn-r)*t);
             voice->position+=(double)s->rate/SND_RATE;
+        }
+        if (volume != 100) {
+            float g = (float)volume / 100.0f;
+            left = (int)((float)left * g);
+            right = (int)((float)right * g);
         }
         out[i*2]=(int16_t)(left<-32768 ? -32768 : left>32767 ? 32767 : left);
         out[i*2+1]=(int16_t)(right<-32768 ? -32768 : right>32767 ? 32767 : right);
