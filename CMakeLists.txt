@@ -1,75 +1,68 @@
 cmake_minimum_required(VERSION 3.16...3.31)
-project(Enjoer C)
-set(CMAKE_C_STANDARD 99)
+project(Enjoer LANGUAGES C CXX)
 
-# The only shipping platform is Android: libds_game.so, packaged by the APK
-# described in game/AndroidManifest.xml. The app is a Minecraft-style main
-# menu (Play / Servers / Options / Quit) over the Geometrium first-person
-# block world, rendered by the software voxel backend in src/engine/render/.
-# The scene-graph engine in src/engine/eng_*.c stays in the repository for
-# the PC preview and its tests but is not shipped in the APK.
-#
-# Source layout (every file is its own translation unit):
-#   src/main.c            Android entry point (native activity)
-#   src/core/             app state, error handling, logging, asset reads,
-#                         settings, and the menu/game router (game.c)
-#   src/graphics/         2D rendering: primitives, textures, text (+ ttf/)
-#   src/sound/            audio: PCM mixer and AudioTrack output
-#   src/geometrium/       the first-person block world (player, hand,
-#                         picking, touch layout, HUD) on the voxel renderer
-#   src/engine/           the voxel/3D renderer (render/) plus the
-#                         scene-graph engine (eng_*, not in the APK)
-# Runtime assets (PNG tiles, font, WAV effects) live in assets/
-# (see stage_assets.py).
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Dawn is intentionally an external dependency: it is a large WebGPU
+# implementation and should be built with the same NDK/toolchain as the app.
+# The C++ renderer has a small preview fallback, so a checkout is still
+# buildable before Dawn has been downloaded.
+option(ENJOER_USE_DAWN "Use Dawn/WebGPU for the Android cube surface" ON)
+set(DAWN_ROOT "" CACHE PATH "Path to a Dawn checkout (when ENJOER_USE_DAWN=ON)")
+set(ENJOER_DAWN_TARGET "" CACHE STRING "Dawn CMake target, if not dawn_native")
+
 if(NOT ANDROID)
     message(FATAL_ERROR
-        "Enjoer builds for Android only. Run CMake through the NDK toolchain "
-        "file, e.g.: cmake -B build "
-        "-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake "
-        "-DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29. "
-        "For the PC preview see tools/preview (plain gcc, no CMake).")
+        "The APK is the shipping target. Use the NDK toolchain; the host "
+        "preview is built with tools/preview/build.sh.")
 endif()
 
 add_library(enjoer SHARED
     src/main.c
+    src/cube_game.c
+    src/dawn_cube.cpp
     src/core/log.c
     src/core/state.c
-    src/core/assets.c
-    src/graphics/gfx_frame.c
-    src/graphics/gfx_draw.c
-    src/graphics/image.c
-    src/graphics/gfx_text.c
-    src/graphics/ttf/ttf_outline.c
-    src/graphics/ttf/ttf_font.c
-    src/sound/sound.c
-    src/sound/sound_android.c
-    src/geometrium/geometrium_game.c
-    src/geometrium/geometrium_hand.c
-    src/geometrium/geometrium_hud.c
-    src/geometrium/geometrium_input.c
-    src/geometrium/geometrium_interact.c
-    src/geometrium/geometrium_player.c
-    src/geometrium/geometrium_scene.c
-    src/engine/render/rend3d.c
-    src/engine/render/rend_shapes.c
-    src/engine/render/rend_material.c
-    src/engine/render/rend_perf.c
-    src/engine/render/voxel_terrain.c
-    src/engine/render/voxel_world.c
-    src/engine/render/voxel_light.c
-    src/engine/render/voxel_water.c
-    src/engine/render/voxel_mesh.c
-    src/engine/render/voxel_edits.c
-    src/core/game.c
-    src/core/settings.c
     ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
-# Filename contract of the existing, unchanged APK workflow and manifest.
+
 set_target_properties(enjoer PROPERTIES OUTPUT_NAME ds_game)
-# The project root is on the include path so translation units can reach
-# vendored single-file libraries as "third_party/..." (stb_image and friends);
-# the PC preview mirrors this with `-I.` in tools/preview/build.sh.
 target_include_directories(enjoer PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${ANDROID_NDK}/sources/android/native_app_glue)
+target_compile_definitions(enjoer PRIVATE
+    ENJOER_USE_DAWN=$<BOOL:${ENJOER_USE_DAWN}>)
 target_link_libraries(enjoer PRIVATE android log m)
+
+if(ENJOER_USE_DAWN)
+    if(NOT DAWN_ROOT)
+        message(FATAL_ERROR
+            "ENJOER_USE_DAWN=ON requires -DDAWN_ROOT=/path/to/dawn. "
+            "Use OFF only for the dependency-free preview fallback.")
+    endif()
+    add_subdirectory(${DAWN_ROOT} ${CMAKE_BINARY_DIR}/dawn EXCLUDE_FROM_ALL)
+
+    if(ENJOER_DAWN_TARGET)
+        target_link_libraries(enjoer PRIVATE ${ENJOER_DAWN_TARGET})
+    elseif(TARGET webgpu_dawn)
+        target_link_libraries(enjoer PRIVATE webgpu_dawn)
+    elseif(TARGET dawn::webgpu_dawn)
+        target_link_libraries(enjoer PRIVATE dawn::webgpu_dawn)
+    elseif(TARGET dawn_native)
+        target_link_libraries(enjoer PRIVATE dawn_native)
+        if(TARGET dawn_proc)
+            target_link_libraries(enjoer PRIVATE dawn_proc)
+        endif()
+    elseif(TARGET dawn::dawn_native)
+        target_link_libraries(enjoer PRIVATE dawn::dawn_native)
+        if(TARGET dawn::dawn_proc)
+            target_link_libraries(enjoer PRIVATE dawn::dawn_proc)
+        endif()
+    else()
+        message(FATAL_ERROR
+            "Dawn was added but no renderer target was found. Set "
+            "-DENJOER_DAWN_TARGET=<Dawn target>.")
+    endif()
+endif()
