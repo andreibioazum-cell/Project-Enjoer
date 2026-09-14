@@ -1,4 +1,4 @@
-name: Build Enjoer cube APK
+ name: Build Enjoer cube APK
 
 on: [push, workflow_dispatch]
 
@@ -16,8 +16,7 @@ jobs:
       with:
         ndk-version: r25c
 
-    # Smoke APK uses the dependency-free C++ fallback.
-    # For the real Dawn build, provide a Dawn checkout and switch this to ON.
+    # Vulkan comes with the NDK, so the CI APK is the real GPU build.
     - name: Build native library
       run: |
         set -eu
@@ -27,7 +26,7 @@ jobs:
           -DANDROID_PLATFORM=android-29 \
           -DANDROID_NDK=$ANDROID_NDK_ROOT \
           -DCMAKE_BUILD_TYPE=Release \
-          -DENJOER_USE_DAWN=OFF
+          -DENJOER_USE_VULKAN=ON
         cmake --build build-arm64 -j
 
         mkdir -p staging/lib/arm64-v8a
