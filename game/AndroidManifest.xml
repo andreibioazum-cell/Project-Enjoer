@@ -6,7 +6,7 @@
 
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="true" />
-    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400003" android:required="true" />
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400003" android:required="false" />
 
     <application
         android:label="Enjoer"

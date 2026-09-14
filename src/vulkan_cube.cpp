@@ -816,19 +816,42 @@ static int height = 1;
 
 } // namespace
 
+static bool software_active;
+
+static void configure_software_window() {
+#ifdef __ANDROID__
+    if (!native_window) return;
+    /* The CPU rasterizer writes 0xAABBGGRR little-endian words, which is
+     * exactly WINDOW_FORMAT_RGBA_8888. Let the compositor scale the buffer
+     * (0x0 keeps the native size). */
+    ANativeWindow_setBuffersGeometry(static_cast<ANativeWindow *>(native_window),
+                                     0, 0, WINDOW_FORMAT_RGBA_8888);
+#endif
+}
+
 extern "C" int cube_renderer_init(void *window, int w, int h) {
     native_window = window;
     width = std::max(1, w);
     height = std::max(1, h);
+    software_active = false;
 #if ENJOER_USE_VULKAN
-    if (native_window && vulkan_cube.init(native_window, width, height)) {
-        vulkan_active = true;
-        return 1;
+    vulkan_active = false;
+    if (native_window) {
+        if (vulkan_cube.init(native_window, width, height)) {
+            vulkan_active = true;
+            return 1;
+        }
+        /* No usable Vulkan driver (old GPU, emulator, missing extension...).
+         * Release whatever was partially created and fall back to the CPU
+         * rasterizer so the game still runs, just without GPU acceleration. */
+        vulkan_cube.shutdown();
+        app_log_error("Enjoer: Vulkan unavailable, using software renderer");
     }
-    /* A preview has no native window. A Vulkan Android build should fail
-     * loudly instead of silently switching away from GPU presentation. */
-    if (native_window) return 0;
 #endif
+    if (native_window) {
+        software_active = true;
+        configure_software_window();
+    }
     return 1;
 }
 
@@ -874,12 +897,13 @@ extern "C" void cube_renderer_shutdown(void) {
     vulkan_active = false;
 #endif
     native_window = nullptr;
+    software_active = false;
 }
 
 extern "C" const char *cube_renderer_backend(void) {
 #if ENJOER_USE_VULKAN
-    return vulkan_active ? "Vulkan" : "Vulkan-compatible preview fallback";
-#else
-    return "C++ preview fallback (enable Vulkan for GPU presentation)";
+    if (vulkan_active) return "Vulkan";
 #endif
+    if (software_active) return "Software (CPU) fallback - no Vulkan on this device";
+    return "C++ preview fallback";
 }

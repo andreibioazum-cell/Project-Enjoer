@@ -30,7 +30,7 @@ void game_init(void *native_window) {
     dragging = 0;
     drag_id = -1;
     ready = cube_renderer_init(native_window, screen_w, screen_h);
-    if (!ready) app_fail("Could not initialize the Vulkan cube renderer");
+    if (!ready) app_fail("Could not initialize the cube renderer");
     else app_log("Enjoer: 3D cube renderer (%s)", cube_renderer_backend());
 }
 
