@@ -1,6 +1,6 @@
-# Enjoer — a cube on Dawn
+# Enjoer — a cube on Vulkan
 
-Enjoer is now a deliberately small 3D cube playground. The old voxel world,
+Enjoer is a deliberately small 3D cube playground. The old voxel world,
 Minecraft-style menu, terrain generator, block editing and asset pipeline are
 gone.
 
@@ -8,14 +8,15 @@ The game is split at a narrow C ABI boundary:
 
 - **C** (`src/cube_game.c`) owns the lifecycle, elapsed time, input, orbit
   state and the Android event loop (`src/main.c`).
-- **C++** (`src/dawn_cube.cpp`) owns the renderer. Its production path creates
-  a WebGPU device, swapchain/surface, depth buffer, pipeline, vertex buffer,
-  uniform buffer and WGSL shader through **Dawn**.
+- **C++** (`src/vulkan_cube.cpp`) owns the renderer. Its production path
+  creates a Vulkan instance, Android surface, logical device, swapchain,
+  depth buffer, render pass, graphics pipeline and vertex buffer, and pushes
+  the MVP matrix through push constants. The shaders live in `src/shaders/`
+  as GLSL and are embedded as SPIR-V (`src/shaders/cube_spv.h`).
 
 A dependency-free C++ raster fallback is kept only for the local HTTP preview
-and for checking the C/C++ boundary before Dawn is downloaded. It renders the
-same six-face cube; it is not the Android renderer when a Dawn build is
-selected.
+and for checking the C/C++ boundary on a host without a GPU. It renders the
+same six-face cube; it is not the Android renderer.
 
 ## Preview
 
@@ -49,13 +50,11 @@ ASAN=1 tools/tests/run.sh
 The regression test exercises the C game, C++ renderer, pointer/key input,
 resize handling and the rendered frame checksum.
 
-## Android + Dawn
+## Android + Vulkan
 
-Dawn is intentionally an external dependency because it is a full WebGPU
-implementation and must be built for the same Android NDK/toolchain as the
-application. The checkout does not hide a several-hundred-megabyte Dawn tree.
-
-With a Dawn checkout and its CMake targets available:
+Vulkan ships with the Android NDK (headers and `libvulkan.so`), so there is
+no external GPU dependency to download. A normal Android build is the Vulkan
+build:
 
 ```sh
 cmake -B build \
@@ -63,31 +62,40 @@ cmake -B build \
   -DANDROID_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-29 \
   -DANDROID_NDK="$ANDROID_NDK_ROOT" \
-  -DENJOER_USE_DAWN=ON \
-  -DDAWN_ROOT=/path/to/dawn \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-If Dawn's target is not named `dawn_native`, pass it explicitly with
-`-DENJOER_DAWN_TARGET=...`. `ENJOER_USE_DAWN` defaults to `ON`, so a normal
-Android build is the Dawn build. Passing `-DENJOER_USE_DAWN=OFF` builds the
-same Android activity with the small fallback, which is useful for smoke
-building when Dawn is not available.
+`ENJOER_USE_VULKAN` defaults to `ON`. Passing `-DENJOER_USE_VULKAN=OFF`
+builds the same Android activity with the small software fallback drawn
+through `ANativeWindow_lock`, which is useful for smoke testing on emulators
+without a Vulkan driver.
 
-The native activity presents directly to an `ANativeWindow` through Dawn's
-Android surface source. There is no software voxel renderer, texture pack,
-world save, sound asset or JavaScript game logic left in the project.
+The native activity presents directly to an `ANativeWindow` through
+`VK_KHR_android_surface` and a FIFO swapchain. The manifest requires Vulkan
+1.0.3 hardware.
+
+### Shaders
+
+`src/shaders/cube.vert` and `src/shaders/cube.frag` are the source of truth.
+After editing them, regenerate the embedded SPIR-V with
+`glslangValidator` from the Vulkan SDK or the `glslang-tools` package:
+
+```sh
+tools/shaders/compile.sh
+```
 
 ## Layout
 
 ```text
-src/engine.h       C public API and Buffer type
-src/cube_game.c    C game state and controls
-src/dawn_cube.h    C ABI to the renderer
-src/dawn_cube.cpp  C++ Dawn/WebGPU renderer + local fallback
-src/main.c         Android NativeActivity loop
-game/              Android manifest and Activity
-tools/preview/     HTTP frame/input preview
-tools/tests/       C/C++ regression test
+src/engine.h            C public API and Buffer type
+src/cube_game.c         C game state and controls
+src/vulkan_cube.h       C ABI to the renderer
+src/vulkan_cube.cpp     C++ Vulkan renderer + local fallback
+src/shaders/            GLSL sources and generated SPIR-V header
+src/main.c              Android NativeActivity loop
+game/                   Android manifest and Activity
+tools/preview/          HTTP frame/input preview
+tools/shaders/          SPIR-V regeneration script
+tools/tests/            C/C++ regression test
 ```

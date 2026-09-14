@@ -1,4 +1,4 @@
-/* Android native activity entry point. Dawn owns the window surface; C only
+/* Android native activity entry point. Vulkan owns the window surface; C only
  * forwards lifecycle and input events to the small cube game layer. */
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
@@ -136,7 +136,7 @@ void android_main(struct android_app *app) {
     app->onInputEvent = handle_input;
     app_set_activity((void *)app->activity);
     app_set_java_vm((void *)app->activity->vm);
-    app_log("Enjoer: native C game + C++ Dawn cube");
+    app_log("Enjoer: native C game + C++ Vulkan cube");
 
     for (;;) {
         struct android_poll_source *source = NULL;

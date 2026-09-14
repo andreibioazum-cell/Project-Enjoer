@@ -4,7 +4,7 @@
 #define _GNU_SOURCE
 #endif
 #include "engine.h"
-#include "dawn_cube.h"
+#include "vulkan_cube.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>

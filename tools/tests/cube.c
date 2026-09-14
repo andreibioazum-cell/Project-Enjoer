@@ -1,6 +1,6 @@
 /* Regression test for the C game / C++ renderer boundary. */
 #include "engine.h"
-#include "dawn_cube.h"
+#include "vulkan_cube.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

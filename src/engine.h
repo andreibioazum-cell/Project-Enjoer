@@ -1,7 +1,7 @@
 /* Public C side of Enjoer.
  *
  * The game loop and input state deliberately stay in C. Rendering crosses one
- * small C ABI boundary into src/dawn_cube.cpp, so the game can remain easy to
+ * small C ABI boundary into src/vulkan_cube.cpp, so the game can remain easy to
  * embed in the Android native activity while the GPU backend is C++. */
 #ifndef ENJOER_ENGINE_H
 #define ENJOER_ENGINE_H
@@ -35,7 +35,7 @@ void app_set_activity(void *activity);
 void app_set_java_vm(void *vm);
 void app_quit(void);
 
-/* C game layer. The native window is opaque here; only Dawn owns it. */
+/* C game layer. The native window is opaque here; only Vulkan owns it. */
 void game_init(void *native_window);
 void game_resize(int width, int height);
 void game_update(void);
