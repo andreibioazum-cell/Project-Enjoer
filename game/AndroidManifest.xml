@@ -6,7 +6,10 @@
 
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="true" />
-    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400003" android:required="true" />
+    <!-- Vulkan is used when the device has it. Devices without a driver are
+         not filtered out: the CPU rasterizer draws the same cube for them. -->
+    <uses-feature android:name="android.hardware.vulkan.level" android:version="0" android:required="false" />
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400003" android:required="false" />
 
     <application
         android:label="Enjoer"

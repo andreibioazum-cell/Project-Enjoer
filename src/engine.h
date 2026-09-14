@@ -12,11 +12,18 @@
 extern "C" {
 #endif
 
+/* How the pixels of a Buffer are packed in memory. An ANativeWindow can hand
+ * back a 16-bit RGB565 buffer on devices without a 32-bit window surface, so
+ * the software renderer has to know the layout. */
+#define ENJOER_BUFFER_FORMAT_RGBA8888 0
+#define ENJOER_BUFFER_FORMAT_RGB565 1
+
 typedef struct {
     uint32_t *pixels;
     int width;
     int height;
     int stride;
+    int format; /* ENJOER_BUFFER_FORMAT_* */
 } Buffer;
 
 extern int screen_w;

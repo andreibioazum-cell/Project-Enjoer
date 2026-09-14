@@ -16,6 +16,14 @@ void cube_renderer_render(Buffer *preview_target, float rotation, float pitch);
 void cube_renderer_shutdown(void);
 const char *cube_renderer_backend(void);
 
+/* 1 when the cube is drawn by the CPU rasterizer instead of Vulkan. */
+int cube_renderer_software_active(void);
+
+/* Draw one frame with the CPU rasterizer: the cube is rasterized at a reduced
+ * resolution and stretched over the whole target. This is the path used on
+ * devices without a working Vulkan driver, and it is host-testable. */
+int cube_software_render(Buffer *target, float rotation, float pitch);
+
 #ifdef __cplusplus
 }
 #endif

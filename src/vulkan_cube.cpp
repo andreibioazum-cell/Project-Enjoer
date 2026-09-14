@@ -6,6 +6,10 @@
  * checkout: the C game and its controls can be tested on a host without a
  * GPU, while Android/device builds use exactly the same cube data and the
  * SPIR-V shaders from src/shaders/.
+ *
+ * The same CPU rasterizer is the runtime safety net: if a device has no
+ * usable Vulkan driver, or loses it mid-session, the cube keeps spinning on
+ * the CPU instead of showing a black screen.
  */
 #include "vulkan_cube.h"
 
@@ -13,13 +17,16 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <vector>
 
 #ifdef __ANDROID__
+#include <sys/system_properties.h>
 #include <android/native_window.h>
 #endif
+#include <time.h>
 
 #ifndef ENJOER_USE_VULKAN
 #define ENJOER_USE_VULKAN 0
@@ -131,7 +138,126 @@ static const std::array<Vertex, 36> &cube_vertices() {
     return vertices;
 }
 
-static void render_fallback(Buffer *buffer, float rotation, float pitch) {
+/* ------------------------------------------------------------------ *
+ * CPU rasterizer.                                                     *
+ *                                                                     *
+ * Safety net for a device without a working Vulkan driver: the same    *
+ * cube data is rasterized by the CPU into a small offscreen buffer     *
+ * which is then stretched over the native window.                      *
+ * ------------------------------------------------------------------- */
+
+/* Longest edge and pixel budget of the software framebuffer. Rasterizing a
+ * phone screen 1:1 would cost tens of milliseconds per frame, so the CPU
+ * always draws a downscaled image and the blit scales it back up. */
+constexpr int kSoftwareMaxEdge = 400;
+constexpr int kSoftwareMaxPixels = 160000;
+
+/* Frames Vulkan may drop in a row before the renderer switches to the CPU. */
+constexpr int kMaxVulkanFailures = 10;
+
+struct SoftwareSurface {
+    std::vector<uint32_t> pixels;
+    std::vector<float> depth;
+    int width = 0;
+    int height = 0;
+
+    /* Pick a resolution that keeps the CPU frame time sane. */
+    void resize(int target_width, int target_height) {
+        const int w = std::max(1, target_width);
+        const int h = std::max(1, target_height);
+        double scale = 1.0;
+        const int longest = std::max(w, h);
+        if (longest > kSoftwareMaxEdge)
+            scale = std::min(scale, static_cast<double>(kSoftwareMaxEdge) / longest);
+        const double total = static_cast<double>(w) * static_cast<double>(h);
+        if (total * scale * scale > static_cast<double>(kSoftwareMaxPixels))
+            scale = std::min(scale, std::sqrt(static_cast<double>(kSoftwareMaxPixels) / total));
+        const int sw = std::max(1, static_cast<int>(std::lround(w * scale)));
+        const int sh = std::max(1, static_cast<int>(std::lround(h * scale)));
+        if (sw == width && sh == height) return;
+        width = sw;
+        height = sh;
+        pixels.assign(static_cast<size_t>(sw) * sh, 0u);
+        depth.assign(static_cast<size_t>(sw) * sh, std::numeric_limits<float>::infinity());
+    }
+
+    void release() {
+        pixels.clear();
+        pixels.shrink_to_fit();
+        depth.clear();
+        depth.shrink_to_fit();
+        width = height = 0;
+    }
+};
+
+/* Nearest-neighbour mapping from destination pixels to source pixels. The
+ * tables are rebuilt only when either side changes size. */
+struct BlitMap {
+    std::vector<int> columns;
+    std::vector<int> rows;
+    int src_w = -1, src_h = -1, dst_w = -1, dst_h = -1;
+
+    void build(int sw, int sh, int dw, int dh) {
+        if (sw == src_w && sh == src_h && dw == dst_w && dh == dst_h) return;
+        src_w = sw; src_h = sh; dst_w = dw; dst_h = dh;
+        columns.resize(static_cast<size_t>(std::max(0, dw)));
+        rows.resize(static_cast<size_t>(std::max(0, dh)));
+        for (int x = 0; x < dw; ++x)
+            columns[static_cast<size_t>(x)] =
+                std::min(sw - 1, static_cast<int>((static_cast<int64_t>(x) * sw) / std::max(1, dw)));
+        for (int y = 0; y < dh; ++y)
+            rows[static_cast<size_t>(y)] =
+                std::min(sh - 1, static_cast<int>((static_cast<int64_t>(y) * sh) / std::max(1, dh)));
+    }
+};
+
+/* Our 32-bit colors are 0xAABBGGRR, i.e. little-endian R,G,B,A in memory. */
+static uint16_t pack_rgb565(uint32_t color) {
+    const uint32_t r = (color >> 0) & 0xffu;
+    const uint32_t g = (color >> 8) & 0xffu;
+    const uint32_t b = (color >> 16) & 0xffu;
+    return static_cast<uint16_t>(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+}
+
+static void blit_scaled(const SoftwareSurface &src, BlitMap &map, Buffer *dst) {
+    if (!dst || !dst->pixels || src.pixels.empty()) return;
+    const int dw = dst->width;
+    const int dh = dst->height;
+    if (dw < 1 || dh < 1) return;
+    map.build(src.width, src.height, dw, dh);
+
+    const uint16_t *rgb565_target =
+        dst->format == ENJOER_BUFFER_FORMAT_RGB565
+            ? reinterpret_cast<const uint16_t *>(dst->pixels)
+            : nullptr;
+
+    for (int y = 0; y < dh; ++y) {
+        const uint32_t *source_row =
+            src.pixels.data() + static_cast<size_t>(map.rows[static_cast<size_t>(y)]) * src.width;
+        const int row_pixels = std::min(dw, std::max(0, dst->stride));
+        if (rgb565_target) {
+            uint16_t *target_row = reinterpret_cast<uint16_t *>(dst->pixels) +
+                                   static_cast<size_t>(y) * dst->stride;
+            if (src.width == dw) {
+                for (int x = 0; x < row_pixels; ++x) target_row[x] = pack_rgb565(source_row[x]);
+            } else {
+                for (int x = 0; x < row_pixels; ++x)
+                    target_row[x] = pack_rgb565(source_row[static_cast<size_t>(map.columns[static_cast<size_t>(x)])]);
+            }
+            continue;
+        }
+        uint32_t *target_row = dst->pixels + static_cast<size_t>(y) * dst->stride;
+        if (src.width == dw) {
+            std::memcpy(target_row, source_row, static_cast<size_t>(row_pixels) * sizeof(uint32_t));
+        } else {
+            for (int x = 0; x < row_pixels; ++x)
+                target_row[x] = source_row[static_cast<size_t>(map.columns[static_cast<size_t>(x)])];
+        }
+    }
+}
+
+static void rasterize_cube(Buffer *buffer, std::vector<float> &depth, float rotation,
+                           float pitch) {
     if (!buffer || !buffer->pixels || buffer->width < 1 || buffer->height < 1) return;
     const float aspect = static_cast<float>(buffer->width) /
                          static_cast<float>(std::max(1, buffer->height));
@@ -144,8 +270,8 @@ static void render_fallback(Buffer *buffer, float rotation, float pitch) {
             buffer->pixels[y * buffer->stride + x] = sky;
     }
 
-    std::vector<float> depth(static_cast<size_t>(buffer->width) * buffer->height,
-                             std::numeric_limits<float>::infinity());
+    depth.assign(static_cast<size_t>(buffer->width) * buffer->height,
+                 std::numeric_limits<float>::infinity());
     const auto &vertices = cube_vertices();
     for (size_t i = 0; i < vertices.size(); i += 3) {
         const Vertex &va = vertices[i];
@@ -160,6 +286,93 @@ static void render_fallback(Buffer *buffer, float rotation, float pitch) {
         const int blue = static_cast<int>(255 * va.b) * shade / 160;
         fill_triangle(buffer, depth, a, b, c, rgba(red, green, blue));
     }
+}
+
+static void *native_window;
+static int width = 1;
+static int height = 1;
+static bool software_active;
+static SoftwareSurface software_surface;
+static BlitMap software_map;
+static std::vector<float> preview_depth;
+
+/* Draw the cube on the CPU at a reduced resolution and stretch it over the
+ * whole target. This is what a device without a Vulkan driver gets. */
+static void software_render_into(Buffer *target, float rotation, float pitch) {
+    if (!target || !target->pixels || target->width < 1 || target->height < 1) return;
+    software_surface.resize(target->width, target->height);
+    Buffer low{};
+    low.pixels = software_surface.pixels.data();
+    low.width = software_surface.width;
+    low.height = software_surface.height;
+    low.stride = software_surface.width;
+    low.format = ENJOER_BUFFER_FORMAT_RGBA8888;
+    rasterize_cube(&low, software_surface.depth, rotation, pitch);
+    blit_scaled(software_surface, software_map, target);
+}
+
+#ifdef __ANDROID__
+/* The CPU path redraws the whole screen, so pace it at roughly 30 fps instead
+ * of burning a core at vsync rate. */
+static bool software_frame_due(void) {
+    static uint64_t last_ns;
+    struct timespec now{};
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return true;
+    const uint64_t now_ns = static_cast<uint64_t>(now.tv_sec) * 1000000000ull +
+                            static_cast<uint64_t>(now.tv_nsec);
+    if (last_ns && now_ns - last_ns < 33000000ull) return false;
+    last_ns = now_ns;
+    return true;
+}
+
+/* Ask for a 32-bit window surface. Devices that answer with RGB565 are
+ * handled by the blit, which converts on the fly. */
+static void request_window_format(void *window) {
+    ANativeWindow *native = static_cast<ANativeWindow *>(window);
+    if (!native) return;
+    if (ANativeWindow_setBuffersGeometry(native, width, height, WINDOW_FORMAT_RGBX_8888) != 0)
+        ANativeWindow_setBuffersGeometry(native, width, height, WINDOW_FORMAT_RGBA_8888);
+}
+
+static int buffer_format_from_window(int format) {
+    return format == WINDOW_FORMAT_RGB_565 ? ENJOER_BUFFER_FORMAT_RGB565
+                                          : ENJOER_BUFFER_FORMAT_RGBA8888;
+}
+
+static void software_present_to_window(float rotation, float pitch) {
+    ANativeWindow *window = static_cast<ANativeWindow *>(native_window);
+    if (!window || !software_frame_due()) return;
+    ANativeWindow_Buffer locked{};
+    if (ANativeWindow_lock(window, &locked, nullptr) != 0) return;
+    Buffer target{};
+    target.pixels = static_cast<uint32_t *>(locked.bits);
+    target.width = locked.width;
+    target.height = locked.height;
+    target.stride = locked.stride;
+    target.format = buffer_format_from_window(locked.format);
+    software_render_into(&target, rotation, pitch);
+    ANativeWindow_unlockAndPost(window);
+}
+#endif
+
+/* Which renderer the user asked for. ENJOER_RENDERER works everywhere; on a
+ * device `setprop debug.enjoer.renderer software` does the same thing without
+ * rebuilding or rooting. */
+enum class Backend { Automatic, Software, Vulkan };
+
+static Backend requested_backend(void) {
+    const char *value = std::getenv("ENJOER_RENDERER");
+#ifdef __ANDROID__
+    char property[PROP_VALUE_MAX] = {0};
+    if ((!value || !*value) && __system_property_get("debug.enjoer.renderer", property) > 0)
+        value = property;
+#endif
+    if (!value || !*value) return Backend::Automatic;
+    if (!std::strcmp(value, "software") || !std::strcmp(value, "cpu") ||
+        !std::strcmp(value, "fallback"))
+        return Backend::Software;
+    if (!std::strcmp(value, "vulkan") || !std::strcmp(value, "gpu")) return Backend::Vulkan;
+    return Backend::Automatic;
 }
 
 #if ENJOER_USE_VULKAN
@@ -183,26 +396,36 @@ template <class T> static T vk_struct(VkStructureType type) {
     return value;
 }
 
+/* How a render() call went. See VulkanCube::render. */
+enum class RenderStatus { Ok, Transient, Fatal };
+
+static bool is_fatal(VkResult result) {
+    return result == VK_ERROR_DEVICE_LOST || result == VK_ERROR_SURFACE_LOST_KHR;
+}
+
 class VulkanCube {
 public:
     bool init(void *native_window, int width, int height) {
         width_ = std::max(1, width);
         height_ = std::max(1, height);
-        if (!create_instance()) return false;
-        if (!create_surface(native_window)) return false;
-        if (!pick_device()) return false;
-        if (!create_device()) return false;
-        if (!create_swapchain()) return false;
-        if (!create_render_pass()) return false;
-        if (!create_depth()) return false;
-        if (!create_framebuffers()) return false;
-        if (!create_pipeline()) return false;
-        if (!create_vertex_buffer()) return false;
-        if (!create_commands()) return false;
-        if (!create_sync()) return false;
+        if (!create_instance()) return fail("vkCreateInstance");
+        if (!create_surface(native_window)) return fail("vkCreateAndroidSurfaceKHR");
+        if (!pick_device()) return fail("no graphics queue with present support");
+        if (!create_device()) return fail("vkCreateDevice");
+        if (!create_swapchain()) return fail("vkCreateSwapchainKHR");
+        if (!create_render_pass()) return fail("vkCreateRenderPass");
+        if (!create_depth()) return fail("depth buffer creation");
+        if (!create_framebuffers()) return fail("vkCreateFramebuffer");
+        if (!create_pipeline()) return fail("graphics pipeline creation");
+        if (!create_vertex_buffer()) return fail("vertex buffer allocation");
+        if (!create_commands()) return fail("command buffer allocation");
+        if (!create_sync()) return fail("semaphore/fence creation");
         initialized_ = true;
         return true;
     }
+
+    /* Name of the step that failed, for logcat. Valid until shutdown(). */
+    const char *stage(void) const { return stage_ ? stage_ : "Vulkan initialisation"; }
 
     void resize(int width, int height) {
         width_ = std::max(1, width);
@@ -210,15 +433,19 @@ public:
         if (initialized_) recreate_swapchain();
     }
 
-    void render(float rotation, float pitch) {
-        if (!initialized_ || swapchain_ == VK_NULL_HANDLE) return;
+    /* Ok: a frame was presented or the swapchain was rebuilt.
+     * Transient: this frame failed but Vulkan may recover (rotation, resize).
+     * Fatal: the device or surface is gone; the caller should fall back. */
+    RenderStatus render(float rotation, float pitch) {
+        if (!initialized_ || swapchain_ == VK_NULL_HANDLE) return RenderStatus::Transient;
 
         vkWaitForFences(device_, 1, &in_flight_, VK_TRUE, UINT64_MAX);
         uint32_t image = 0;
         VkResult acquired = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
                                                   image_available_, VK_NULL_HANDLE, &image);
-        if (acquired == VK_ERROR_OUT_OF_DATE_KHR) { recreate_swapchain(); return; }
-        if (acquired != VK_SUCCESS && acquired != VK_SUBOPTIMAL_KHR) return;
+        if (acquired == VK_ERROR_OUT_OF_DATE_KHR) { recreate_swapchain(); return RenderStatus::Ok; }
+        if (acquired != VK_SUCCESS && acquired != VK_SUBOPTIMAL_KHR)
+            return is_fatal(acquired) ? RenderStatus::Fatal : RenderStatus::Transient;
         vkResetFences(device_, 1, &in_flight_);
 
         const Mat4 mvp = compute_mvp(rotation, pitch);
@@ -233,7 +460,7 @@ public:
         submit.pCommandBuffers = &command_buffers_[image];
         submit.signalSemaphoreCount = 1;
         submit.pSignalSemaphores = &render_finished_;
-        if (vkQueueSubmit(queue_, 1, &submit, in_flight_) != VK_SUCCESS) return;
+        if (vkQueueSubmit(queue_, 1, &submit, in_flight_) != VK_SUCCESS) return RenderStatus::Fatal;
 
         VkPresentInfoKHR present = vk_struct<VkPresentInfoKHR>(VK_STRUCTURE_TYPE_PRESENT_INFO_KHR);
         present.waitSemaphoreCount = 1;
@@ -244,6 +471,8 @@ public:
         const VkResult presented = vkQueuePresentKHR(queue_, &present);
         if (presented == VK_ERROR_OUT_OF_DATE_KHR || presented == VK_SUBOPTIMAL_KHR)
             recreate_swapchain();
+        if (presented == VK_SUCCESS || presented == VK_SUBOPTIMAL_KHR) return RenderStatus::Ok;
+        return is_fatal(presented) ? RenderStatus::Fatal : RenderStatus::Transient;
     }
 
     void shutdown() {
@@ -267,6 +496,8 @@ public:
     }
 
 private:
+    bool fail(const char *stage) { stage_ = stage; return false; }
+
     Mat4 compute_mvp(float rotation, float pitch) const {
         const float aspect = static_cast<float>(width_) / height_;
         const float f = 1.0f / std::tan(62.0f * 3.1415926535f / 360.0f);
@@ -777,6 +1008,7 @@ private:
     }
 
     bool initialized_ = false;
+    const char *stage_ = nullptr;
     int width_ = 1, height_ = 1;
     VkInstance instance_ = VK_NULL_HANDLE;
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
@@ -808,11 +1040,23 @@ private:
 
 static VulkanCube vulkan_cube;
 static bool vulkan_active;
+static int vulkan_failures;
 #endif
 
-static void *native_window;
-static int width = 1;
-static int height = 1;
+#if ENJOER_USE_VULKAN
+/* Give up on Vulkan and keep the cube alive on the CPU instead of freezing on
+ * a black screen. A later APP_CMD_INIT_WINDOW gives Vulkan another chance. */
+static void switch_to_software(const char *reason) {
+    app_log_error("Enjoer: %s - falling back to the CPU rasterizer", reason);
+    vulkan_cube.shutdown();
+    vulkan_active = false;
+    vulkan_failures = 0;
+    software_active = true;
+#ifdef __ANDROID__
+    request_window_format(native_window);
+#endif
+}
+#endif
 
 } // namespace
 
@@ -820,14 +1064,33 @@ extern "C" int cube_renderer_init(void *window, int w, int h) {
     native_window = window;
     width = std::max(1, w);
     height = std::max(1, h);
+    software_active = false;
+    const Backend requested = requested_backend();
+
 #if ENJOER_USE_VULKAN
-    if (native_window && vulkan_cube.init(native_window, width, height)) {
+    if (requested != Backend::Software && native_window &&
+        vulkan_cube.init(native_window, width, height)) {
         vulkan_active = true;
         return 1;
     }
-    /* A preview has no native window. A Vulkan Android build should fail
-     * loudly instead of silently switching away from GPU presentation. */
-    if (native_window) return 0;
+    if (native_window) {
+        if (requested == Backend::Vulkan) {
+            app_log_error("Enjoer: ENJOER_RENDERER=vulkan was requested, but Vulkan failed (%s)",
+                          vulkan_cube.stage());
+            vulkan_cube.shutdown();
+            return 0;
+        }
+        app_log_error("Enjoer: no usable Vulkan device (%s) - drawing the cube on the CPU",
+                      vulkan_cube.stage());
+        vulkan_cube.shutdown();
+    }
+#endif
+
+    software_active = true;
+    if (requested == Backend::Software)
+        app_log("Enjoer: CPU rasterizer requested through ENJOER_RENDERER");
+#ifdef __ANDROID__
+    if (native_window) request_window_format(native_window);
 #endif
     return 1;
 }
@@ -836,35 +1099,36 @@ extern "C" void cube_renderer_resize(int w, int h) {
     width = std::max(1, w);
     height = std::max(1, h);
 #if ENJOER_USE_VULKAN
-    if (vulkan_active) vulkan_cube.resize(width, height);
+    if (vulkan_active) {
+        vulkan_cube.resize(width, height);
+        return;
+    }
+#endif
+#ifdef __ANDROID__
+    if (software_active && native_window) request_window_format(native_window);
 #endif
 }
 
 extern "C" void cube_renderer_render(Buffer *preview_target, float rotation, float pitch) {
 #if ENJOER_USE_VULKAN
     if (vulkan_active) {
-        vulkan_cube.render(rotation, pitch);
-        return;
+        const RenderStatus status = vulkan_cube.render(rotation, pitch);
+        if (status == RenderStatus::Ok) {
+            vulkan_failures = 0;
+            return;
+        }
+        if (status == RenderStatus::Fatal) switch_to_software("the Vulkan device was lost");
+        else if (++vulkan_failures < kMaxVulkanFailures) return;
+        else switch_to_software("Vulkan stopped presenting frames");
     }
 #endif
     if (preview_target) {
-        render_fallback(preview_target, rotation, pitch);
+        /* The HTTP preview has no window: draw at the requested resolution. */
+        rasterize_cube(preview_target, preview_depth, rotation, pitch);
         return;
     }
 #ifdef __ANDROID__
-    if (native_window) {
-        ANativeWindow *window = static_cast<ANativeWindow *>(native_window);
-        ANativeWindow_Buffer locked{};
-        if (ANativeWindow_lock(window, &locked, nullptr) == 0) {
-            Buffer target{};
-            target.pixels = static_cast<uint32_t *>(locked.bits);
-            target.width = locked.width;
-            target.height = locked.height;
-            target.stride = locked.stride;
-            render_fallback(&target, rotation, pitch);
-            ANativeWindow_unlockAndPost(window);
-        }
-    }
+    software_present_to_window(rotation, pitch);
 #endif
 }
 
@@ -872,14 +1136,32 @@ extern "C" void cube_renderer_shutdown(void) {
 #if ENJOER_USE_VULKAN
     if (vulkan_active) vulkan_cube.shutdown();
     vulkan_active = false;
+    vulkan_failures = 0;
 #endif
+    software_active = false;
+    software_surface.release();
     native_window = nullptr;
 }
 
 extern "C" const char *cube_renderer_backend(void) {
 #if ENJOER_USE_VULKAN
-    return vulkan_active ? "Vulkan" : "Vulkan-compatible preview fallback";
+    if (vulkan_active) return "Vulkan";
+    return "CPU rasterizer (Vulkan unavailable)";
 #else
-    return "C++ preview fallback (enable Vulkan for GPU presentation)";
+    return "CPU rasterizer (built without Vulkan)";
 #endif
+}
+
+extern "C" int cube_renderer_software_active(void) {
+#if ENJOER_USE_VULKAN
+    return vulkan_active ? 0 : 1;
+#else
+    return 1;
+#endif
+}
+
+extern "C" int cube_software_render(Buffer *target, float rotation, float pitch) {
+    if (!target || !target->pixels) return 0;
+    software_render_into(target, rotation, pitch);
+    return 1;
 }

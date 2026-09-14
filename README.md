@@ -14,9 +14,11 @@ The game is split at a narrow C ABI boundary:
   the MVP matrix through push constants. The shaders live in `src/shaders/`
   as GLSL and are embedded as SPIR-V (`src/shaders/cube_spv.h`).
 
-A dependency-free C++ raster fallback is kept only for the local HTTP preview
-and for checking the C/C++ boundary on a host without a GPU. It renders the
-same six-face cube; it is not the Android renderer.
+The same C++ file also carries a dependency-free CPU rasterizer. It renders
+the same six-face cube for the local HTTP preview and for checking the
+C/C++ boundary on a host without a GPU, and it is the runtime safety net on
+Android: if the device has no working Vulkan driver, or loses it mid-session,
+the cube keeps spinning on the CPU instead of showing a black screen.
 
 ## Preview
 
@@ -67,13 +69,49 @@ cmake --build build -j
 ```
 
 `ENJOER_USE_VULKAN` defaults to `ON`. Passing `-DENJOER_USE_VULKAN=OFF`
-builds the same Android activity with the small software fallback drawn
-through `ANativeWindow_lock`, which is useful for smoke testing on emulators
-without a Vulkan driver.
+builds the same Android activity CPU-only, which is useful for smoke testing
+on emulators without a Vulkan driver.
 
 The native activity presents directly to an `ANativeWindow` through
-`VK_KHR_android_surface` and a FIFO swapchain. The manifest requires Vulkan
-1.0.3 hardware.
+`VK_KHR_android_surface` and a FIFO swapchain.
+
+## When the device has no Vulkan
+
+Vulkan is a preference now, not a requirement, so the app installs and runs
+on phones without a driver:
+
+- `cube_renderer_init` builds the Vulkan instance, surface, device and
+  swapchain. If any step fails, the renderer logs which step it was
+  (`adb logcat -s Enjoer`) and keeps going on the CPU.
+- Vulkan can also die mid-session (device lost, surface lost, a driver that
+  stops presenting). After ten failed frames in a row the renderer tears the
+  GPU objects down and switches to the CPU path; the next `INIT_WINDOW`
+  gives Vulkan another chance.
+- The CPU path rasterizes the same cube into a small buffer (longest edge
+  400 px, ~160k pixels) and stretches it over the window with a
+  nearest-neighbour blit, which keeps a software-only phone interactive
+  instead of rendering 2.5 M pixels per frame. It converts to RGB565 when a
+  device only hands out a 16-bit window buffer, and paces itself at ~30 fps
+  so it does not burn a full core.
+- The manifest declares `android.hardware.vulkan.*` as `required="false"`,
+  so the APK is no longer filtered out on devices without Vulkan.
+
+`cube_renderer_backend()` reports which path is live, and
+`cube_renderer_software_active()` tells the game layer directly.
+
+### Forcing a backend
+
+Useful to reproduce a friend's phone without owning it:
+
+```sh
+adb shell setprop debug.enjoer.renderer software   # always CPU
+adb shell setprop debug.enjoer.renderer vulkan     # GPU only: fail loudly if unavailable
+adb shell setprop debug.enjoer.renderer auto       # default: Vulkan, CPU when it fails
+adb logcat -s Enjoer
+```
+
+`ENJOER_RENDERER=software|vulkan|auto` (environment variable) does the same
+thing for the host preview and for `wrap.com.cb4` on a device.
 
 ### Shaders
 
@@ -91,7 +129,7 @@ tools/shaders/compile.sh
 src/engine.h            C public API and Buffer type
 src/cube_game.c         C game state and controls
 src/vulkan_cube.h       C ABI to the renderer
-src/vulkan_cube.cpp     C++ Vulkan renderer + local fallback
+src/vulkan_cube.cpp     C++ Vulkan renderer + CPU fallback
 src/shaders/            GLSL sources and generated SPIR-V header
 src/main.c              Android NativeActivity loop
 game/                   Android manifest and Activity
