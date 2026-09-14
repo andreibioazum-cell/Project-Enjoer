@@ -42,7 +42,7 @@ jobs:
           $ANDROID_HOME/build-tools/34.0.0/d8 \
             --lib $ANDROID_HOME/platforms/android-34/android.jar \
             --output staging \
-            build-java
+            $(find build-java -name '*.class')
 
       - name: Package APK
         run: |
