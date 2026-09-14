@@ -66,7 +66,7 @@ jobs:
           $BT/apksigner sign \
             --ks d.ks \
             --ks-pass pass:android \
-            --key-pass android \
+            --key-pass pass:android \
             --out EnjoerCube.apk \
             aligned.apk
 
