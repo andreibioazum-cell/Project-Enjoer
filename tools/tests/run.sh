@@ -17,8 +17,8 @@ fi
 $CC $CFLAGS -c src/core/log.c -o "$OUT/log.o"
 $CC $CFLAGS -c src/core/state.c -o "$OUT/state.o"
 $CC $CFLAGS -c src/cube_game.c -o "$OUT/cube_game.o"
-$CXX $CXXFLAGS -c src/dawn_cube.cpp -o "$OUT/dawn_cube.o"
+$CXX $CXXFLAGS -c src/vulkan_cube.cpp -o "$OUT/vulkan_cube.o"
 $CC $CFLAGS -c tools/tests/cube.c -o "$OUT/cube_test.o"
-$CXX "$OUT/log.o" "$OUT/state.o" "$OUT/cube_game.o" "$OUT/dawn_cube.o" \
+$CXX "$OUT/log.o" "$OUT/state.o" "$OUT/cube_game.o" "$OUT/vulkan_cube.o" \
     "$OUT/cube_test.o" $LDFLAGS -lm -o "$OUT/cube"
 "$OUT/cube"

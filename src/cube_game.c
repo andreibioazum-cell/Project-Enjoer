@@ -2,9 +2,9 @@
  *
  * There is no world generator, menu or inventory now: this is a focused cube
  * playground. C owns time, input and camera state;
- * the C++ file owns the Dawn device and the draw calls. */
+ * the C++ file owns the Vulkan device and the draw calls. */
 #include "engine.h"
-#include "dawn_cube.h"
+#include "vulkan_cube.h"
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
@@ -30,7 +30,7 @@ void game_init(void *native_window) {
     dragging = 0;
     drag_id = -1;
     ready = cube_renderer_init(native_window, screen_w, screen_h);
-    if (!ready) app_fail("Could not initialize the Dawn cube renderer");
+    if (!ready) app_fail("Could not initialize the Vulkan cube renderer");
     else app_log("Enjoer: 3D cube renderer (%s)", cube_renderer_backend());
 }
 
