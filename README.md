@@ -72,8 +72,10 @@ through `ANativeWindow_lock`, which is useful for smoke testing on emulators
 without a Vulkan driver.
 
 The native activity presents directly to an `ANativeWindow` through
-`VK_KHR_android_surface` and a FIFO swapchain. The manifest requires Vulkan
-1.0.3 hardware.
+`VK_KHR_android_surface` and a FIFO swapchain. Vulkan 1.0.3 is preferred but
+not required: if the device has no usable Vulkan driver, the renderer falls
+back at runtime to the built-in CPU rasterizer and presents through
+`ANativeWindow_lock`, so the game still runs (slower, no GPU acceleration).
 
 ### Shaders
 
