@@ -1,6 +1,7 @@
 /* Regression test for the C game / C++ renderer boundary. */
 #include "engine.h"
 #include "vulkan_cube.h"
+#include "dimscript_runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +35,7 @@ int main(void) {
     game_draw(&frame);
     const unsigned long first = checksum(&frame);
     CHECK(first != 0);
+    CHECK(ds_render_text_count() == 3); /* font backend is intentionally absent */
 
     game_key("ArrowLeft", 1);
     game_draw(&frame);

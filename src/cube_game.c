@@ -5,6 +5,8 @@
  * the C++ file owns the Vulkan device and the draw calls. */
 #include "engine.h"
 #include "vulkan_cube.h"
+#include "dimscript_runtime.h"
+#include "generated/clicker.h"
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
@@ -18,6 +20,7 @@ static int drag_id = -1;
 static float last_x;
 static float last_y;
 static int reset_down;
+static int script_ready;
 
 static float clampf(float value, float lo, float hi) {
     return value < lo ? lo : value > hi ? hi : value;
@@ -29,9 +32,17 @@ void game_init(void *native_window) {
     spin = 0.65f;
     dragging = 0;
     drag_id = -1;
+    script_ready = 0;
     ready = cube_renderer_init(native_window, screen_w, screen_h);
-    if (!ready) app_fail("Could not initialize the Vulkan cube renderer");
-    else app_log("Enjoer: 3D cube renderer (%s)", cube_renderer_backend());
+    if (!ready) {
+        app_fail("Could not initialize the Vulkan cube renderer");
+        return;
+    }
+    ds_runtime_init();
+    dimscript_init();
+    dimscript_load();
+    script_ready = 1;
+    app_log("Enjoer: 3D cube renderer (%s) + DimScript clicker", cube_renderer_backend());
 }
 
 void game_resize(int width, int height) {
@@ -46,10 +57,13 @@ void game_update(void) {
     if (!isfinite(seconds) || seconds < 0.0f) seconds = 0.0f;
     if (seconds > 0.05f) seconds = 0.05f;
     if (!reset_down) rotation += seconds * spin;
+    if (script_ready) dimscript_update(seconds);
 }
 
 void game_draw(Buffer *preview_target) {
-    if (ready) cube_renderer_render(preview_target, rotation, pitch);
+    if (!ready) return;
+    if (script_ready) dimscript_draw();
+    cube_renderer_render(preview_target, rotation, pitch);
 }
 
 void game_touch(float x, float y, int action, int pointer_id) {
@@ -60,6 +74,7 @@ void game_touch(float x, float y, int action, int pointer_id) {
             drag_id = pointer_id;
             last_x = x;
             last_y = y;
+            if (script_ready) dimscript_touchpressed(pointer_id, x, y);
         }
     } else if (action == 2 && dragging && pointer_id == drag_id) {
         float dx = x - last_x;
@@ -104,6 +119,12 @@ void game_cancel_input(void) {
 }
 
 void game_shutdown(void) {
+    if (script_ready) {
+        dimscript_quit();
+        dimscript_shutdown();
+        ds_runtime_shutdown();
+        script_ready = 0;
+    }
     if (ready) cube_renderer_shutdown();
     ready = 0;
     game_cancel_input();

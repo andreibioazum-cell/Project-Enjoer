@@ -20,6 +20,8 @@ endif()
 add_library(enjoer SHARED
     src/main.c
     src/cube_game.c
+    src/dimscript_runtime.c
+    src/generated/clicker.c
     src/vulkan_cube.cpp
     src/core/log.c
     src/core/state.c

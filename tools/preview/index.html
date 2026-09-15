@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Enjoer — Vulkan cube</title>
+<title>DimScript — Vulkan game preview</title>
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101a32;overscroll-behavior:none}
 .game{position:fixed;inset:0;display:grid;place-items:center}
@@ -14,7 +14,7 @@ canvas:active{cursor:grabbing}
 </head>
 <body>
 <main class="game"><canvas id="c" tabindex="0" aria-label="Enjoer 3D cube preview. Drag to orbit. Use arrow keys or WASD to look, Space reverses the spin, R resets."></canvas></main>
-<div class="hint">drag to orbit · arrows / WASD · space reverses spin · R resets</div>
+<div class="hint">drag to orbit · touch runs DimScript · arrows / WASD · space reverses spin · R resets · fontless</div>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');let W=960,H=540;
 function fit(){const s=Math.min(innerWidth/W,innerHeight/H);cv.style.width=W*s+'px';cv.style.height=H*s+'px'}

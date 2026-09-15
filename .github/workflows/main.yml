@@ -16,6 +16,9 @@ jobs:
         with:
           ndk-version: r25c
 
+      - name: Run DimScript and native regression tests
+        run: tools/tests/run.sh
+
       # Vulkan comes with the NDK, so the CI APK is the real GPU build.
       - name: Build native library
         run: |
