@@ -57,7 +57,11 @@ void enjoer_frame_clear(int width, int height) {
     enjoer_frame_begin(width, height);
 }
 
-static void push_vertex(float x, float y, float r, float g, float b) {
+/* One vertex of the batch.  `layer` is negative for shapes, otherwise it names
+ * the image the fragment shader samples: the batch is the only thing the
+ * renderer knows about, so a sprite and a rectangle cost the same. */
+static void push_vertex_full(float x, float y, float r, float g, float b, float u, float v,
+                             float layer) {
     if (!reserve(frame.vertex_count + 1)) return;
     EnjoerVertex *vertex = &frame.vertices[frame.vertex_count];
     /* 2D geometry lives just in front of the cube so a single depth test keeps
@@ -68,7 +72,14 @@ static void push_vertex(float x, float y, float r, float g, float b) {
     vertex->r = clamp01(r);
     vertex->g = clamp01(g);
     vertex->b = clamp01(b);
+    vertex->u = u;
+    vertex->v = v;
+    vertex->layer = layer;
     ++frame.vertex_count;
+}
+
+static void push_vertex(float x, float y, float r, float g, float b) {
+    push_vertex_full(x, y, r, g, b, 0.0f, 0.0f, -1.0f);
 }
 
 void enjoer_draw_triangle(float x0, float y0, float x1, float y1, float x2, float y2,
@@ -151,4 +162,21 @@ void enjoer_draw_line(float x0, float y0, float x1, float y1, float thickness,
     const float ny = dx / length * (t * 0.5f);
     enjoer_draw_quad(x0 + nx, y0 + ny, x1 + nx, y1 + ny, x1 - nx, y1 - ny, x0 - nx, y0 - ny,
                      r, g, b);
+}
+
+void enjoer_draw_image_quad(float x, float y, float width, float height,
+                            float u0, float v0, float u1, float v1, int32_t layer,
+                            float r, float g, float b) {
+    if (width < 0.0f) { x += width; width = -width; }
+    if (height < 0.0f) { y += height; height = -height; }
+    if (width <= 0.0f || height <= 0.0f || layer < 0) return;
+    const float layer_coordinate = (float)layer;
+    /* Wound clockwise on screen (top-left, top-right, bottom-right, bottom-left)
+     * so the same triangle order works for the CPU rasterizer and the GPU. */
+    push_vertex_full(x, y, r, g, b, u0, v0, layer_coordinate);
+    push_vertex_full(x + width, y, r, g, b, u1, v0, layer_coordinate);
+    push_vertex_full(x + width, y + height, r, g, b, u1, v1, layer_coordinate);
+    push_vertex_full(x, y, r, g, b, u0, v0, layer_coordinate);
+    push_vertex_full(x + width, y + height, r, g, b, u1, v1, layer_coordinate);
+    push_vertex_full(x, y + height, r, g, b, u0, v1, layer_coordinate);
 }

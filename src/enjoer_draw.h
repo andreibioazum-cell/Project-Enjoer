@@ -1,14 +1,22 @@
-/* The geometry batch that the DimScript runtime builds and the renderer eats.
+/* The geometry batch that DimScript builds and the renderer eats.
  *
  * Both halves of the engine talk to each other through plain triangle lists.
  * That keeps the Vulkan pipeline boring (one vertex format, one push constant
- * matrix) and lets the software preview rasterizer reuse exactly what the GPU
- * would have drawn: a game that looks right in the browser looks right on the
- * device.
+ * matrix, one texture array) and lets the software rasterizer used by the tests
+ * reuse exactly what the GPU would have drawn.
  *
  * Coordinates are screen pixels with the origin in the top left corner, which
  * is what a 2D game author expects.  The renderer multiplies by an orthographic
  * matrix, so a script never has to care about clip space.
+ *
+ * Every vertex carries a texture coordinate and a layer:
+ *
+ *   layer < 0   untextured — the vertex colour is the pixel (shapes, cube);
+ *   layer >= 0  index into the image array loaded by `image.load("x.png")`.
+ *
+ * A shape therefore costs the same six floats it always did, and a sprite is
+ * the same quad with its layer set, so nothing in the renderer needs a second
+ * pipeline.
  */
 #ifndef ENJOER_DRAW_H
 #define ENJOER_DRAW_H
@@ -30,11 +38,13 @@ typedef struct EnjoerVertex {
     float r;
     float g;
     float b;
+    float u;
+    float v;
+    float layer;
 } EnjoerVertex;
 
 /* One recorded render.text call.  There is intentionally no font backend yet,
- * so the Vulkan path only counts these, while the HTTP preview overlays them as
- * real browser text to make fontless games debuggable. */
+ * so the text pass only records position, colour and scale. */
 typedef struct EnjoerTextCommand {
     char text[ENJOER_DRAW_TEXT_LENGTH];
     float x;
@@ -79,6 +89,12 @@ void enjoer_draw_ring(float x, float y, float radius, float thickness, int segme
                       float r, float g, float b);
 void enjoer_draw_line(float x0, float y0, float x1, float y1, float thickness,
                       float r, float g, float b);
+
+/* Textured quad: a sprite sheet region in normalised coordinates, tinted by the
+ * colour (1, 1, 1 is untinted). */
+void enjoer_draw_image_quad(float x, float y, float width, float height,
+                            float u0, float v0, float u1, float v1, int32_t layer,
+                            float r, float g, float b);
 
 #ifdef __cplusplus
 }

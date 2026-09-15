@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from .ast import GlobalDecl, Program, Require
+from .ast import GlobalDecl, Node, Program, Require
 from .lexer import DimScriptError
 from .manifest import MANIFEST_NAME, GameManifest, game_files, read_manifest
 from .parser import parse
@@ -55,6 +55,17 @@ class GameProject:
 
     def sources(self) -> List[Tuple[str, str]]:
         return [(script.name, script.source) for script in self.scripts]
+
+
+def _walk(node: object) -> Iterable[Node]:
+    yield node
+    for value in getattr(node, "__dict__", {}).values():
+        if isinstance(value, Node):
+            yield from _walk(value)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                if isinstance(item, Node):
+                    yield from _walk(item)
 
 
 def _parse(script: ScriptFile) -> None:
@@ -117,6 +128,10 @@ def link_scripts(scripts: Sequence[ScriptFile]) -> Program:
 
     for script in _order(list(scripts)):
         _parse(script)
+        # Every node remembers its file, so a compiled error or an out-of-range
+        # index reports `blocks.ds:47` and not just a line number.
+        for node in _walk(script.program):
+            setattr(node, "file", script.filename)
         for module in script.program.requires:
             program.requires.append(Require(module=module.module, line=module.line, column=module.column))
         for struct in script.program.structs:
