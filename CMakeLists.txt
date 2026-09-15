@@ -58,16 +58,22 @@ if(ENJOER_USE_VULKAN)
 endif()
 
 # A game is data, not code. tools/gamepack.py copies game.manifest and the .ds
+# NOTE: ENJOER_GAME_DIR is a PATH cache entry, so CMake has already turned a
+# relative value into an absolute one; concatenating the source dir onto it
+# would double the prefix, which is exactly the mistake this comment exists for.
 # files next to the library and generates AndroidManifest.xml from the same
 # manifest, so the runtime and the package can never disagree. Python is a host
 # tool and the NDK toolchain may not be able to find it, so this stays optional:
 # `python3 tools/gamepack.py <game> --staging <dir>` does the same thing.
 if(ENJOER_GAME_DIR)
+    if(NOT IS_DIRECTORY "${ENJOER_GAME_DIR}")
+        message(FATAL_ERROR "ENJOER_GAME_DIR=${ENJOER_GAME_DIR} is not a directory")
+    endif()
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_FOUND)
         add_custom_target(enjoer_assets ALL
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gamepack.py"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/${ENJOER_GAME_DIR}"
+                    "${ENJOER_GAME_DIR}"
                     --staging "${CMAKE_CURRENT_BINARY_DIR}/game"
             BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/game/AndroidManifest.xml"
             DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/gamepack.py"

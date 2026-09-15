@@ -159,7 +159,8 @@ def pack(directory: Path, staging: Path, *, check_only: bool = False) -> GameMan
 
     directory = directory.resolve()
     if not directory.is_dir():
-        raise DimScriptError(f"{directory}: это не папка игры")
+        raise DimScriptError(f"{directory}: нет такой папки игры (путь должен вести к папке с "
+                             f"{MANIFEST_NAME}; текущая директория: {Path.cwd()})")
     project = load_project(directory)
     manifest = project.manifest
 
