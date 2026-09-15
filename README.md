@@ -332,4 +332,5 @@ src/main.c                Android NativeActivity loop, asset manager wiring
 game/                     Android Activity and the fallback manifest
 tools/preview/            HTTP frame/input preview with the text overlay
 tools/tests/              native, VM, parity and AOT regression tests
+tools/ci/annotate.py      turns a build log into check annotations (CI helper)
 ```

@@ -611,14 +611,26 @@ private:
         return module;
     }
 
-    bool create_pipeline() {
+    /* One layout, two pipelines: a 3D cube and a depth-free 2D batch share the
+     * same vertex format (position + colour) and the same vertex shader, which
+     * multiplies by the pushed matrix.  Drawing the batch therefore means
+     * pushing an orthographic matrix instead of the MVP. */
+    bool create_pipeline_layout() {
+        if (pipeline_layout_ != VK_NULL_HANDLE) return true;
         VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4)};
         VkPipelineLayoutCreateInfo layout = vk_struct<VkPipelineLayoutCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
         layout.pushConstantRangeCount = 1;
         layout.pPushConstantRanges = &push;
-        if (vkCreatePipelineLayout(device_, &layout, nullptr, &pipeline_layout_) != VK_SUCCESS)
-            return false;
+        return vkCreatePipelineLayout(device_, &layout, nullptr, &pipeline_layout_) == VK_SUCCESS;
+    }
 
+    bool create_pipelines() {
+        if (!create_pipeline_layout()) return false;
+        if (!create_pipeline(false, &pipeline_)) return false;
+        return create_pipeline(true, &pipeline_2d_);
+    }
+
+    bool create_pipeline(bool for_2d, VkPipeline *target) {
         VkShaderModule vert = make_shader(cube_vert_spv, sizeof(cube_vert_spv));
         VkShaderModule frag = make_shader(cube_frag_spv, sizeof(cube_frag_spv));
         if (!vert || !frag) {
@@ -867,8 +879,10 @@ private:
         if (surface_format_ != previous_format) {
             /* Rare, but the render pass and pipeline bake the colour format. */
             vkDestroyPipeline(device_, pipeline_, nullptr);
+            vkDestroyPipeline(device_, pipeline_2d_, nullptr);
             vkDestroyRenderPass(device_, render_pass_, nullptr);
             pipeline_ = VK_NULL_HANDLE;
+            pipeline_2d_ = VK_NULL_HANDLE;
             render_pass_ = VK_NULL_HANDLE;
             if (!create_render_pass()) return;
             vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);

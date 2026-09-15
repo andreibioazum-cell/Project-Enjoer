@@ -6,33 +6,22 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# The NDK *is* clang, so the host build follows suit: the same compiler family
-# and the same -O3 for the DimScript VM, the renderer and the generated C.  A
-# debug build keeps -O0 on purpose, everything else gets -O3.
+# The Android NDK *is* clang, and -O3 is what makes the DimScript VM fast enough
+# to interpret a whole game every frame. The host does not use this file at all
+# (tools/preview/build.sh and tools/tests/run.sh do, also with clang and -O3), so
+# the flags below are the ones that end up in the shipping library.
+#
+# -Werror is deliberately NOT set here: the NDK compiles its own
+# android_native_app_glue.c into this target, and a warning there is not ours to
+# fix. The host test build keeps -Werror for every line of our code.
 option(ENJOER_USE_VULKAN "Use Vulkan for the Android cube surface" ON)
-set(ENJOER_GAME_DIR "games/brick" CACHE PATH "Game folder packed into assets/game/ (empty = no game)")
+set(ENJOER_GAME_DIR "games/brick" CACHE PATH "Game folder packed into assets/game/ (empty = none)")
 
 if(NOT ANDROID)
     message(FATAL_ERROR
         "The APK is the shipping target. Use the NDK toolchain; the host "
         "preview is built with tools/preview/build.sh.")
 endif()
-
-find_program(CLANG_C clang)
-find_program(CLANG_CXX clang++)
-if(CLANG_C AND CLANG_CXX AND NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    message(STATUS "Enjoer: switching to clang (${CLANG_C})")
-    set(CMAKE_C_COMPILER "${CLANG_C}" CACHE FILEPATH "C compiler" FORCE)
-    set(CMAKE_CXX_COMPILER "${CLANG_CXX}" CACHE FILEPATH "C++ compiler" FORCE)
-endif()
-
-foreach(language C CXX)
-    string(TOLOWER "${language}" flag)
-    set(CMAKE_${language}_FLAGS_DEBUG "-O0 -g3" CACHE STRING "" FORCE)
-    set(CMAKE_${language}_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
-    set(CMAKE_${language}_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG" CACHE STRING "" FORCE)
-    set(CMAKE_${language}_FLAGS "-Wall -Wextra -Werror ${CMAKE_${language}_FLAGS}")
-endforeach()
 
 add_library(enjoer SHARED
     src/main.c
@@ -57,24 +46,35 @@ target_include_directories(enjoer PRIVATE
     ${ANDROID_NDK}/sources/android/native_app_glue)
 target_compile_definitions(enjoer PRIVATE
     ENJOER_USE_VULKAN=$<BOOL:${ENJOER_USE_VULKAN}>)
+# These come after the toolchain's own flags, so -O3 wins over the NDK's default
+# -O2 for a Release build, and a Debug build keeps its -O0 for the debugger.
+target_compile_options(enjoer PRIVATE
+    -Wall -Wextra -fno-strict-aliasing
+    $<$<NOT:$<CONFIG:Debug>>:-O3>)
 target_link_libraries(enjoer PRIVATE android log m)
 
 if(ENJOER_USE_VULKAN)
     target_link_libraries(enjoer PRIVATE vulkan)
 endif()
 
-# The game itself is data, not code: gamepack copies game.manifest and the .ds
-# files next to the library so the runtime can open them through the asset
-# manager.  Regenerate the whole staging folder with `ninja enjoer_assets`.
+# A game is data, not code. tools/gamepack.py copies game.manifest and the .ds
+# files next to the library and generates AndroidManifest.xml from the same
+# manifest, so the runtime and the package can never disagree. Python is a host
+# tool and the NDK toolchain may not be able to find it, so this stays optional:
+# `python3 tools/gamepack.py <game> --staging <dir>` does the same thing.
 if(ENJOER_GAME_DIR)
-    find_package(Python3 COMPONENTS Interpreter REQUIRED)
-    add_custom_target(enjoer_assets ALL
-        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gamepack.py"
-                "${CMAKE_CURRENT_SOURCE_DIR}/${ENJOER_GAME_DIR}"
-                --staging "${CMAKE_CURRENT_BINARY_DIR}/game"
-        BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/game/AndroidManifest.xml"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/gamepack.py"
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        COMMENT "Packing ${ENJOER_GAME_DIR} into assets/game")
-    add_dependencies(enjoer enjoer_assets)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_FOUND)
+        add_custom_target(enjoer_assets ALL
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gamepack.py"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/${ENJOER_GAME_DIR}"
+                    --staging "${CMAKE_CURRENT_BINARY_DIR}/game"
+            BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/game/AndroidManifest.xml"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/gamepack.py"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            COMMENT "Packing ${ENJOER_GAME_DIR} into assets/game")
+        add_dependencies(enjoer enjoer_assets)
+    else()
+        message(STATUS "Enjoer: no host Python3; run tools/gamepack.py manually for assets/game")
+    endif()
 endif()
