@@ -1,6 +1,7 @@
 /* Small platform state and recoverable error boundary shared by C and C++. */
 #define _POSIX_C_SOURCE 200809L
 #include "engine.h"
+#include "ds_files.h"
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>

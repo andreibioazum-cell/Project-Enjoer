@@ -41,7 +41,34 @@ _OPERATORS = (
     "=>",
 )
 _SINGLE = set("{}()[]:,.=+-*/%<>!")
-_KEYWORDS = {"struct", "new", "delete", "if", "then", "else", "return", "true", "false", "nil", "and", "or", "not"}
+# `count`, `end`, `do` and friends stay usable as names: only the keywords the
+# grammar actually needs are hard reserved, which keeps game code readable.
+_KEYWORDS = {
+    "struct",
+    "new",
+    "delete",
+    "if",
+    "then",
+    "else",
+    "return",
+    "true",
+    "false",
+    "nil",
+    "and",
+    "or",
+    "not",
+    "while",
+    "for",
+    "do",
+    "end",
+    "break",
+    "continue",
+    "require",
+    "local",
+}
+
+# Keywords that may still be used as identifiers or field names.
+SOFT_KEYWORDS = {"then", "do", "end", "require", "local", "for", "struct"}
 
 
 def _decode_entities(source: str) -> str:

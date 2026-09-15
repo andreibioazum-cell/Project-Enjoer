@@ -9,6 +9,7 @@
 #include <android/native_activity.h>
 #include <time.h>
 #include "engine.h"
+#include "ds_files.h"
 
 static int active;
 static int focused = 1;
@@ -136,6 +137,10 @@ void android_main(struct android_app *app) {
     app->onInputEvent = handle_input;
     app_set_activity((void *)app->activity);
     app_set_java_vm((void *)app->activity->vm);
+    /* A game is data in the APK, not code: assets/game/game.manifest and the
+     * .ds files next to it are the whole project, read through the asset
+     * manager so the same folder layout works on a device and on disk. */
+    ds_files_set_asset_manager(app->activity->assetManager);
     app_log("Enjoer: native C game + C++ Vulkan cube");
 
     for (;;) {

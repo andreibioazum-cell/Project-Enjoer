@@ -1,47 +1,97 @@
 # Enjoer + DimScript
 
-This repository contains the small Vulkan game host and **DimScript**, a
-compact game scripting language. DimScript source is written with the syntax
-from `examples/clicker.ds`; the Python frontend parses and type-checks it, then
-emits ordinary C99. Python is not part of the running game loop: after
-compilation the callbacks are native C and can be built with the Android NDK.
+Enjoer is a small Vulkan game host, and **DimScript** is the game language it
+runs. A game is a folder of `.ds` files plus a `game.manifest`; the engine opens
+that folder and interprets it, so a game changes without recompiling anything.
 
-The current example is intentionally font-less. `render.text(...)` is part of
-the stable API and is recorded by the runtime, but the Vulkan renderer does
-not rasterize glyphs yet. This keeps the language/runtime boundary ready for a
-font atlas without pretending that a font already exists.
+There are two DimScript implementations and they are kept identical on purpose:
 
-## DimScript
+| | what it is | where |
+|---|---|---|
+| **VM** | the interpreter that ships: arena + mark/sweep GC, lists, full language | `src/ds_vm.c`, `src/ds_vm_lang.c`, `src/ds_vm_exec.c`, `src/ds_vm_heap.c` |
+| **reference interpreter** | same AST, same frame, no GC: used by tools, tests and `--run` | `dimscript/interpreter.py` |
+| **AOT compiler** | the same syntax lowered to plain C99 (smaller subset, see below) | `dimscript/compiler.py`, `tools/dimscriptc.py` |
 
-A minimal program looks like this:
+`tools/tests/parity.py` runs the brick game on both interpreters and diffs every
+vertex and every text command, so the two cannot drift apart silently.
+
+Everything is drawn through the same triangle batch that the Vulkan pipeline
+consumes: shapes from `render.*` become vertices in `src/enjoer_draw.c`, and a
+game that looks right in the browser preview looks right on the device.
+
+## The language
 
 ```dimscript
-struct ClickerGame {
-    score: int
-    text_scale: float
+-- games/brick/main.ds
+struct Paddle {
+    x: float
+    y: float
+    width: float
+    height: float
 }
 
-game = new ClickerGame
+struct Ball {
+    x: float
+    y: float
+    vx: float
+    vy: float
+    radius: float
+    stuck: bool
+}
+
+struct BrickGame {
+    blocks: list
+    lives: int
+    score: int
+    state: int
+    paddle: Paddle
+    ball: Ball
+}
+
+game = new BrickGame
+target_x = 0.0
+
+require "blocks"
+require "hud"
 
 load() {
+    game.blocks = build_blocks(11)
+    game.lives = 3
     game.score = 0
-    game.text_scale = 1.0
+    game.state = 0
+    center_paddle()
+    launch_ball()
+    render.clear(0.05, 0.08, 0.15)
 }
 
-touchpressed(id, touch_x, touch_y) {
-    game.score = game.score + 1
-    game.text_scale = 1.6
+resized(width: float, height: float) {
+    center_paddle()
 }
 
 update(dt: float) {
-    if game.text_scale > 1.0 then
-        game.text_scale = game.text_scale - (4.0 * dt)
+    follow_pointer(dt)
+    if game.state == 1 then {
+        step_ball(game, dt)
+    }
+}
+
+touchpressed(id, touch_x, touch_y) {
+    target_x = touch_x
+    if game.state == 0 then {
+        game.state = 1
+        game.ball.stuck = false
+        game.ball.vy = -330.0
     }
 }
 
 draw() {
-    render.color(1.0, 1.0, 1.0)
-    render.text("Счет: " .. game.score, 50.0, 150.0, game.text_scale)
+    render.color(0.86, 0.95, 1.0)
+    render.rect(game.paddle.x - game.paddle.width / 2.0, game.paddle.y,
+                game.paddle.width, game.paddle.height)
+    render.color(1.0, 0.78, 0.32)
+    render.circle(game.ball.x, game.ball.y, game.ball.radius)
+    render.text("Счёт: " .. game.score, 20.0, 48.0, 1.0)
+    draw_hud()
 }
 
 quit() {
@@ -49,142 +99,237 @@ quit() {
 }
 ```
 
-Supported in this first version:
+### Syntax
 
-- `struct` fields with `int`, `float`, `string` and `bool` types;
-- `new`/`delete`, member access with `.`, assignments and local variables;
-- arithmetic, comparisons, boolean operators and string concatenation with
-  `..`;
-- `if ... then` blocks closed by `}` (an explicit `{ ... }` after `then` is
-  accepted too), optional `else`, comments beginning with `--`;
-- lifecycle callbacks `load`, `touchpressed`, `update`, `draw` and `quit`;
-- `render.color(r, g, b)` and `render.text(text, x, y, scale)`.
+* `struct Name { field: type ... }`, `new Name`, `delete value`.
+* Global declarations are top-level `name = expression`.
+* Functions are `name(param: type, ...) : return_type { ... }`; untyped
+  parameters are allowed and default to `float` (`id`-like names to `int`).
+* Blocks are `{ ... }` closed by `}`. `if`/`while`/`for` may drop the braces and
+  use `then`/`do`; `end` is accepted as an alias for `}`.
+* `if ... then`, `else`, `else if`.
+* `while condition do`, `for i = first, last do` (inclusive) and
+  `for i = first, last, step do`, `break`, `continue`.
+* `local scratch = 0` declares a variable even when a global has the same name.
+* `require "module"` loads `module.ds` from the same game folder; files are
+  linked in dependency order, so `build_blocks` defined in `blocks.ds` is
+  callable from `main.ds`.
+* Comments start with `--`. Statements are newline separated; an operator may
+  end a line but never start one, so a wrapped expression must keep its `+`,
+  `and`, `..` etc. at the end of the previous line.
+* `&gt;`/`&lt;` HTML entities are unescaped by the lexer, so a snippet pasted
+  from a web page still parses.
 
-The compiler also accepts `&gt;`/`&lt;` copied from HTML, which is useful when
-pasting the original example.
+### Types and operators
 
-### Compile or interpret a script
+| type | notes |
+|---|---|
+| `int` | 64-bit signed |
+| `float` | `1.0`, `2.5e3`; a literal without a dot is an `int` |
+| `string` | UTF-8, immutable, `..` concatenates |
+| `bool` | `true`/`false`; `and`/`or` short-circuit and yield a `bool` |
+| `nil` | unset struct field, or a deleted object |
+| `list` | growable array of any values (interpreter only) |
 
-No third-party Python packages are needed:
+`+ - *` keep the integer type when both sides are integers; `/` always produces
+a `float`; `%` is a floored remainder. Division or remainder by zero is a script
+error, not `inf`. `==`/`~=` compare numbers and strings, and compare objects by
+identity. `+` on strings is an error on purpose — use `..`. String comparison
+with `<`/`>` is lexicographic.
 
-```sh
-# Static parse/type check
-python3 tools/dimscriptc.py examples/clicker.ds --check
+Lists: `x = []`, `x = [1, 2, 3]`, `x.push(v)`, `x.insert(i, v)`, `x.delete(i)`,
+`x.clear()`, `x.index_of(v)`, `x.join(", ")`, `x.count`, `x[i]` (negative
+indices count from the end), and `x[i] = v`.
 
-# Emit C99 and the callback header
-python3 tools/dimscriptc.py examples/clicker.ds --emit-c \
-  -o /tmp/clicker.c --header /tmp/clicker.h
+### Builtins
 
-# Or use the module entry point
-python3 -m dimscript examples/clicker.ds -o /tmp/clicker.c
+* `render.clear(r, g, b)`, `render.color(r, g, b)`, `render.color_alpha(r, g, b, a)`
+* `render.rect(x, y, w, h)`, `render.frame(x, y, w, h, thickness)`,
+  `render.circle(x, y, radius)`, `render.ring(x, y, radius, thickness)`,
+  `render.line(x0, y0, x1, y1, thickness)`, `render.tri(x0, y0, x1, y1, x2, y2)`
+* `render.text(text, x, y, scale)` — coordinates are pixels from the top left.
+  **There is no font backend yet**: the call is recorded in the frame and shown
+  by the preview as real browser text, and a future text pass will read the same
+  record. Nothing rasterizes glyphs in C or Vulkan today.
+* `math.floor/ceil/round/abs/sign/sqrt/sin/cos/tan/min/max/mod/pow/lerp/random`,
+  `math.pi`, `math.e`
+* `engine.width()`, `engine.height()`, `engine.time()`, `engine.delta()`,
+  `engine.fps()`, `engine.frame()`, `engine.quit()`
+* `input.touches()`, `input.touch_x(i)`, `input.touch_y(i)`, `input.touch_down(i)`,
+  `input.key("a")`
+* `print(...)`, `log(...)`, `str(v)`, `len(v)`, `num(text)`
 
-# Development/reference interpreter; text commands are shown as JSON
-python3 tools/dimscriptc.py examples/clicker.ds --run --click 2 --frames 2
+### Engine callbacks
+
+A game implements any subset of: `load()`, `resized(width, height)`,
+`touchpressed(id, touch_x, touch_y)`, `touchmoved(...)`, `touchreleased(...)`,
+`keypressed(name)`, `keyreleased(name)`, `update(dt)`, `draw()`, `quit()`.
+They run in order per frame: input callbacks first, then `update`, then `draw`.
+A script error stops the game loop for that callback, reports the file, line and
+column, and the preview shows it in a banner instead of a black screen.
+
+The VM also enforces a per-frame statement budget and a recursion limit, so a
+mistaken `while true do` in a game fails with a readable error instead of
+freezing the device.
+
+## Game folder and manifest
+
+```text
+games/brick/
+├── game.manifest
+├── main.ds      -- structs, globals, the engine callbacks
+├── blocks.ds    -- level building and physics
+└── hud.ds       -- everything on screen
 ```
 
-The generated file includes `dimscript_runtime.h`. A standalone native build
-therefore only needs the generated C, `src/dimscript_runtime.c`, and
-`-Isrc`; the language runtime itself has no Python dependency.
+`game.manifest` is a flat `key = value` file with `--` comments:
 
-The tracked `src/generated/clicker.c` and `src/generated/clicker.h` are
-produced from `examples/clicker.ds` and are compiled into the Android game.
-After changing the example, regenerate them with the command above.
+```ini
+title = "Кирпич"
+author = "Enjoer"
+package = "com.cb4.brick"
+version = "1.0"
+version_code = 2
+orientation = "sensorLandscape"
+target_fps = 60
+resizeable = true
+clear_color = 0.05 0.08 0.15
+scripts = ["main.ds", "blocks.ds", "hud.ds"]
+```
 
-## Native Vulkan game
+`clear_color` also accepts `"#rrggbb"`. Any `icon`, `icons` or `icon_*` key is
+**rejected with an error**: icons are not supported yet, and a silently ignored
+key is worse than a build that refuses to lie about it. The same rules are
+implemented twice — `src/ds_manifest.c` (device) and `dimscript/manifest.py`
+(host tooling) — and both produce the same defaults.
 
-The game is split at a narrow C ABI boundary:
+Files that the manifest does not list are still loaded, after the listed ones,
+so a forgotten entry is not a silent no-op on disk. An Android build only sees
+what is packaged, which is why `tools/gamepack.py` writes the complete list into
+the packaged copy of the manifest.
 
-- **C** (`src/cube_game.c`) owns lifecycle, time, input and calls the generated
-  DimScript callbacks.
-- **DimScript-generated C** (`src/generated/clicker.c`) owns the clicker state
-  and game callback logic.
-- **C++** (`src/vulkan_cube.cpp`) owns the renderer. Its production path
-  creates a Vulkan instance, Android surface, logical device, swapchain, depth
-  buffer, render pass, graphics pipeline and vertex buffer, and pushes the MVP
-  matrix through push constants. The shaders live in `src/shaders/` as GLSL
-  and are embedded as SPIR-V (`src/shaders/cube_spv.h`).
-- **C runtime** (`src/dimscript_runtime.c`) supplies allocation, fast native
-  values, string concatenation and the font-less render ABI.
+### Packing an APK's data
 
-The preview has a dependency-free C++ raster fallback because a host checkout
-usually has no Android `ANativeWindow`. Android builds use Vulkan when
-`ENJOER_USE_VULKAN=ON` (the default).
+```sh
+python3 tools/gamepack.py games/brick --staging staging
+python3 tools/gamepack.py games/brick --check        # validate, write nothing
+python3 tools/gamepack.py games/brick --print-manifest
+```
+
+`staging/` then holds `assets/game/*.ds`, `assets/game/game.manifest` and a
+generated `AndroidManifest.xml` (package, label, orientation, versions,
+`resizeableActivity`) derived from the game manifest, so the two never disagree.
+`CMakeLists.txt` runs the same tool when `ENJOER_GAME_DIR` is set.
+
+## Building
+
+Everything is built with **clang at `-O3`** — the NDK *is* clang, so host and
+device see the same compiler and optimisation level. `tools/toolchain.sh` picks
+`clang`, falls back to `python3 -m ziglang cc`, and only then to `gcc`.
+
+```sh
+tools/preview/build.sh          # -> ./preview
+sh tools/tests/run.sh           # python + VM + parity + engine/renderer tests
+ASAN=1 sh tools/tests/run.sh    # same tests under -fsanitize=address,undefined
+```
+
+```sh
+# Android (Vulkan is the default and needs no external SDK)
+cmake -B build \
+  -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
+  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 \
+  -DCMAKE_BUILD_TYPE=Release -DENJOER_GAME_DIR=games/brick
+cmake --build build -j
+```
+
+On a device the game folder comes from the APK's `assets/game`; the host reads
+the directory given by `--game` (or `$ENJOER_GAME`).
 
 ### Preview
 
 ```sh
-tools/preview/build.sh
-./preview --port 8090
-# open http://localhost:8090
+./preview --port 8090 --w 960 --h 540 --game games/brick
 ```
 
-The server binds to `0.0.0.0`, and the page uses relative URLs, so the live
-preview also works behind an external HTTPS proxy.
+The server binds `0.0.0.0`, uses relative URLs, and renders on demand: each
+`/frame.jpg` advances one frame, so a backgrounded tab costs nothing.
+`GET /info` reports the title, the mode (`interpreted`/`compiled`), the
+renderer, the last script error and the recorded `render.text` commands, which
+the page overlays in the browser font — the font-less engine and a readable
+debug view at the same time.
 
-Controls:
+Without a `game.manifest` in the folder, the preview runs the ahead-of-time
+compiled `examples/clicker.ds` and shows the cube instead, so a fresh checkout
+is never a blank window.
 
-- drag with the mouse or a finger to orbit the cube;
-- `W A S D` or arrow keys adjust the view;
-- `Space` reverses the automatic spin;
-- `R` resets the cube;
-- a touch-down also enters the DimScript `touchpressed` callback.
-
-### Android + Vulkan
-
-Vulkan ships with the Android NDK (headers and `libvulkan.so`), so there is no
-external GPU dependency to download. A normal Android build is:
+## Ahead-of-time compilation
 
 ```sh
-cmake -B build \
-  -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
-  -DANDROID_ABI=arm64-v8a \
-  -DANDROID_PLATFORM=android-29 \
-  -DANDROID_NDK="$ANDROID_NDK_ROOT" \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
+python3 tools/dimscriptc.py examples/clicker.ds --check
+python3 tools/dimscriptc.py examples/clicker.ds --emit-c \
+  -o src/generated/clicker.c --header src/generated/clicker.h
+python3 tools/dimscriptc.py games/brick --run --frames 3     # whole folder
+python3 tools/dimscriptc.py games/brick --check
 ```
 
-`ENJOER_USE_VULKAN` defaults to `ON`. Passing
-`-DENJOER_USE_VULKAN=OFF` builds the same Android activity with the small
-software fallback drawn through `ANativeWindow_lock`, useful for smoke testing
-on emulators without a Vulkan driver.
+The C backend lowers a program to plain C99 against `src/dimscript_runtime.h`:
+structs become C structs, `render.*` becomes the same batch calls the VM makes,
+and the engine callbacks become `dimscript_load`, `dimscript_update`, … Wrappers
+are emitted for every callback, so a game that implements only `update` still
+links.
 
-### Shaders
-
-`src/shaders/cube.vert` and `src/shaders/cube.frag` are the source of truth.
-After editing them, regenerate the embedded SPIR-V with `glslangValidator`:
-
-```sh
-tools/shaders/compile.sh
-```
+`list`, indexing and list methods exist in the interpreter only. Compiling a
+game that uses them stops with an explicit message pointing at `src/ds_vm.c`
+rather than emitting half a file — which is exactly the case for `games/brick`.
+`src/generated/clicker.c` is the checked-in output of the list-free example and
+is what the fallback path runs.
 
 ## Tests
 
 ```sh
-tools/tests/run.sh
-ASAN=1 tools/tests/run.sh
+sh tools/tests/run.sh
 ```
 
-The regression test covers the DimScript lexer/parser/interpreter/C emitter,
-the C game layer, C++ renderer, pointer/key input, resize handling and the
-rendered frame checksum. The C test also verifies that three text draw calls
-reach the runtime even though the font backend is intentionally disabled.
+1. `tools/tests/dimscript.py` — lexer, parser, interpreter, type checker and the
+   generated C of the example, compared against the checked-in file.
+2. `tools/tests/vm.c` — the native VM: multi-file linking and `require` order,
+   lists, loops, builtins, the render batch, GC staying under a heap bound, and
+   five error paths (unknown name, bad callback arity, missing file, division by
+   zero, statement budget).
+3. `tools/tests/parity.py` — the same brick game on both interpreters, vertex by
+   vertex (1068 vertices, three texts).
+4. `tools/tests/aot.py` — `examples/shapes.ds` compiled to C *and* interpreted,
+   linked as two binaries whose dumps are diffed (`for`/`while`/`break`/`local`,
+   `math.`/`engine.`/`input.`, every render primitive): identical, 1071 vertices.
+5. `tools/tests/cube.c` — the engine boundary: manifest → VM → batch →
+   rasterizer, input reaching a script, resize, and the compiled fallback.
+
+`ASAN=1 sh tools/tests/run.sh` runs all five under
+`-fsanitize=address,undefined`, which is the check the GC and the arena get.
 
 ## Layout
 
 ```text
-dimscript/               Python lexer, AST, parser, interpreter and C compiler
-examples/clicker.ds      DimScript source of the native example
-tools/dimscriptc.py       compiler CLI
-src/dimscript_runtime.*   native runtime ABI (no font implementation yet)
-src/generated/            C/header generated from the example
-src/engine.h              C public game API and Buffer type
-src/cube_game.c           lifecycle/input + DimScript callback host
-src/vulkan_cube.*         C ABI and C++ Vulkan renderer + local fallback
-src/shaders/              GLSL sources and generated SPIR-V header
-src/main.c                Android NativeActivity loop
-game/                     Android manifest and Activity
-tools/preview/            HTTP frame/input preview
-tools/shaders/            SPIR-V regeneration script
-tools/tests/              native and DimScript regression tests
+dimscript/                Python front-end: lexer, AST, parser, checker,
+                          reference interpreter, C backend, manifest, project
+examples/clicker.ds       the original example, also the AOT source
+examples/shapes.ds        loops + builtins + shapes: the AOT/VM parity fixture
+games/brick/              a real multi-file game: manifest + 3 .ds files
+tools/dimscriptc.py       compiler/interpreter CLI
+tools/gamepack.py         packs a game folder and generates AndroidManifest.xml
+tools/toolchain.sh        clang -O3 selection, shared by every build script
+src/ds_vm.*               the shipping interpreter (VM, GC, lists, builtins)
+src/ds_manifest.*         game.manifest reader used at startup
+src/ds_files.*            game folder access: disk on host, assets on Android
+src/enjoer_draw.*         the triangle batch both renderers consume
+src/dimscript_runtime.*   native ABI shared by the VM and generated C
+src/generated/            C + header generated from examples/clicker.ds
+src/engine.h              C game API and Buffer type
+src/cube_game.c           lifecycle, input, manifest, interpreter-vs-AOT choice
+src/vulkan_cube.*         Vulkan renderer (device) and software fallback (host)
+src/shaders/              GLSL sources and the generated SPIR-V header
+src/main.c                Android NativeActivity loop, asset manager wiring
+game/                     Android Activity and the fallback manifest
+tools/preview/            HTTP frame/input preview with the text overlay
+tools/tests/              native, VM, parity and AOT regression tests
 ```

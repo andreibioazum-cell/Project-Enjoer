@@ -1,28 +1,40 @@
 #!/bin/sh
-# Native regression for the small C/C++ cube. ASAN=1 enables sanitizers.
+# Native regression for the whole engine: the Python front-end, the DimScript
+# VM in C, the C game layer and the C++ renderer.  ASAN=1 enables sanitizers.
 set -eu
 cd "$(dirname "$0")/../.."
-python3 tools/tests/dimscript.py
-CC=${CC:-gcc}
-CXX=${CXX:-g++}
-OUT=${BUILD_DIR:-build-tests/cube}
+. tools/toolchain.sh
+enjoer_pick_toolchain
+OUT=${BUILD_DIR:-build-tests}
 mkdir -p "$OUT"
-CFLAGS="-std=c99 -O2 -Wall -Wextra -Werror -I./src"
-CXXFLAGS="-std=c++17 -O2 -Wall -Wextra -Werror -I./src"
-LDFLAGS=""
+rm -f "$OUT"/*.o
+
+SANITIZE=""
 if [ "${ASAN:-0}" = 1 ]; then
-    CFLAGS="$CFLAGS -g -fsanitize=address,undefined -fno-omit-frame-pointer"
-    CXXFLAGS="$CXXFLAGS -g -fsanitize=address,undefined -fno-omit-frame-pointer"
-    LDFLAGS="$LDFLAGS -fsanitize=address,undefined"
+    SANITIZE="-fsanitize=address,undefined -fno-omit-frame-pointer"
+    ENJOER_CFLAGS="$ENJOER_CFLAGS $SANITIZE"
+    ENJOER_CXXFLAGS="$ENJOER_CXXFLAGS $SANITIZE"
 fi
-$CC $CFLAGS -c src/core/log.c -o "$OUT/log.o"
-$CC $CFLAGS -c src/core/state.c -o "$OUT/state.o"
-$CC $CFLAGS -c src/dimscript_runtime.c -o "$OUT/dimscript_runtime.o"
-$CC $CFLAGS -c src/generated/clicker.c -o "$OUT/clicker.o"
-$CC $CFLAGS -c src/cube_game.c -o "$OUT/cube_game.o"
-$CXX $CXXFLAGS -c src/vulkan_cube.cpp -o "$OUT/vulkan_cube.o"
-$CC $CFLAGS -c tools/tests/cube.c -o "$OUT/cube_test.o"
-$CXX "$OUT/log.o" "$OUT/state.o" "$OUT/dimscript_runtime.o" "$OUT/clicker.o" \
-    "$OUT/cube_game.o" "$OUT/vulkan_cube.o" "$OUT/cube_test.o" \
-    $LDFLAGS -lm -o "$OUT/cube"
+
+for source in $(enjoer_c_sources); do
+    $CC $ENJOER_CFLAGS -c "$source" -o "$OUT/$(basename "$source" .c).o"
+done
+$CXX $ENJOER_CXXFLAGS -c src/vulkan_cube.cpp -o "$OUT/vulkan_cube.o"
+$CC $ENJOER_CFLAGS -c tools/tests/cube.c -o "$OUT/cube_test.o"
+$CXX $OUT/*.o $SANITIZE -lm -o "$OUT/cube"
+
+$CC $ENJOER_CFLAGS -c tools/tests/vm.c -o "$OUT/vm_test.o"
+$CC $OUT/ds_vm.o $OUT/ds_vm_heap.o $OUT/ds_vm_lang.o $OUT/ds_vm_exec.o \
+    $OUT/dimscript_runtime.o $OUT/enjoer_draw.o $OUT/vm_test.o $OUT/log.o $OUT/state.o \
+    $SANITIZE -lm -o "$OUT/vm"
+
+$CC $ENJOER_CFLAGS -c tools/tests/frame_dump.c -o "$OUT/frame_dump.o"
+$CC $OUT/ds_vm.o $OUT/ds_vm_heap.o $OUT/ds_vm_lang.o $OUT/ds_vm_exec.o \
+    $OUT/dimscript_runtime.o $OUT/enjoer_draw.o $OUT/ds_manifest.o $OUT/ds_files.o \
+    $OUT/frame_dump.o $OUT/log.o $OUT/state.o $SANITIZE -lm -o "$OUT/frame_dump"
+
+python3 tools/tests/dimscript.py
+"$OUT/vm"
+python3 tools/tests/parity.py
+ENJOER_CC="$CC" python3 tools/tests/aot.py
 "$OUT/cube"

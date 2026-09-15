@@ -1,0 +1,83 @@
+-- Кирпич: HUD.
+--
+-- There is no font backend yet, so every number a player must read is drawn
+-- with shapes: the score becomes a bar, the lives become pips.  render.text is
+-- still called, because the call is recorded by the runtime and shown as an
+-- overlay in the browser preview; on the device it will be rasterized as soon
+-- as a font atlas exists.
+
+draw_hud() {
+    render.color(1.0, 1.0, 1.0)
+    render.text("Кирпич", 20.0, 24.0, 1.0)
+
+    -- Score with the click animation, exactly like the clicker example.
+    render.text("Счёт: " .. game.score, 20.0, 48.0, game.text_scale)
+    draw_score_bar()
+    draw_lives()
+
+    if game.state == 0 then {
+        render.text("Тапни или пробел, чтобы запустить мяч", 20.0, engine.height() - 34.0, 0.85)
+    }
+    if game.state == 2 then {
+        draw_banner(1.0, 0.32, 0.32, "Проигрыш. Тапни, чтобы начать заново")
+    }
+    if game.state == 3 then {
+        draw_banner(0.32, 0.95, 0.55, "Победа. Тапни, чтобы начать заново")
+    }
+}
+
+draw_score_bar() {
+    total = game.blocks.count
+    filled = 0.0
+    if total > 0 then {
+        filled = game.score / total
+    }
+    if filled > 1.0 then {
+        filled = 1.0
+    }
+    width = engine.width() - 40.0
+    render.color(0.20, 0.25, 0.40)
+    render.rect(20.0, 62.0, width, 6.0)
+    render.color(0.42, 0.92, 0.62)
+    render.rect(20.0, 62.0, width * filled, 6.0)
+}
+
+draw_lives() {
+    for index = 0, game.lives - 1 do
+        x = engine.width() - 26.0 - index * 24.0
+        render.color(1.0, 0.45, 0.45)
+        render.circle(x, 30.0, 8.0)
+        render.color(0.05, 0.08, 0.15)
+        render.circle(x, 30.0, 4.0)
+    }
+}
+
+draw_banner(red: float, green: float, blue: float, message: string) {
+    width = math.min(520.0, engine.width() - 40.0)
+    height = 92.0
+    x = engine.width() / 2.0 - width / 2.0
+    y = engine.height() / 2.0 - height / 2.0
+    render.color(0.04, 0.05, 0.10)
+    render.rect(x, y, width, height)
+    render.color(red, green, blue)
+    render.frame(x, y, width, height, 3.0)
+    render.text(message, x + 18.0, y + 28.0, 1.0)
+}
+
+draw_blocks(blocks: list) {
+    for index = 0, blocks.count - 1 do
+        brick = blocks[index]
+        if brick.alive then {
+            render.color(0.30 + brick.shade, 0.45 + brick.shade * 0.7, 0.95)
+            render.rect(brick.x, brick.y, brick.width, brick.height)
+        }
+    }
+}
+
+draw_field() {
+    -- Top wall, so the player sees where the ball bounces without a font.
+    render.color(0.16, 0.20, 0.34)
+    render.rect(0.0, 0.0, engine.width(), 12.0)
+    render.color(0.10, 0.13, 0.24)
+    render.rect(0.0, engine.height() - 6.0, engine.width(), 6.0)
+}

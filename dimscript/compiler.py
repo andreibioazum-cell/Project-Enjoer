@@ -17,13 +17,18 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from .ast import (
     Assign,
     Binary,
+    Break,
     Call,
+    Continue,
     Delete,
     Expr,
     ExprStmt,
+    For,
     FunctionDecl,
     GlobalDecl,
     If,
+    Index,
+    ListLiteral,
     Literal,
     Member,
     Name,
@@ -32,6 +37,7 @@ from .ast import (
     Return,
     Stmt,
     Unary,
+    While,
 )
 from .lexer import DimScriptError
 
@@ -63,20 +69,127 @@ VOID = DType("void")
 NIL = DType("nil")
 UNKNOWN = DType("unknown")
 RENDER = DType("namespace:render")
+MATH = DType("namespace:math")
+ENGINE = DType("namespace:engine")
+INPUT = DType("namespace:input")
+LIST = DType("list")
 
+#: Everything the VM offers on a list value; only `count` is a property.
+LIST_METHODS = frozenset({"push", "insert", "delete", "remove_at", "clear", "index_of", "join",
+                          "count"})
 
-@dataclass
-class SemanticModel:
-    structs: Dict[str, Dict[str, DType]] = field(default_factory=dict)
-    global_types: Dict[str, DType] = field(default_factory=dict)
-    function_params: Dict[str, List[DType]] = field(default_factory=dict)
-    function_returns: Dict[str, DType] = field(default_factory=dict)
-    function_locals: Dict[str, Dict[str, DType]] = field(default_factory=dict)
-    expression_types: Dict[int, DType] = field(default_factory=dict)
-    target_types: Dict[int, DType] = field(default_factory=dict)
+#: What the ahead-of-time backend knows about.  Anything outside it is a clear
+#: error rather than silently missing code — `list` and indexing are the two
+#: constructs the interpreter (src/ds_vm.c) has and compiled games do not.
+NAMESPACE_TYPES = {"render": RENDER, "math": MATH, "engine": ENGINE, "input": INPUT}
 
+#: namespace -> callable name -> (argument count, C call template)
+BUILTIN_CALLS = {
+    "render": {
+        # -1 means "any count the VM accepts": render.color takes three or four
+        # components, the fourth one being alpha.
+        "color": (-1, "ds_render_color({0}, {1}, {2})"),
+        "color_alpha": (4, "ds_render_color_alpha({0}, {1}, {2}, {3})"),
+        "clear": (3, "ds_render_clear({0}, {1}, {2})"),
+        "rect": (4, "ds_render_rect({0}, {1}, {2}, {3})"),
+        "frame": (5, "ds_render_frame({0}, {1}, {2}, {3}, {4})"),
+        "circle": (3, "ds_render_circle({0}, {1}, {2})"),
+        "ring": (4, "ds_render_ring({0}, {1}, {2}, {3})"),
+        "line": (5, "ds_render_line({0}, {1}, {2}, {3}, {4})"),
+        "tri": (6, "ds_render_triangle({0}, {1}, {2}, {3}, {4}, {5})"),
+        "text": (4, "ds_render_text({0}, {1}, {2}, {3})"),
+    },
+    "math": {
+        "floor": (1, "ds_math_floor({0})"),
+        "ceil": (1, "ds_math_ceil({0})"),
+        "round": (1, "ds_math_round({0})"),
+        "abs": (1, "ds_math_abs({0})"),
+        "sign": (1, "ds_math_sign({0})"),
+        "sqrt": (1, "ds_math_sqrt({0})"),
+        "sin": (1, "ds_math_sin({0})"),
+        "cos": (1, "ds_math_cos({0})"),
+        "tan": (1, "ds_math_tan({0})"),
+        "min": (2, "ds_math_min({0}, {1})"),
+        "max": (2, "ds_math_max({0}, {1})"),
+        "mod": (2, "ds_math_mod({0}, {1})"),
+        "pow": (2, "ds_math_pow({0}, {1})"),
+        "lerp": (3, "ds_math_lerp({0}, {1}, {2})"),
+        "random": (-1, "ds_engine_random()"),
+        "pi": (0, "ds_math_pi()"),
+        "e": (0, "ds_math_e()"),
+    },
+    "engine": {
+        "width": (0, "ds_engine_width()"),
+        "height": (0, "ds_engine_height()"),
+        "time": (0, "ds_engine_time()"),
+        "delta": (0, "ds_engine_delta()"),
+        "fps": (0, "ds_engine_fps()"),
+        "frame": (0, "ds_engine_frame()"),
+        "quit": (0, "ds_engine_quit()"),
+    },
+    "input": {
+        "touches": (0, "ds_engine_touch_count()"),
+        "touch_x": (1, "ds_engine_touch_x((int)({0}))"),
+        "touch_y": (1, "ds_engine_touch_y((int)({0}))"),
+        "touch_down": (1, "ds_engine_touch_down((int)({0}))"),
+        "key": (1, "ds_engine_key_down({0})"),
+    },
+}
+
+#: What a builtin *call* evaluates to.  Anything drawing has no result.
+BUILTIN_RETURNS = {
+    ("math", "floor"): FLOAT,
+    ("math", "ceil"): FLOAT,
+    ("math", "round"): FLOAT,
+    ("math", "abs"): FLOAT,
+    ("math", "sign"): INT,
+    ("math", "sqrt"): FLOAT,
+    ("math", "sin"): FLOAT,
+    ("math", "cos"): FLOAT,
+    ("math", "tan"): FLOAT,
+    ("math", "min"): FLOAT,
+    ("math", "max"): FLOAT,
+    ("math", "mod"): FLOAT,
+    ("math", "pow"): FLOAT,
+    ("math", "lerp"): FLOAT,
+    ("math", "random"): FLOAT,
+    ("math", "pi"): FLOAT,
+    ("math", "e"): FLOAT,
+    ("engine", "width"): FLOAT,
+    ("engine", "height"): FLOAT,
+    ("engine", "time"): FLOAT,
+    ("engine", "delta"): FLOAT,
+    ("engine", "fps"): FLOAT,
+    ("engine", "frame"): INT,
+    ("engine", "quit"): VOID,
+    ("input", "touches"): INT,
+    ("input", "touch_x"): FLOAT,
+    ("input", "touch_y"): FLOAT,
+    ("input", "touch_down"): BOOL,
+    ("input", "key"): BOOL,
+}
+
+#: Names that read like a field (`engine.width`) but are really getters.
+BUILTIN_PROPERTIES = {
+    "math": {
+        "pi": "ds_math_pi()",
+        "e": "ds_math_e()",
+    },
+    "engine": {
+        "width": "ds_engine_width()",
+        "height": "ds_engine_height()",
+        "time": "ds_engine_time()",
+        "delta": "ds_engine_delta()",
+        "fps": "ds_engine_fps()",
+        "frame": "ds_engine_frame()",
+    },
+    "input": {
+        "touches": "ds_engine_touch_count()",
+    },
+}
 
 _TYPE_NAMES = {
+    "list": LIST,
     "int": INT,
     "float": FLOAT,
     "string": STRING,
@@ -85,6 +198,20 @@ _TYPE_NAMES = {
     "boolean": BOOL,
     "void": VOID,
 }
+
+
+@dataclass
+class SemanticModel:
+    structs: Dict[str, Dict[str, DType]] = field(default_factory=dict)
+    global_types: Dict[str, DType] = field(default_factory=dict)
+    function_params: Dict[str, List[DType]] = field(default_factory=dict)
+    function_returns: Dict[str, List[DType]] = field(default_factory=dict)
+    function_locals: Dict[str, Dict[str, DType]] = field(default_factory=dict)
+    expression_types: Dict[int, DType] = field(default_factory=dict)
+    target_types: Dict[int, DType] = field(default_factory=dict)
+    loop_variables: Dict[int, str] = field(default_factory=dict)
+    list_types: Dict[int, DType] = field(default_factory=dict)
+    list_expressions: set = field(default_factory=set)
 
 
 def _type_from_name(name: Optional[str], structs: Dict[str, Dict[str, DType]]) -> DType:
@@ -147,12 +274,28 @@ def _default_param_type(function_name: str, parameter_name: str) -> DType:
 
 
 class Analyzer:
+    #: Engine callbacks and how many parameters they receive.  A script may
+    #: implement any subset of them; the rest simply never run.
+    CALLBACK_ARITY = {
+        "load": 0,
+        "resized": 2,
+        "touchpressed": 3,
+        "touchmoved": 3,
+        "touchreleased": 3,
+        "keypressed": 1,
+        "keyreleased": 1,
+        "update": 1,
+        "draw": 0,
+        "quit": 0,
+    }
+
     def __init__(self, program: Program) -> None:
         self.program = program
         self.model = SemanticModel()
         self.functions = {function.name: function for function in program.functions}
         self._current_function: Optional[FunctionDecl] = None
         self._locals: Dict[str, DType] = {}
+        self._loop_depth = 0
 
     def analyze(self) -> SemanticModel:
         self._collect_structs()
@@ -197,13 +340,7 @@ class Analyzer:
                 return_type = VOID
             if return_type.name.startswith("unresolved:"):
                 raise _error(function, f"неизвестный тип результата {function.return_type!r}")
-            callback_arity = {
-                "load": 0,
-                "touchpressed": 3,
-                "update": 1,
-                "draw": 0,
-                "quit": 0,
-            }.get(function.name)
+            callback_arity = self.CALLBACK_ARITY.get(function.name)
             if callback_arity is not None and len(params) != callback_arity:
                 raise _error(function, f"callback {function.name!r} должен иметь {callback_arity} параметр(а)")
             self.model.function_params[function.name] = params
@@ -245,7 +382,7 @@ class Analyzer:
             return
         if isinstance(statement, Delete):
             dtype = self._expression_type(statement.expression, self._locals)
-            if not dtype.is_struct:
+            if not dtype.is_struct and dtype != LIST:
                 raise _error(statement, "delete применим только к объекту struct")
             return
         if isinstance(statement, If):
@@ -263,7 +400,40 @@ class Analyzer:
             if not _compatible(expected, actual):
                 raise _error(statement, f"функция возвращает {_display_type(expected)}, а получено {_display_type(actual)}")
             return
+        if isinstance(statement, While):
+            condition = self._expression_type(statement.condition, self._locals)
+            if condition not in (BOOL, INT, FLOAT, UNKNOWN):
+                raise _error(statement.condition, "условие while должно быть bool или числом")
+            self._analyze_loop_body(statement.body)
+            return
+        if isinstance(statement, For):
+            start = self._expression_type(statement.start, self._locals)
+            stop = self._expression_type(statement.stop, self._locals)
+            if not _is_numeric(start) or not _is_numeric(stop):
+                raise _error(statement, "границы for должны быть числами")
+            if statement.step is not None:
+                step = self._expression_type(statement.step, self._locals)
+                if not _is_numeric(step):
+                    raise _error(statement.step, "шаг for должен быть числом")
+            self._locals[statement.variable] = INT
+            self.model.loop_variables[id(statement)] = statement.variable
+            self._analyze_loop_body(statement.body)
+            return
+        if isinstance(statement, (Break, Continue)):
+            if not self._loop_depth:
+                raise _error(statement, "break/continue возможны только внутри while или for")
+            return
         raise _error(statement, "неизвестная конструкция")
+
+    def _analyze_loop_body(self, body: List[Stmt]) -> None:
+        saved = dict(self._locals)
+        self._loop_depth += 1
+        for child in body:
+            self._analyze_statement(child)
+        self._loop_depth -= 1
+        # A loop variable stays visible as a C local, everything the body
+        # introduced stays in the map because the C function declares it too.
+        del saved
 
     def _target_type(self, target: Expr, value_type: DType) -> DType:
         if isinstance(target, Name):
@@ -300,8 +470,30 @@ class Analyzer:
                 raise _error(expression, f"неизвестное имя {expression.name!r}")
         elif isinstance(expression, Member):
             object_type = self._expression_type(expression.object, locals_)
-            if object_type == RENDER:
-                dtype = DType(f"builtin:{expression.name}")
+            if object_type in (RENDER, MATH, ENGINE, INPUT):
+                namespace = object_type.name.split(":", 1)[1]
+                properties = BUILTIN_PROPERTIES.get(namespace, {})
+                if expression.name in properties:
+                    dtype = FLOAT
+                elif expression.name in BUILTIN_CALLS.get(namespace, {}):
+                    dtype = DType(f"builtin:{expression.name}")
+                else:
+                    raise _error(expression, f"у {namespace} нет свойства {expression.name!r}")
+            elif object_type == LIST:
+                # Elements of a list are only reachable at runtime, so they get
+                # the permissive type; `count` is the one real property.
+                if expression.name == "count":
+                    dtype = INT
+                elif expression.name in LIST_METHODS:
+                    dtype = DType(f"builtin:{expression.name}")
+                else:
+                    raise _error(expression, f"у списка нет свойства {expression.name!r}")
+            elif object_type == UNKNOWN:
+                dtype = UNKNOWN
+            elif object_type == STRING:
+                # The interpreter has a few string properties; compiled games
+                # keep the language subset that maps to plain C.
+                raise _error(expression, f"строка не имеет поля {expression.name!r}; length доступен только в интерпретаторе")
             elif object_type.is_struct:
                 fields = self.model.structs.get(object_type.struct_name, {})
                 if expression.name not in fields:
@@ -339,6 +531,19 @@ class Analyzer:
                 dtype = BOOL
             else:
                 raise _error(expression, f"неизвестный оператор {operator!r}")
+        elif isinstance(expression, Index):
+            # `[i]` reads a number out of a list or a character out of a string;
+            # both are interpreter features, so the checker only types them and
+            # leaves the rejection to the code generator.
+            object_type = self._expression_type(expression.object, locals_)
+            self._expression_type(expression.index, locals_)
+            # Unknown: the element type of a list is only known at runtime, and
+            # the code generator refuses to reach this far anyway.
+            dtype = STRING if object_type == STRING else UNKNOWN
+        elif isinstance(expression, ListLiteral):
+            for item in expression.items:
+                self._expression_type(item, locals_)
+            dtype = LIST
         elif isinstance(expression, Call):
             dtype = self._call_type(expression, locals_)
         else:
@@ -349,26 +554,27 @@ class Analyzer:
 
     def _call_type(self, expression: Call, locals_: Dict[str, DType]) -> DType:
         callee = expression.callee
-        if isinstance(callee, Member) and isinstance(callee.object, Name) and callee.object.name == "render":
-            if callee.name not in {"color", "text"}:
-                raise _error(callee, f"неизвестная функция render.{callee.name}")
-            expected_count = 3 if callee.name == "color" else 4
-            if len(expression.args) != expected_count:
-                raise _error(expression, f"render.{callee.name} ожидает {expected_count} аргумента")
-            for argument in expression.args:
-                self._expression_type(argument, locals_)
-            if callee.name == "color":
-                for argument in expression.args:
-                    if not _is_numeric(self._expression_type(argument, locals_)):
-                        raise _error(argument, "компоненты цвета должны быть числами")
-            else:
-                text_type = self._expression_type(expression.args[0], locals_)
-                if text_type not in (STRING, INT, FLOAT, BOOL, UNKNOWN):
-                    raise _error(expression.args[0], "первый аргумент render.text должен быть текстом или числом")
-                for argument in expression.args[1:]:
-                    if not _is_numeric(self._expression_type(argument, locals_)):
-                        raise _error(argument, "координаты и масштаб текста должны быть числами")
-            return VOID
+        if isinstance(callee, Member) and isinstance(callee.object, Name) and callee.object.name in NAMESPACE_TYPES:
+            namespace = callee.object.name
+            table = BUILTIN_CALLS.get(namespace, {})
+            if callee.name not in table:
+                raise _error(callee, f"нет функции {namespace}.{callee.name}")
+            expected_count, _ = table[callee.name]
+            if expected_count < 0:
+                # Variadic: render.color(r, g, b) and render.color(r, g, b, a).
+                if not 1 <= len(expression.args) <= 6:
+                    raise _error(expression, f"{namespace}.{callee.name} ожидает от 1 до 6 аргументов")
+            elif len(expression.args) != expected_count:
+                plural = "" if expected_count == 1 else "а"
+                raise _error(expression, f"{namespace}.{callee.name} ожидает {expected_count} аргумент{plural}")
+            for index, argument in enumerate(expression.args):
+                dtype = self._expression_type(argument, locals_)
+                if namespace == "render" and callee.name == "text" and index == 0:
+                    if dtype not in (STRING, INT, FLOAT, BOOL, UNKNOWN):
+                        raise _error(argument, "первый аргумент render.text должен быть текстом или числом")
+                elif not _is_numeric(dtype) and dtype not in (STRING, UNKNOWN):
+                    raise _error(argument, f"аргумент {namespace}.{callee.name} должен быть числом")
+            return BUILTIN_RETURNS.get((namespace, callee.name), VOID)
         if isinstance(callee, Name) and callee.name in self.functions:
             params = self.model.function_params[callee.name]
             if len(params) != len(expression.args):
@@ -378,12 +584,31 @@ class Analyzer:
                 if not _compatible(expected, actual):
                     raise _error(argument, f"ожидался {_display_type(expected)}, получено {_display_type(actual)}")
             return self.model.function_returns[callee.name]
-        if isinstance(callee, Name) and callee.name in {"print", "log"}:
-            if len(expression.args) != 1:
-                raise _error(expression, f"{callee.name} ожидает один аргумент")
-            self._expression_type(expression.args[0], locals_)
-            return VOID
-        raise _error(callee, "вызвать можно функцию или render.color/render.text")
+        if isinstance(callee, Name) and callee.name in {"print", "log", "str", "len", "num"}:
+            if callee.name == "str":
+                expected = 1
+            elif callee.name in {"len", "num"}:
+                expected = 1
+            else:
+                expected = -1
+            if expected > 0 and len(expression.args) != expected:
+                raise _error(expression, f"{callee.name} ожидает {expected} аргумент")
+            if expected < 0 and not expression.args:
+                raise _error(expression, f"{callee.name} ожидает аргументы")
+            for argument in expression.args:
+                self._expression_type(argument, locals_)
+            return STRING if callee.name == "str" else (FLOAT if callee.name == "num" else
+                                                        (INT if callee.name == "len" else VOID))
+        if isinstance(callee, Member) and isinstance(callee.object, (Name, Member, Index)):
+            owner = self._expression_type(callee.object, locals_)
+            if owner == LIST:
+                # `list.push(x)` and friends exist in the VM; the expression is
+                # legal, the C backend simply cannot emit it.
+                for argument in expression.args:
+                    self._expression_type(argument, locals_)
+                self.model.list_expressions.add(id(expression))
+                return VOID
+        raise _error(callee, "вызвать можно функцию скрипта или builtin (render./math./engine./input.)")
 
 
 # C code generator -------------------------------------------------------------
@@ -406,12 +631,33 @@ def _c_float(value: float) -> str:
 
 
 class CCompiler:
+    #: name -> (return type, C parameter types) of the `dimscript_*` wrapper
+    #: that the host calls.  A wrapper is emitted for every one of them, so a
+    #: game that implements only `update` still links against the engine.
     CALLBACKS = {
         "load": ("void", []),
+        "resized": ("void", ["float", "float"]),
         "touchpressed": ("void", ["int", "float", "float"]),
+        "touchmoved": ("void", ["int", "float", "float"]),
+        "touchreleased": ("void", ["int", "float", "float"]),
+        "keypressed": ("void", ["const char *"]),
+        "keyreleased": ("void", ["const char *"]),
         "update": ("void", ["float"]),
         "draw": ("void", []),
         "quit": ("void", []),
+    }
+
+    WRAPPER_PARAMS = {
+        "load": "void",
+        "resized": "float width, float height",
+        "touchpressed": "int id, float touch_x, float touch_y",
+        "touchmoved": "int id, float touch_x, float touch_y",
+        "touchreleased": "int id, float touch_x, float touch_y",
+        "keypressed": "const char *name",
+        "keyreleased": "const char *name",
+        "update": "float dt",
+        "draw": "void",
+        "quit": "void",
     }
 
     def __init__(self, program: Program, filename: str = "<string>") -> None:
@@ -426,6 +672,7 @@ class CCompiler:
         self.current_function: Optional[FunctionDecl] = None
 
     def compile(self) -> str:
+        self.reject_unsupported()
         self.emit("/* Generated by DimScript. Do not edit by hand. */")
         self.emit(f"/* Source: {self.filename} */")
         self.emit('#include "dimscript_runtime.h"')
@@ -457,11 +704,7 @@ class CCompiler:
             "#endif",
             "void dimscript_init(void);",
             "void dimscript_shutdown(void);",
-            "void dimscript_load(void);",
-            "void dimscript_touchpressed(int id, float touch_x, float touch_y);",
-            "void dimscript_update(float dt);",
-            "void dimscript_draw(void);",
-            "void dimscript_quit(void);",
+            *[f"void dimscript_{name}({params});" for name, params in self.WRAPPER_PARAMS.items()],
             "#ifdef __cplusplus",
             "}",
             "#endif",
@@ -475,6 +718,40 @@ class CCompiler:
             self.lines.append("    " * self.indent_level + text)
         else:
             self.lines.append("")
+
+    def reject_unsupported(self) -> None:
+        """Lists are a runtime feature: an ahead-of-time build must say so.
+
+        The check runs before any C is emitted, so a game never ends up with a
+        half generated file.  Everything the VM has and the C ABI does not is
+        listed here.
+        """
+
+        from .ast import Node  # local import: the module already imports its children
+
+        def walk(node: object):
+            yield node
+            for child in getattr(node, "__dict__", {}).values() if hasattr(node, "__dict__") else []:
+                if isinstance(child, Node):
+                    yield from walk(child)
+                elif isinstance(child, (list, tuple)):
+                    for item in child:
+                        if isinstance(item, Node):
+                            yield from walk(item)
+
+        roots: List[Node] = list(self.program.functions) + list(self.program.structs)
+        roots += list(self.program.globals)
+        for root in roots:
+            for node in walk(root):
+                if isinstance(node, Index):
+                    raise SemanticError(
+                        f"{self.filename}:{node.line}:{node.column}: список по индексу (list[i]) "
+                        "работает только в интерпретаторе (src/ds_vm.c); для ahead-of-time сборки "
+                        "храните данные в полях struct")
+                if isinstance(node, ListLiteral):
+                    raise SemanticError(
+                        f"{self.filename}:{node.line}:{node.column}: список [..] работает только "
+                        "в интерпретаторе (src/ds_vm.c); для ahead-of-time сборки используйте struct")
 
     def emit_structs(self) -> None:
         for struct in self.program.structs:
@@ -532,6 +809,12 @@ class CCompiler:
         for name, dtype in local_types.items():
             if name not in parameter_names:
                 self.emit(f"{self.c_type(dtype)} {_sanitize(name)} = {self.default_value(dtype)};")
+        # `for i = a, b do` declares its counter as a plain C local so that a
+        # `break` or a later read of the loop variable behaves as in the VM.
+        for statement in function.body:
+            for loop in self._collect_loops(statement):
+                if loop not in local_types and loop not in parameter_names:
+                    self.emit(f"int32_t {_sanitize(loop)} = 0;")
         for statement in function.body:
             self.emit_statement(statement)
         if self.model.function_returns[function.name] == VOID:
@@ -541,33 +824,30 @@ class CCompiler:
         self.current_function = None
 
     def emit_lifecycle_wrappers(self) -> None:
-        for name, (return_c, callback_types) in self.CALLBACKS.items():
+        for name in self.CALLBACKS:
             function = self.functions.get(name)
-            self.emit(f"void dimscript_{name}(" + self.wrapper_params(name) + ") {")
+            declaration = self.wrapper_params(name)
+            self.emit(f"void dimscript_{name}({declaration}) {{")
             self.indent_level += 1
-            if function is not None:
-                args = self.wrapper_args(name, function)
-                self.emit(f"ds_fn_{_sanitize(name)}({args});")
+            if function is None:
+                # A game may implement any subset of the engine callbacks, so a
+                # wrapper always exists; when there is nothing to call it simply
+                # ignores the event.
+                for parameter in _parameter_names(declaration):
+                    self.emit(f"(void){parameter};")
+            else:
+                self.emit(f"if (!ds_program_initialized) return;")
+                self.emit(f"ds_fn_{_sanitize(name)}({self.wrapper_args(name, function)});")
             self.indent_level -= 1
             self.emit("}")
 
     def wrapper_params(self, name: str) -> str:
-        if name == "touchpressed":
-            return "int id, float touch_x, float touch_y"
-        if name == "update":
-            return "float dt"
-        return "void"
+        return self.WRAPPER_PARAMS.get(name, "void")
 
     def wrapper_args(self, name: str, function: FunctionDecl) -> str:
-        if name == "touchpressed":
-            # The canonical callback has these three parameters.  If a script
-            # gives it another count, semantic analysis still describes the
-            # error clearly before code generation reaches here.
-            names = [_sanitize(parameter.name) for parameter in function.params]
-            return ", ".join(names)
-        if name == "update":
-            return ", ".join(_sanitize(parameter.name) for parameter in function.params)
-        return ""
+        # The canonical callbacks have the parameter count the wrapper passes;
+        # a mismatch is reported by semantic analysis before this runs.
+        return ", ".join(_sanitize(parameter.name) for parameter in function.params)
 
     def c_type(self, dtype: DType) -> str:
         if dtype == INT:
@@ -607,18 +887,49 @@ class CCompiler:
             else:
                 self.emit(f"ds_delete((void **)&{self.expression(statement.expression)});")
         elif isinstance(statement, If):
-            self.emit(f"if ({self.expression(statement.condition)}) {{")
+            self.emit(f"if ({self.truthy(statement.condition)}) {{")
             self.indent_level += 1
             for child in statement.then_body:
                 self.emit_statement(child)
             self.indent_level -= 1
             if statement.else_body:
-                self.emit("} else {")
-                self.indent_level += 1
-                for child in statement.else_body:
-                    self.emit_statement(child)
-                self.indent_level -= 1
+                # `else if` parses to a single nested If, which keeps the chain
+                # flat in the C output as well.
+                nested = statement.else_body[0] if len(statement.else_body) == 1 else None
+                if isinstance(nested, If):
+                    self.emit(f"}} else if ({self.truthy(nested.condition)}) {{")
+                    self.indent_level += 1
+                    for child in nested.then_body:
+                        self.emit_statement(child)
+                    self.indent_level -= 1
+                    self._emit_else_chain(nested)
+                else:
+                    self.emit("} else {")
+                    self.indent_level += 1
+                    for child in statement.else_body:
+                        self.emit_statement(child)
+                    self.indent_level -= 1
             self.emit("}")
+        elif isinstance(statement, While):
+            self.emit(f"while ({self.truthy(statement.condition)}) {{")
+            self.indent_level += 1
+            self.emit_body(statement.body)
+            self.indent_level -= 1
+            self.emit("}")
+        elif isinstance(statement, For):
+            variable = _sanitize(statement.variable)
+            start = self.expression(statement.start)
+            stop = self.expression(statement.stop)
+            step = self.expression(statement.step) if statement.step is not None else "1"
+            self.emit(f"for ({variable} = {start}; {variable} <= {stop}; {variable} += ({step})) {{")
+            self.indent_level += 1
+            self.emit_body(statement.body)
+            self.indent_level -= 1
+            self.emit("}")
+        elif isinstance(statement, Break):
+            self.emit("break;")
+        elif isinstance(statement, Continue):
+            self.emit("continue;")
         elif isinstance(statement, Return):
             if statement.expression is None:
                 self.emit("return;")
@@ -626,6 +937,47 @@ class CCompiler:
                 self.emit(f"return {self.expression(statement.expression)};")
         else:
             raise TypeError(f"unsupported statement {statement!r}")
+
+    def _emit_else_chain(self, statement: If) -> None:
+        if not statement.else_body:
+            return
+        nested = statement.else_body[0] if len(statement.else_body) == 1 else None
+        if isinstance(nested, If):
+            self.emit(f"}} else if ({self.truthy(nested.condition)}) {{")
+            self.indent_level += 1
+            for child in nested.then_body:
+                self.emit_statement(child)
+            self.indent_level -= 1
+            self._emit_else_chain(nested)
+        else:
+            self.emit("} else {")
+            self.indent_level += 1
+            for child in statement.else_body:
+                self.emit_statement(child)
+            self.indent_level -= 1
+
+    def _collect_loops(self, statement: Stmt) -> List[str]:
+        """Loop counter names declared by this function (top level only)."""
+
+        if isinstance(statement, For):
+            return [statement.variable]
+        return []
+
+    def emit_body(self, body: List[Stmt]) -> None:
+        for statement in body:
+            self.emit_statement(statement)
+
+    def truthy(self, expression: Expr) -> str:
+        """DimScript truthiness: a number counts when it is not zero."""
+
+        dtype = self.expression_type(expression)
+        value = self.expression(expression)
+        if dtype == BOOL:
+            # `if ((a == b))` is what the expression emitter produces; Clang
+            # reads the doubled parentheses as a mistake, so peel one layer.
+            stripped = _strip_outer_parentheses(value)
+            return stripped if stripped is not None else value
+        return f"({value}) != 0"
 
     def target(self, target: Expr) -> str:
         if isinstance(target, Name):
@@ -647,6 +999,14 @@ class CCompiler:
         return _sanitize(expression.name)
 
     def member(self, expression: Member) -> str:
+        object_type = self.expression_type(expression.object)
+        if object_type.name.startswith("namespace:"):
+            namespace = object_type.name.split(":", 1)[1]
+            getter = BUILTIN_PROPERTIES.get(namespace, {}).get(expression.name)
+            if getter is not None:
+                return getter
+            raise SemanticError(f"{self.filename}: {expression.line}:{expression.column}: "
+                                f"{namespace}.{expression.name} нельзя читать как поле, вызовите функцию")
         return f"{self.expression(expression.object)}->{_sanitize(expression.name)}"
 
     def expression_type(self, expression: Expr) -> DType:
@@ -690,16 +1050,37 @@ class CCompiler:
                 return f"(strcmp({self.as_string(expression.left)}, {self.as_string(expression.right)}) {comparison} 0)"
             return f"({self.expression(expression.left)} {operator} {self.expression(expression.right)})"
         if isinstance(expression, Call):
-            if isinstance(expression.callee, Member) and isinstance(expression.callee.object, Name) and expression.callee.object.name == "render":
-                if expression.callee.name == "color":
-                    args = ", ".join(f"(float)({self.expression(argument)})" for argument in expression.args)
-                    return f"ds_render_color({args})"
-                if expression.callee.name == "text":
-                    text = self.as_string(expression.args[0])
-                    coordinates = ", ".join(f"(float)({self.expression(argument)})" for argument in expression.args[1:])
-                    return f"ds_render_text({text}, {coordinates})"
+            callee = expression.callee
+            if isinstance(callee, Member) and isinstance(callee.object, Name) and callee.object.name in NAMESPACE_TYPES:
+                namespace = callee.object.name
+                entry = BUILTIN_CALLS.get(namespace, {}).get(callee.name)
+                if entry is None:
+                    raise SemanticError(f"{self.filename}:{expression.line}: нет функции {namespace}.{callee.name}")
+                template = entry[1]
+                if namespace == "render" and callee.name == "color" and len(expression.args) >= 4:
+                    template = "ds_render_color_alpha({0}, {1}, {2}, {3})"
+                # Text and key names cross the C boundary as `const char *`,
+                # every other builtin argument is a double.
+                rendered = []
+                for index, argument in enumerate(expression.args):
+                    if namespace == "render" and callee.name == "text" and index == 0:
+                        rendered.append(self.as_string(argument))
+                    elif namespace == "input" and callee.name == "key":
+                        rendered.append(self.as_string(argument))
+                    else:
+                        rendered.append(f"(double)({self.expression(argument)})")
+                return template.format(*rendered)
             if isinstance(expression.callee, Name) and expression.callee.name in {"print", "log"}:
-                return f"ds_log({self.as_string(expression.args[0])})"
+                parts = ", ".join(self.as_string(argument) for argument in expression.args)
+                if len(expression.args) == 1:
+                    return f"ds_log({parts})"
+                return f"ds_log(ds_text_join({len(expression.args)}, {parts}))"
+            if isinstance(expression.callee, Name) and expression.callee.name == "str":
+                return self.as_string(expression.args[0])
+            if isinstance(expression.callee, Name) and expression.callee.name == "num":
+                return f"ds_number_of_text({self.as_string(expression.args[0])})"
+            if isinstance(expression.callee, Name) and expression.callee.name == "len":
+                return f"ds_length_of({self.as_string(expression.args[0])})"
             if isinstance(expression.callee, Name):
                 return f"ds_fn_{_sanitize(expression.callee.name)}({', '.join(self.expression(argument) for argument in expression.args)})"
         raise TypeError(f"unsupported expression {expression!r}")
@@ -716,6 +1097,33 @@ class CCompiler:
         if dtype == BOOL:
             return f"ds_bool_to_string(({value}) != 0)"
         return value
+
+
+def _strip_outer_parentheses(text: str) -> Optional[str]:
+    """`(a == b)` -> `a == b`, or None when the parentheses are not a pair."""
+
+    if not text.startswith("(") or not text.endswith(")"):
+        return None
+    depth = 0
+    for index, character in enumerate(text):
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return text[1:-1].strip() if index == len(text) - 1 else None
+    return None
+
+
+def _parameter_names(declaration: str) -> List[str]:
+    if declaration.strip() == "void":
+        return []
+    names = []
+    for part in declaration.split(","):
+        match = re.search(r"([A-Za-z_][A-Za-z0-9_]*)\s*$", part.strip())
+        if match:
+            names.append(match.group(1))
+    return names
 
 
 def compile_source(source: str, filename: str = "<string>") -> Tuple[str, SemanticModel]:

@@ -43,9 +43,9 @@ static void ds_fn_touchpressed(int32_t id, float touch_x, float touch_y) {
 
 static void ds_fn_update(float dt) {
     (void)dt;
-    if ((game->text_scale > 1.0f)) {
+    if (game->text_scale > 1.0f) {
         game->text_scale = (game->text_scale - (4.0f * dt));
-        if ((game->text_scale < 1.0f)) {
+        if (game->text_scale < 1.0f) {
             game->text_scale = 1.0f;
         }
     }
@@ -53,10 +53,10 @@ static void ds_fn_update(float dt) {
 }
 
 static void ds_fn_draw(void) {
-    ds_render_color((float)(1.0f), (float)(1.0f), (float)(1.0f));
-    ds_render_text("Главное меню", (float)(20.0f), (float)(20.0f), (float)(1.0f));
-    ds_render_text(ds_concat("Счет: ", ds_int_to_string((int64_t)(game->score))), (float)(50.0f), (float)(150.0f), (float)(game->text_scale));
-    ds_render_text("Тапни по экрану, чтобы заработать", (float)(50.0f), (float)(300.0f), (float)(0.8f));
+    ds_render_color((double)(1.0f), (double)(1.0f), (double)(1.0f));
+    ds_render_text("Главное меню", (double)(20.0f), (double)(20.0f), (double)(1.0f));
+    ds_render_text(ds_concat("Счет: ", ds_int_to_string((int64_t)(game->score))), (double)(50.0f), (double)(150.0f), (double)(game->text_scale));
+    ds_render_text("Тапни по экрану, чтобы заработать", (double)(50.0f), (double)(300.0f), (double)(0.8f));
     return;
 }
 
@@ -66,17 +66,42 @@ static void ds_fn_quit(void) {
 }
 
 void dimscript_load(void) {
+    if (!ds_program_initialized) return;
     ds_fn_load();
 }
+void dimscript_resized(float width, float height) {
+    (void)width;
+    (void)height;
+}
 void dimscript_touchpressed(int id, float touch_x, float touch_y) {
+    if (!ds_program_initialized) return;
     ds_fn_touchpressed(id, touch_x, touch_y);
 }
+void dimscript_touchmoved(int id, float touch_x, float touch_y) {
+    (void)id;
+    (void)touch_x;
+    (void)touch_y;
+}
+void dimscript_touchreleased(int id, float touch_x, float touch_y) {
+    (void)id;
+    (void)touch_x;
+    (void)touch_y;
+}
+void dimscript_keypressed(const char *name) {
+    (void)name;
+}
+void dimscript_keyreleased(const char *name) {
+    (void)name;
+}
 void dimscript_update(float dt) {
+    if (!ds_program_initialized) return;
     ds_fn_update(dt);
 }
 void dimscript_draw(void) {
+    if (!ds_program_initialized) return;
     ds_fn_draw();
 }
 void dimscript_quit(void) {
+    if (!ds_program_initialized) return;
     ds_fn_quit();
 }

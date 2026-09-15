@@ -5,6 +5,8 @@
 #endif
 #include "engine.h"
 #include "vulkan_cube.h"
+#include "enjoer_draw.h"
+#include "ds_vm.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -166,12 +168,72 @@ static char *read_html(void) {
     return html;
 }
 
+/* Escape a script string into JSON.  The batch keeps UTF-8 bytes, so only the
+ * characters JSON itself reserves need attention. */
+static void json_escape(const char *text, char *out, size_t capacity) {
+    size_t used = 0;
+    if (capacity < 2) { if (capacity) out[0] = '\0'; return; }
+    for (const unsigned char *cursor = (const unsigned char *)text; cursor && *cursor; ++cursor) {
+        char buffer[8];
+        int n = 0;
+        if (*cursor == '"' || *cursor == '\\') n = snprintf(buffer, sizeof(buffer), "\\%c", *cursor);
+        else if (*cursor == '\n') n = snprintf(buffer, sizeof(buffer), "\\n");
+        else if (*cursor == '\r') n = snprintf(buffer, sizeof(buffer), "\\r");
+        else if (*cursor == '\t') n = snprintf(buffer, sizeof(buffer), "\\t");
+        else if (*cursor < 0x20) n = snprintf(buffer, sizeof(buffer), "\\u%04x", *cursor);
+        else buffer[0] = (char)*cursor, buffer[1] = '\0', n = 1;
+        if (n <= 0 || used + (size_t)n + 1 >= capacity) break;
+        memcpy(out + used, buffer, (size_t)n);
+        used += (size_t)n;
+        out[used] = '\0';
+    }
+    out[used] = '\0';
+}
+
+/* What the browser needs to know about the running game: its name, whether it
+ * is interpreted or compiled, the recorded render.text calls (there is no font
+ * backend yet, so the page paints them) and any error that stopped the script. */
+static int write_info(char *out, size_t capacity) {
+    const EnjoerFrame *frame = enjoer_frame();
+    const DsGameManifest *manifest = game_manifest();
+    char title[256], error[512];
+    json_escape(game_title(), title, sizeof(title));
+    const char *failure = app_failed() ? app_error() : (game_script_error() ? game_script_error() : "");
+    json_escape(failure, error, sizeof(error));
+
+    size_t used = 0;
+    int n = snprintf(out, capacity,
+        "{\"w\":%d,\"h\":%d,\"backend\":\"%s\",\"title\":\"%s\",\"mode\":\"%s\","
+        "\"show_fps\":%d,\"error\":\"%s\",\"texts\":[",
+        screen_w, screen_h, cube_renderer_backend(), title,
+        game_is_interpreted() ? "interpreted" : "compiled",
+        manifest && manifest->show_fps, error);
+    if (n < 0 || (size_t)n >= capacity) return (int)(capacity - 1);
+    used = (size_t)n;
+    for (int index = 0; index < frame->text_count; ++index) {
+        const EnjoerTextCommand *text = &frame->texts[index];
+        char safe[ENJOER_DRAW_TEXT_LENGTH * 2];
+        json_escape(text->text, safe, sizeof(safe));
+        n = snprintf(out + used, capacity - used,
+                     "%s{\"text\":\"%s\",\"x\":%.2f,\"y\":%.2f,\"scale\":%.3f,"
+                     "\"r\":%.3f,\"g\":%.3f,\"b\":%.3f}",
+                     index ? "," : "", safe, (double)text->x, (double)text->y,
+                     (double)text->scale, (double)text->r, (double)text->g, (double)text->b);
+        if (n < 0 || used + (size_t)n + 3 >= capacity) break;
+        used += (size_t)n;
+    }
+    n = snprintf(out + used, capacity - used, "]}");
+    if (n > 0 && used + (size_t)n < capacity) used += (size_t)n;
+    return (int)used;
+}
+
 int main(int argc, char **argv) {
     int port = 8090, width = 960, height = 540;
     for (int i = 1; i + 1 < argc; ++i) {
         if (!strcmp(argv[i], "--port")) port = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--w")) width = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--h")) height = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--game")) game_set_game_dir(argv[++i]);
         else if (!strcmp(argv[i], "--storage") || !strcmp(argv[i], "--assets")) ++i;
     }
     if (width < 64 || height < 64 || width > 4096 || height > 4096 ||
@@ -202,10 +264,11 @@ int main(int argc, char **argv) {
     address.sin_port = htons((uint16_t)port);
     if (bind(server, (struct sockaddr *)&address, sizeof(address)) != 0 ||
         listen(server, 16) != 0) return 1;
-    fprintf(stderr, "Enjoer cube preview: http://0.0.0.0:%d (%dx%d, backend=%s)\n",
-            port, width, height, cube_renderer_backend());
+    fprintf(stderr, "Enjoer preview: http://0.0.0.0:%d (%dx%d, backend=%s, game=%s)\n",
+            port, width, height, cube_renderer_backend(), game_title());
 
-    char request[16384];
+    char request[32768];
+    char info[16384];
     while (running) {
         const int client = accept(server, NULL, NULL);
         if (client < 0) continue;
@@ -223,10 +286,7 @@ int main(int argc, char **argv) {
             http_head(client, 200, "text/html; charset=utf-8", strlen(html));
             send_all(client, html, strlen(html));
         } else if (!strcmp(method, "GET") && !strcmp(path, "/info")) {
-            char info[256];
-            const int n = snprintf(info, sizeof(info),
-                "{\"w\":%d,\"h\":%d,\"backend\":\"%s\"}", width, height,
-                cube_renderer_backend());
+            const int n = write_info(info, sizeof(info));
             http_head(client, 200, "application/json", (size_t)n);
             send_all(client, info, (size_t)n);
         } else if (!strcmp(method, "GET") && !strcmp(path, "/frame.jpg")) {

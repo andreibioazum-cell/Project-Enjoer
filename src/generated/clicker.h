@@ -7,7 +7,12 @@ extern "C" {
 void dimscript_init(void);
 void dimscript_shutdown(void);
 void dimscript_load(void);
+void dimscript_resized(float width, float height);
 void dimscript_touchpressed(int id, float touch_x, float touch_y);
+void dimscript_touchmoved(int id, float touch_x, float touch_y);
+void dimscript_touchreleased(int id, float touch_x, float touch_y);
+void dimscript_keypressed(const char *name);
+void dimscript_keyreleased(const char *name);
 void dimscript_update(float dt);
 void dimscript_draw(void);
 void dimscript_quit(void);

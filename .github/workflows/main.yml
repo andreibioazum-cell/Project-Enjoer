@@ -1,4 +1,4 @@
-name: Build Enjoer cube APK
+name: Build Enjoer game APK
 
 on: [push, workflow_dispatch]
 
@@ -16,8 +16,28 @@ jobs:
         with:
           ndk-version: r25c
 
+      # The host build uses clang at -O3 too, so the tests exercise the same
+      # compiler and optimisation level as the shipping library.
+      - name: Install clang
+        run: |
+          set -eu
+          sudo apt-get update
+          sudo apt-get install -y clang
+          clang --version
+
       - name: Run DimScript and native regression tests
+        env:
+          CC: clang
+          CXX: clang++
         run: tools/tests/run.sh
+
+      - name: Validate and pack the game
+        run: |
+          set -eu
+          python3 tools/gamepack.py games/brick --staging staging
+          test -f staging/assets/game/game.manifest
+          test -f staging/assets/game/main.ds
+          test -f staging/AndroidManifest.xml
 
       # Vulkan comes with the NDK, so the CI APK is the real GPU build.
       - name: Build native library
@@ -29,7 +49,8 @@ jobs:
             -DANDROID_PLATFORM=android-29 \
             -DANDROID_NDK=$ANDROID_NDK_ROOT \
             -DCMAKE_BUILD_TYPE=Release \
-            -DENJOER_USE_VULKAN=ON
+            -DENJOER_USE_VULKAN=ON \
+            -DENJOER_GAME_DIR=games/brick
           cmake --build build-arm64 -j
           mkdir -p staging/lib/arm64-v8a
           cp build-arm64/libds_game.so staging/lib/arm64-v8a/
@@ -37,7 +58,7 @@ jobs:
       - name: Compile Java activity
         run: |
           set -eu
-          mkdir -p build-java staging
+          mkdir -p build-java
           javac -source 8 -target 8 \
             -classpath $ANDROID_HOME/platforms/android-34/android.jar \
             -d build-java \
@@ -52,7 +73,7 @@ jobs:
           set -eu
           BT=$ANDROID_HOME/build-tools/34.0.0
           $BT/aapt package -f \
-            -M game/AndroidManifest.xml \
+            -M staging/AndroidManifest.xml \
             -I $ANDROID_HOME/platforms/android-34/android.jar \
             -F unsigned.apk \
             staging/
