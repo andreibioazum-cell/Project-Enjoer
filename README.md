@@ -214,12 +214,18 @@ the packaged copy of the manifest.
 python3 tools/gamepack.py games/brick --staging staging
 python3 tools/gamepack.py games/brick --check        # validate, write nothing
 python3 tools/gamepack.py games/brick --print-manifest
+# when aapt packs the folder, keep the manifest outside of it:
+python3 tools/gamepack.py games/brick --staging staging --manifest-out apk-manifest/AndroidManifest.xml
 ```
 
-`staging/` then holds `assets/game/*.ds`, `assets/game/game.manifest` and a
+`staging/` then holds `assets/game/*.ds` and `assets/game/game.manifest`, and a
 generated `AndroidManifest.xml` (package, label, orientation, versions,
-`resizeableActivity`) derived from the game manifest, so the two never disagree.
-`CMakeLists.txt` runs the same tool when `ENJOER_GAME_DIR` is set.
+`resizeableActivity`) is derived from the game manifest, so the two never
+disagree. `--manifest-out` writes that file elsewhere, which is what the APK
+step does — `aapt` walks the folder it is given and would otherwise try to store
+a second `AndroidManifest.xml` as a plain file. `CMakeLists.txt` runs the same
+tool when `ENJOER_GAME_DIR` is set (the variable is a `PATH` cache entry, so
+CMake has already made a relative path absolute).
 
 ## Building
 

@@ -39,10 +39,17 @@ jobs:
       - name: Validate and pack the game
         run: |
           set -eu
-          python3 tools/gamepack.py games/brick --staging staging
+          # The manifest goes outside the packaging root: aapt would otherwise
+          # also try to store staging/AndroidManifest.xml as a file.
+          python3 tools/gamepack.py games/brick --staging staging \
+            --manifest-out apk-manifest/AndroidManifest.xml
           test -f staging/assets/game/game.manifest
           test -f staging/assets/game/main.ds
-          test -f staging/AndroidManifest.xml
+          test -f staging/assets/game/blocks.ds
+          test -f staging/assets/game/hud.ds
+          test -f apk-manifest/AndroidManifest.xml
+          grep -q 'package="com.cb4.brick"' apk-manifest/AndroidManifest.xml
+          grep -q 'android:label="Кирпич"' apk-manifest/AndroidManifest.xml
 
       # Vulkan comes with the NDK, so the CI APK is the real GPU build.
       - name: Build native library
@@ -85,12 +92,16 @@ jobs:
       - name: Package APK
         run: |
           set -eu
+          set -o pipefail
           BT=$ANDROID_HOME/build-tools/34.0.0
-          $BT/aapt package -f \
-            -M staging/AndroidManifest.xml \
+          if ! $BT/aapt package -f \
+            -M apk-manifest/AndroidManifest.xml \
             -I $ANDROID_HOME/platforms/android-34/android.jar \
             -F unsigned.apk \
-            staging/
+            staging/ 2>&1 | tee "$RUNNER_TEMP/aapt.log"; then
+            python3 tools/ci/annotate.py "$RUNNER_TEMP/aapt.log"
+            exit 1
+          fi
           $BT/zipalign -v 4 unsigned.apk aligned.apk
           keytool -genkey -v \
             -keystore d.ks \

@@ -154,7 +154,8 @@ def script_files(directory: Path, manifest: GameManifest) -> List[Path]:
     return [path for path in listed + extra if path.exists()]
 
 
-def pack(directory: Path, staging: Path, *, check_only: bool = False) -> GameManifest:
+def pack(directory: Path, staging: Path, *, check_only: bool = False,
+         manifest_out: Optional[Path] = None) -> GameManifest:
     """Validate the game, then stage it.  Returns the resolved manifest."""
 
     directory = directory.resolve()
@@ -190,16 +191,19 @@ def pack(directory: Path, staging: Path, *, check_only: bool = False) -> GameMan
     (target / MANIFEST_NAME).write_text(normalized_manifest_text(directory, manifest), encoding="utf-8")
     for path in scripts:
         shutil.copy2(path, target / path.name)
-    (staging / "AndroidManifest.xml").write_text(android_manifest(manifest), encoding="utf-8")
+    target_manifest = manifest_out or (staging / "AndroidManifest.xml")
+    target_manifest.parent.mkdir(parents=True, exist_ok=True)
+    target_manifest.write_text(android_manifest(manifest), encoding="utf-8")
     return manifest
 
 
-def describe(manifest: GameManifest, staging: Path) -> str:
+def describe(manifest: GameManifest, staging: Path,
+             manifest_out: Optional[Path] = None) -> str:
     return (
         f"{manifest.title} — {manifest.package} v{manifest.version} "
         f"(code {manifest.version_code}, {manifest.orientation}, {manifest.target_fps} fps)\n"
         f"  scripts: {', '.join(manifest.scripts)}\n"
-        f"  manifest: {staging / 'AndroidManifest.xml'}\n"
+        f"  manifest: {manifest_out or staging / 'AndroidManifest.xml'}\n"
         f"  assets:   {staging / 'assets' / 'game'}"
     )
 
@@ -207,20 +211,27 @@ def describe(manifest: GameManifest, staging: Path) -> str:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="gamepack", description=__doc__.splitlines()[0])
     parser.add_argument("game", nargs="?", default="games/brick", help="папка игры (по умолчанию games/brick)")
-    parser.add_argument("--staging", default="staging", help="куда положить assets/ и AndroidManifest.xml")
+    parser.add_argument("--staging", default="staging", help="куда положить assets/game/")
+    parser.add_argument("--manifest-out", default=None,
+                        help="куда писать AndroidManifest.xml (по умолчанию — внутри --staging). "
+                             "aapt не принимает входную папку, в которой уже лежит манифест, "
+                             "поэтому сборщик APK выносит его отдельно.")
     parser.add_argument("--check", action="store_true", help="только проверить, ничего не записывая")
     parser.add_argument("--print-manifest", action="store_true", help="напечатать AndroidManifest.xml в stdout")
     args = parser.parse_args(argv)
 
     try:
-        manifest = pack(Path(args.game), Path(args.staging), check_only=args.check or args.print_manifest)
+        manifest = pack(Path(args.game), Path(args.staging),
+                        check_only=args.check or args.print_manifest,
+                        manifest_out=Path(args.manifest_out) if args.manifest_out else None)
     except (DimScriptError, OSError) as error:
         print(f"gamepack: error: {error}", file=sys.stderr)
         return 2
     if args.print_manifest:
         sys.stdout.write(android_manifest(manifest))
         return 0
-    print(describe(manifest, Path(args.staging)))
+    print(describe(manifest, Path(args.staging),
+                   Path(args.manifest_out) if args.manifest_out else None))
     if args.check:
         print("  check only: ничего не записано")
     return 0

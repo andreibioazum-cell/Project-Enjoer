@@ -19,7 +19,7 @@ import argparse
 import re
 import sys
 
-ERROR_LINE = re.compile(r"(error:|Error:|FAILED|ninja: build stopped|CMake Error"
+ERROR_LINE = re.compile(r"(error:|Error:|ERROR:|FAILED|ninja: build stopped|CMake Error"
                         r"|undefined reference|No such file or directory)")
 NOISE = re.compile(r"^\s*(make\[\d+\]|g?make\s|ninja: entering|In file included from)")
 
