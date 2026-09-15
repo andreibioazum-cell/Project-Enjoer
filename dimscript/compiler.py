@@ -9,17 +9,39 @@ game folder, merges every ``.ds`` file into one program and hands it to
 produces machine code that ships inside the APK — no bytecode, no dispatch
 loop, no runtime type checks, no GC in hot path.
 
-Memory model — manual, like in C:
+Memory model — manual, like in C, with strings as immutable values:
 * ``new X``, ``[]``, string literals, ``..`` are raw malloc via ``ds_alloc``.
   Caller owns the pointer.
-* Assignment ``a = b`` is raw ``a = b`` — no keep/release, no overhead.
-  Sharing is allowed like in C, user must not double-free.
+* Strings are values: storing one (global, local, struct field, list element)
+  duplicates via ``ds_string_replace``/``ds_list_set_string`` and frees the old
+  one, and ``return`` duplicates too — so a stored string is always owned and a
+  borrowed one (literal, param, getter) can never be freed out from under its
+  owner.  Duplication is unobservable: strings have no mutation API.
+* Lists and structs have identity: pushing a struct or a list stores the
+  pointer raw (sharing like in C, user must not double-free), while string
+  lists own private duplicates freed by ``ds_string_dtor``.
+* Assignment of non-strings is raw ``a = b`` — no keep/release, no overhead.
 * ``delete x`` emits ``ds_release_slot(&x)`` which is ``free + NULL``.
-* Lists/strings getters return BORROWED pointers (no keep), setters borrow.
+* Getters return BORROWED pointers; function parameters are borrowed (a callee
+  that wants to keep one duplicates it with ``"" .. param``).
 * ``ds_concat``, ``ds_text_join``, ``ds_*_to_string`` allocate fresh owned string.
 * Struct dtors free owned fields via ``ds_release`` (which is free + dtor).
 * No ``ds_keep``, ``ds_move``, ``ds_assign`` in generated code — speed like C.
 * AOT to machine code: ``tools/aot.py`` -> ``game.c`` -> ``clang -O3`` -> ``.so``.
+* Fresh strings consumed in place (``..`` operands, ``log``/``num``/``len``
+  arguments, ``==`` operands, builtin and user-function string arguments, list
+  push/insert/set items) live in a per-statement temp frame (``__ds_tN``) freed
+  with LIFO ``ds_release`` at the ``;`` — the statement still reads like C, and
+  ASan stays clean.  Only a provably consumed value may be released.
+* Conditions with temps materialize (``int __ds_cN = (cond);``) and free before
+  the branches run; a ``while`` with temps becomes ``for (;;)`` with the check
+  on top, so every pass pays for its own strings, and ``for`` start bounds
+  materialize the same way.  Only ``for`` stop/step bounds stay inline (they
+  re-evaluate per pass, and hoisting them would change side-effect counts) —
+  a fresh string there is pathological and leaks a bounded few per trip.
+* Function parameters are borrowed: a callee that wants to keep a string
+  argument must copy it (``kept = "" .. param``).  The ``dimscript_*`` wrappers
+  free the ``DsString`` they allocate for ``const char *`` parameters.
 """
 
 from __future__ import annotations
@@ -98,6 +120,7 @@ MATH = DType("namespace:math")
 ENGINE = DType("namespace:engine")
 INPUT = DType("namespace:input")
 IMAGE = DType("namespace:image")
+FONT = DType("namespace:font")
 
 
 def list_of(element: DType) -> DType:
@@ -107,7 +130,8 @@ def list_of(element: DType) -> DType:
 LIST_METHODS = frozenset({"push", "insert", "delete", "remove_at", "clear", "index_of", "join",
                           "count"})
 
-NAMESPACE_TYPES = {"render": RENDER, "math": MATH, "engine": ENGINE, "input": INPUT, "image": IMAGE}
+NAMESPACE_TYPES = {"render": RENDER, "math": MATH, "engine": ENGINE, "input": INPUT,
+                   "image": IMAGE, "font": FONT}
 
 
 @dataclass(frozen=True)
@@ -149,12 +173,17 @@ BUILTINS: Dict[str, Dict[str, Builtin]] = {
         "image_region": Builtin(
             9, VOID, "ds_render_image_region((int32_t)({0}), {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8})",
             numbers="float"),
+        "font": Builtin(1, VOID, "ds_render_font((int32_t)({0}))"),
     },
     "image": {
         "load": Builtin(1, INT, "ds_image_load({0})", strings=(0,)),
         "width": Builtin(1, INT, "ds_image_width((int32_t)({0}))"),
         "height": Builtin(1, INT, "ds_image_height((int32_t)({0}))"),
         "count": Builtin(0, INT, "ds_image_count()"),
+    },
+    "font": {
+        "load": Builtin(1, INT, "ds_font_load({0})", strings=(0,)),
+        "count": Builtin(0, INT, "ds_font_count()"),
     },
     "math": {
         "floor": Builtin(1, FLOAT, "ds_math_floor({0})"),
@@ -421,7 +450,7 @@ class ListInference:
             return locals_.get(expression.name, global_types.get(expression.name, UNKNOWN))
         if isinstance(expression, Member):
             owner = self._type(expression.object, function, locals_, global_types)
-            if owner in (RENDER, MATH, ENGINE, INPUT, IMAGE):
+            if owner in (RENDER, MATH, ENGINE, INPUT, IMAGE, FONT):
                 return UNKNOWN
             if owner.name == "list":
                 return INT if expression.name == "count" else UNKNOWN
@@ -974,7 +1003,7 @@ class Analyzer:
 
     def _member_type(self, expression: Member, locals_: Dict[str, DType]) -> DType:
         object_type = self._expression_type(expression.object, locals_)
-        if object_type in (RENDER, MATH, ENGINE, INPUT, IMAGE):
+        if object_type in (RENDER, MATH, ENGINE, INPUT, IMAGE, FONT):
             namespace = object_type.name.split(":", 1)[1]
             properties = BUILTIN_PROPERTIES.get(namespace, {})
             if expression.name in properties:
@@ -1068,7 +1097,7 @@ class Analyzer:
                     raise _error(expression.args[0], "len работает со строкой или списком")
                 return INT
             return VOID
-        raise _error(callee, "вызвать можно функцию скрипта или builtin (render./math./engine./input./image.)")
+        raise _error(callee, "вызвать можно функцию скрипта или builtin (render./math./engine./input./image./font.)")
 
     def _list_call_type(self, expression: Call, callee: Member, owner: DType,
                         locals_: Dict[str, DType]) -> DType:
@@ -1204,6 +1233,9 @@ class CCompiler:
         self.fresh_expression: Optional[int] = None
         self.literals: Dict[str, int] = {}
         self.literal_order: List[str] = []
+        self.temp_frames: List[List[Tuple[str, str]]] = []
+        self.temp_counter = 0
+        self.temps_enabled = True
 
     # -- output helpers ---------------------------------------------------
 
@@ -1212,6 +1244,62 @@ class CCompiler:
             self.lines.append("    " * self.indent_level + text)
         else:
             self.lines.append("")
+
+    # -- temporary string frames ------------------------------------------
+    #
+    # A fresh string consumed in place (an operand of `..`, an argument of
+    # `log`/`num`/`len`, a `==` operand, a builtin string argument) is bound to
+    # a `__ds_tN` variable declared just above the statement and released with
+    # LIFO `ds_release` right below it.  Stored values, `return` results, list
+    # elements and function arguments never enter a frame.
+
+    def temp_push(self) -> None:
+        """Open a frame collecting fresh strings consumed by one statement."""
+        self.temp_frames.append([])
+
+    def temp_pop(self) -> List[Tuple[str, str]]:
+        """Close the current frame and return its (variable, code) pairs."""
+        return self.temp_frames.pop()
+
+    def emit_temp_frame(self, frame: List[Tuple[str, str]]) -> None:
+        for variable, code in frame:
+            self.emit(f"DsString *{variable} = {code};")
+
+    def emit_temp_release(self, frame: List[Tuple[str, str]]) -> None:
+        for variable, _ in reversed(frame):
+            self.emit(f"ds_release((void*){variable});")
+
+    def emit_line_with_temps(self, line: str) -> None:
+        """Emit one statement, freeing the fresh strings it consumed in place."""
+        frame = self.temp_pop()
+        self.emit_temp_frame(frame)
+        self.emit(line)
+        self.emit_temp_release(frame)
+
+    def build_check(self, expression: Expr) -> Tuple[str, List[Tuple[str, str]]]:
+        """Build a condition, returning its code plus the temps it consumed.
+
+        The caller materializes the check (``int __ds_cN = (cond);``) and frees
+        the frame before the branches run, so every iteration pays for exactly
+        the strings it built: an `if` frees before the body, a `while` frees
+        on every pass through a desugared loop.  An empty frame keeps the
+        plain `if (cond)` / `while (cond)` shape.
+        """
+        self.temp_push()
+        code = self.truthy(expression)
+        return code, self.temp_pop()
+
+    def alloc_scratch(self) -> str:
+        """A unique `__ds_cN` name for a materialized check or loop bound."""
+        variable = f"__ds_c{self.temp_counter}"
+        self.temp_counter += 1
+        return variable
+
+    def emit_check(self, variable: str, code: str, frame: List[Tuple[str, str]]) -> None:
+        """Emit a materialized check: temps, the cached value, the release."""
+        self.emit_temp_frame(frame)
+        self.emit(f"int {variable} = ({code});")
+        self.emit_temp_release(frame)
 
     def compile(self) -> str:
         self.emit("/* Generated by DimScript (tools/aot.py). Do not edit by hand. */")
@@ -1313,6 +1401,8 @@ class CCompiler:
         return "0"
 
     def element_dtor(self, element: DType) -> str:
+        if element == STRING:
+            return "ds_string_dtor"
         if not element.is_struct:
             return "NULL"
         struct = self.structs_by_name[element.struct_name]
@@ -1400,13 +1490,20 @@ class CCompiler:
     # -- lifecycle --------------------------------------------------------
 
     def emit_lifecycle(self) -> None:
+        self.temp_counter = 0
         self.emit("void dimscript_init(void) {")
         self.indent_level += 1
         self.emit("if (ds_program_initialized) return;")
-        self.emit("ds_literals = ds_intern_literals(ds_literal_sources, "
-                  f"{len(self.literal_order) or 1});")
+        # The count is derived from the pool array itself, not frozen here:
+        # the global initialisers below register their own literals, so any
+        # len() taken now would undercount and ds_literals[N] would read out
+        # of bounds (an empty pool still emits one {NULL, 0} row, hence the
+        # division stays exact in every case).
+        self.emit("ds_literals = ds_intern_literals(ds_literal_sources, (int)(sizeof(ds_literal_sources) / "
+                  "sizeof(ds_literal_sources[0])));")
         for declaration in self.program.globals:
-            self.emit_assignment(self.global_c_names[declaration.name], declaration.value)
+            self.emit_assignment(self.global_c_names[declaration.name], declaration.value,
+                                 self.model.global_types[declaration.name])
         self.emit("ds_program_initialized = 1;")
         self.indent_level -= 1
         self.emit("}")
@@ -1435,15 +1532,21 @@ class CCompiler:
                 self.emit("if (!ds_program_initialized) return;")
                 # MANUAL MEMORY: convert const char* -> DsString* when needed, speed like C
                 args = []
+                converted: List[str] = []
                 for param, dtype in zip(function.params, self.model.function_params[function.name]):
                     cname = _sanitize(param.name)
                     if dtype == STRING:
                         # wrapper has const char* name, convert to DsString*
-                        self.emit(f"DsString * {cname}_s = ds_string_new({cname}, {cname} ? strlen({cname}) : 0);")
+                        self.emit(f"DsString *{cname}_s = ds_string_new({cname}, {cname} ? strlen({cname}) : 0);")
                         args.append(f"{cname}_s")
+                        converted.append(f"{cname}_s")
                     else:
                         args.append(cname)
                 self.emit(f"ds_fn_{_sanitize(callback)}({', '.join(args)});")
+                # Parameters are borrowed: the callee must copy a string it
+                # wants to keep, and the wrapper frees its conversions.
+                for cname in converted:
+                    self.emit(f"ds_release((void*){cname});")
             self.indent_level -= 1
             self.emit("}")
         self.emit("")
@@ -1460,6 +1563,7 @@ class CCompiler:
 
     def emit_user_function(self, function: FunctionDecl) -> None:
         self.current_function = function
+        self.temp_counter = 0
         params = self.model.function_params[function.name]
         return_type = self.model.function_returns[function.name]
         parameter_text = ", ".join(
@@ -1503,13 +1607,21 @@ class CCompiler:
             self.emit_assignment_target(statement.target, statement.value)
             return
         if isinstance(statement, ExprStmt):
-            self.emit(f"{self.value(statement.expression)[0]};")
+            self.temp_push()
+            line = f"{self.value(statement.expression)[0]};"
+            self.emit_line_with_temps(line)
             return
         if isinstance(statement, Delete):
             self.emit_delete(statement.expression)
             return
         if isinstance(statement, If):
-            self.emit(f"if ({self.truthy(statement.condition)}) {{")
+            code, frame = self.build_check(statement.condition)
+            if frame:
+                scratch = self.alloc_scratch()
+                self.emit_check(scratch, code, frame)
+                self.emit(f"if ({scratch}) {{")
+            else:
+                self.emit(f"if ({code}) {{")
             self.indent_level += 1
             for child in statement.then_body:
                 self.emit_statement(child)
@@ -1517,12 +1629,30 @@ class CCompiler:
             if statement.else_body:
                 nested = statement.else_body[0] if len(statement.else_body) == 1 else None
                 if isinstance(nested, If):
-                    self.emit(f"}} else if ({self.truthy(nested.condition)}) {{")
-                    self.indent_level += 1
-                    for child in nested.then_body:
-                        self.emit_statement(child)
-                    self.indent_level -= 1
-                    self._emit_else_chain(nested)
+                    code, frame = self.build_check(nested.condition)
+                    if frame:
+                        # Desugared: the check runs inside the else block and
+                        # frees before the nested if; the "}" below then closes
+                        # this else block, whatever the chain opened inside.
+                        scratch = self.alloc_scratch()
+                        self.emit("} else {")
+                        self.indent_level += 1
+                        self.emit_check(scratch, code, frame)
+                        self.emit(f"if ({scratch}) {{")
+                        self.indent_level += 1
+                        for child in nested.then_body:
+                            self.emit_statement(child)
+                        self.indent_level -= 1
+                        self._emit_else_chain(nested)
+                        self.emit("}")
+                        self.indent_level -= 1
+                    else:
+                        self.emit(f"}} else if ({code}) {{")
+                        self.indent_level += 1
+                        for child in nested.then_body:
+                            self.emit_statement(child)
+                        self.indent_level -= 1
+                        self._emit_else_chain(nested)
                 else:
                     self.emit("} else {")
                     self.indent_level += 1
@@ -1532,18 +1662,53 @@ class CCompiler:
             self.emit("}")
             return
         if isinstance(statement, While):
-            self.emit(f"while ({self.truthy(statement.condition)}) {{")
-            self.indent_level += 1
-            for child in statement.body:
-                self.emit_statement(child)
-            self.indent_level -= 1
-            self.emit("}")
+            code, frame = self.build_check(statement.condition)
+            if frame:
+                # Desugared: the check runs on top of every pass and frees
+                # before the body, so each iteration pays for its own strings.
+                # A body's break/continue keeps working: both land back on the
+                # check, exactly like a plain while.
+                scratch = self.alloc_scratch()
+                self.emit("for (;;) {")
+                self.indent_level += 1
+                self.emit_check(scratch, code, frame)
+                self.emit(f"if (!{scratch}) break;")
+                for child in statement.body:
+                    self.emit_statement(child)
+                self.indent_level -= 1
+                self.emit("}")
+            else:
+                self.emit(f"while ({code}) {{")
+                self.indent_level += 1
+                for child in statement.body:
+                    self.emit_statement(child)
+                self.indent_level -= 1
+                self.emit("}")
             return
         if isinstance(statement, For):
             variable = _sanitize(statement.variable)
+            # The start bound runs once, so its temps materialize eagerly; the
+            # stop/step bounds re-evaluate every iteration and stay inline —
+            # hoisting them would either leak across passes or change how many
+            # times a bound with side effects runs.  A fresh string in a
+            # numeric bound means num()/len() of a fresh value, which is
+            # pathological; this is the one place the compiler knowingly
+            # leaves such values inline (bounded by the trip count).
+            self.temp_push()
             start = self.value(statement.start)[0]
-            stop = self.value(statement.stop)[0]
-            step = self.value(statement.step)[0] if statement.step is not None else "1"
+            start_frame = self.temp_pop()
+            enabled, self.temps_enabled = self.temps_enabled, False
+            try:
+                stop = self.value(statement.stop)[0]
+                step = self.value(statement.step)[0] if statement.step is not None else "1"
+            finally:
+                self.temps_enabled = enabled
+            if start_frame:
+                scratch = self.alloc_scratch()
+                self.emit_temp_frame(start_frame)
+                self.emit(f"int32_t {scratch} = (int32_t)({start});")
+                self.emit_temp_release(start_frame)
+                start = scratch
             self.emit(f"for ({variable} = (int32_t)({start}); {variable} <= (int32_t)({stop}); "
                       f"{variable} += (int32_t)({step})) {{")
             self.indent_level += 1
@@ -1565,9 +1730,46 @@ class CCompiler:
             if statement.expression is None:
                 self.emit(self.return_statement(return_type, None))
                 return
-            code, fresh = self.value(statement.expression)
-            # manual: direct return, no keep/release
-            self.emit(f"return {code};")
+            self.temp_push()
+            code, _fresh = self.value(statement.expression)
+            frame = self.temp_pop()
+            if return_type == STRING:
+                # String returns are always owned: the caller frees or stores
+                # them.  A fresh result is materialized into a temp so the
+                # original joins the frame (declared last, released first —
+                # its operands are the earlier temps), and the duplicate is
+                # what the caller receives.  A borrowed one (param, global,
+                # literal, member) is duplicated as-is.
+                if self.is_fresh_owned(statement.expression):
+                    dup = self.alloc_scratch()
+                    original = f"__ds_t{self.temp_counter}"
+                    self.temp_counter += 1
+                    frame.append((original, code))
+                    self.emit_temp_frame(frame)
+                    self.emit(f"DsString *{dup} = ds_string_dup({original});")
+                    self.emit_temp_release(frame)
+                    self.emit(f"return {dup};")
+                else:
+                    self.emit_temp_frame(frame)
+                    self.emit_temp_release(frame)
+                    self.emit(f"return ds_string_dup({code});")
+            elif return_type == VOID:
+                # `return f()` with a void call: run it, free its temps, leave.
+                self.emit_temp_frame(frame)
+                if frame:
+                    self.emit(f"{code};")
+                    self.emit_temp_release(frame)
+                self.emit("return;")
+            elif frame:
+                # The value must survive its own temps: materialize, free, hand
+                # over.  (Releasing first would use the temps after freeing.)
+                scratch = self.alloc_scratch()
+                self.emit_temp_frame(frame)
+                self.emit(f"{self.c_type(return_type)} {scratch} = ({code});")
+                self.emit_temp_release(frame)
+                self.emit(f"return {scratch};")
+            else:
+                self.emit(f"return {code};")
             return
         raise TypeError(f"unsupported statement {statement!r}")
 
@@ -1576,12 +1778,27 @@ class CCompiler:
             return
         nested = statement.else_body[0] if len(statement.else_body) == 1 else None
         if isinstance(nested, If):
-            self.emit(f"}} else if ({self.truthy(nested.condition)}) {{")
-            self.indent_level += 1
-            for child in nested.then_body:
-                self.emit_statement(child)
-            self.indent_level -= 1
-            self._emit_else_chain(nested)
+            code, frame = self.build_check(nested.condition)
+            if frame:
+                scratch = self.alloc_scratch()
+                self.emit("} else {")
+                self.indent_level += 1
+                self.emit_check(scratch, code, frame)
+                self.emit(f"if ({scratch}) {{")
+                self.indent_level += 1
+                for child in nested.then_body:
+                    self.emit_statement(child)
+                self.indent_level -= 1
+                self._emit_else_chain(nested)
+                self.emit("}")
+                self.indent_level -= 1
+            else:
+                self.emit(f"}} else if ({code}) {{")
+                self.indent_level += 1
+                for child in nested.then_body:
+                    self.emit_statement(child)
+                self.indent_level -= 1
+                self._emit_else_chain(nested)
         else:
             self.emit("} else {")
             self.indent_level += 1
@@ -1590,19 +1807,25 @@ class CCompiler:
             self.indent_level -= 1
 
     def emit_delete(self, expression: Expr) -> None:
+        self.temp_push()
         slot = self.slot(expression)
         # manual memory like C: free + NULL
-        self.emit(f"ds_release_slot((void **)&{slot});")
+        line = f"ds_release_slot((void **)&{slot});"
+        self.emit_line_with_temps(line)
 
     def emit_assignment_target(self, target: Expr, value: Expr) -> None:
         # STRICT COMPILER, MANUAL MEMORY, SPEED LIKE C — no ds_keep/move/assign
         if isinstance(target, Index):
+            self.temp_push()
             list_type = self.expression_type(target.object)
             element = self.require_element(list_type.element, target)
             list_code = self.value(target.object)[0]
             index = self.value(target.index)[0]
-            # direct value, no ownership tracking
-            val_code = self.value(value)[0]
+            # ds_list_set_string duplicates: a fresh value is freed with the frame.
+            if element == STRING:
+                val_code = self.owned_string(value)
+            else:
+                val_code = self.value(value)[0]
             setter = {
                 "DS_ELEM_FLOAT": "ds_list_set_float",
                 "DS_ELEM_INT": "ds_list_set_int",
@@ -1612,22 +1835,40 @@ class CCompiler:
                 "DS_ELEM_OBJECT": "ds_list_set_object",
             }[self.element_kind(element)]
             cast = "" if element in (FLOAT, INT, BOOL) else f"({self.c_type(element)})"
-            self.emit(f"{setter}({list_code}, (int64_t)({index}), {cast}{val_code});")
+            line = f"{setter}({list_code}, (int64_t)({index}), {cast}{val_code});"
+            self.emit_line_with_temps(line)
             return
         if isinstance(target, Name):
             name = self.assignable_name(target)
-            self.emit_assignment(name, value)
+            self.emit_assignment(name, value, self.expression_type(target))
             return
         if isinstance(target, Member):
+            self.temp_push()
             slot = self.member(target)
-            # direct assignment like C
-            self.emit(f"{slot} = {self.value(value)[0]};")
+            if self.expression_type(target) == STRING:
+                # Struct fields own their strings (the struct dtor frees them).
+                line = f"ds_string_replace((DsString **)&{slot}, {self.owned_string(value)});"
+            else:
+                line = f"{slot} = {self.value(value)[0]};"
+            self.emit_line_with_temps(line)
             return
         raise TypeError(f"unsupported assignment target {target!r}")
 
-    def emit_assignment(self, target: str, value: Expr) -> None:
-        # MANUAL MEMORY: raw assignment, speed like C, no refcount
-        self.emit(f"{target} = {self.value(value)[0]};")
+    def emit_assignment(self, target: str, value: Expr, dtype: DType) -> None:
+        self.temp_push()
+        if dtype == STRING and not self.is_param_slot(target):
+            # Strings are immutable values: storing duplicates and frees the
+            # old one, so globals and locals always own their strings.  Params
+            # stay raw — the incoming value is borrowed, never owned.
+            line = f"ds_string_replace((DsString **)&{target}, {self.owned_string(value)});"
+        else:
+            line = f"{target} = {self.value(value)[0]};"
+        self.emit_line_with_temps(line)
+
+    def is_param_slot(self, target: str) -> bool:
+        if self.current_function is None:
+            return False
+        return target in {_sanitize(parameter.name) for parameter in self.current_function.params}
 
     def assignable_name(self, expression: Name) -> str:
         return self.name(expression)
@@ -1641,12 +1882,12 @@ class CCompiler:
 
     def truthy(self, expression: Expr) -> str:
         dtype = self.expression_type(expression)
+        if dtype == STRING:
+            return f"(ds_string_length({self.owned_string(expression)}) != 0)"
         code = self.value(expression)[0]
         if dtype == BOOL:
             stripped = _strip_outer_parentheses(code)
             return stripped if stripped is not None else code
-        if dtype == STRING:
-            return f"(ds_string_length({code}) != 0)"
         if dtype.is_handle:
             return f"({code} != NULL)"
         return f"({code}) != 0"
@@ -1740,10 +1981,36 @@ class CCompiler:
         code = self.value(expression)[0]
         return f"(double)({code})"
 
-    def owned_string(self, expression: Expr) -> str:
-        # MANUAL: no keep, direct
+    def is_fresh_string(self, expression: Expr) -> bool:
+        """True when the expression provably allocates a new string value.
+
+        Only these shapes are ever released after the statement: assignment
+        targets, ``return`` results, list elements and function arguments are
+        handled by other paths and never touch this predicate.
+        """
+        if isinstance(expression, Binary) and expression.operator == "..":
+            return True
+        if isinstance(expression, Index):
+            return self.expression_type(expression.object) == STRING
+        if isinstance(expression, Call):
+            callee = expression.callee
+            if isinstance(callee, Name) and callee.name == "str" and expression.args:
+                argument = expression.args[0]
+                dtype = self.expression_type(argument)
+                return dtype != STRING or self.is_fresh_string(argument)
+            if (isinstance(callee, Member) and callee.name == "join"
+                    and self.expression_type(callee.object).name == "list"):
+                return True
+            # String returns are always duplicated at the `return`, so every
+            # user call that yields a string hands over an owned value.
+            if isinstance(callee, Name) and callee.name in self.functions:
+                return self.model.function_returns[callee.name] == STRING
+        return False
+
+    def owned_string_raw(self, expression: Expr) -> str:
+        """Inline string value with no temp tracking (escapes or converts)."""
         dtype = self.expression_type(expression)
-        code, fresh = self.value(expression)
+        code, _fresh = self.value(expression)
         if dtype == STRING:
             return code
         if dtype == INT:
@@ -1752,6 +2019,24 @@ class CCompiler:
             return f"ds_float_to_string((double)({code}))"
         if dtype == BOOL:
             return f"ds_bool_to_string(({code}) != 0)"
+        return code
+
+    def is_fresh_owned(self, expression: Expr) -> bool:
+        """True when :meth:`owned_string_raw` returns a fresh allocation."""
+        dtype = self.expression_type(expression)
+        if dtype != STRING:
+            return dtype in (INT, FLOAT, BOOL)
+        return self.is_fresh_string(expression)
+
+    def owned_string(self, expression: Expr) -> str:
+        """A string consumed in place: fresh values join the statement temps."""
+        code = self.owned_string_raw(expression)
+        if (self.temps_enabled and self.temp_frames
+                and self.is_fresh_owned(expression)):
+            variable = f"__ds_t{self.temp_counter}"
+            self.temp_counter += 1
+            self.temp_frames[-1].append((variable, code))
+            return variable
         return code
 
     def index_read(self, expression: Index) -> Tuple[str, bool]:
@@ -1788,7 +2073,9 @@ class CCompiler:
             return f"ds_list_new({kind}, {self.element_size(element)}, {self.element_dtor(element)}, 0)"
         values = []
         for item in expression.items:
-            code, fresh = self.value(item)
+            # String literals duplicate inside ds_list_of_strings; fresh items
+            # are the statement's temps.
+            code = self.owned_string(item) if element == STRING else self.value(item)[0]
             values.append(code)
         if element in (FLOAT,):
             casted = ", ".join(f"(double)({value})" for value in values)
@@ -1821,8 +2108,15 @@ class CCompiler:
             if owner.name == "list":
                 return self.list_call(callee, expression), self.builtin_is_fresh("list", callee.name)
         if isinstance(callee, Name) and callee.name in self.functions:
-            # MANUAL: direct args, no keep, speed like C
-            arguments = [self.value(argument)[0] for argument in expression.args]
+            # Parameters are borrowed: a fresh string argument is the caller's
+            # temp and joins the statement frame (a callee that wants to keep
+            # one duplicates it with `"" .. param`).
+            params = self.model.function_params[callee.name]
+            assert len(params) == len(expression.args)
+            arguments = [
+                self.owned_string(argument) if dtype == STRING else self.value(argument)[0]
+                for argument, dtype in zip(expression.args, params)
+            ]
             call_code = f"ds_fn_{_sanitize(callee.name)}({', '.join(arguments)})"
             # fresh if returns handle (allocates)
             return call_code, self.model.function_returns[callee.name].is_handle
@@ -1830,18 +2124,24 @@ class CCompiler:
             parts = [self.owned_string(argument) for argument in expression.args]
             if len(parts) == 1:
                 return f"ds_log({parts[0]})", False
-            return f"ds_log(ds_text_join({len(parts)}, {', '.join(parts)}))", False
+            joined = f"ds_text_join({len(parts)}, {', '.join(parts)})"
+            if self.temps_enabled and self.temp_frames:
+                variable = f"__ds_t{self.temp_counter}"
+                self.temp_counter += 1
+                self.temp_frames[-1].append((variable, joined))
+                return f"ds_log({variable})", False
+            return f"ds_log({joined})", False
         if isinstance(callee, Name) and callee.name == "str":
-            return self.owned_string(expression.args[0]), True
+            # The caller owns the result, so it stays raw and never joins temps.
+            return self.owned_string_raw(expression.args[0]), True
         if isinstance(callee, Name) and callee.name == "num":
             return f"ds_number_of_text({self.owned_string(expression.args[0])})", False
         if isinstance(callee, Name) and callee.name == "len":
             argument = expression.args[0]
             dtype = self.expression_type(argument)
-            code = self.value(argument)[0]
             if dtype == STRING:
-                return f"ds_string_length({code})", False
-            return f"ds_list_count({code})", False
+                return f"ds_string_length({self.owned_string(argument)})", False
+            return f"ds_list_count({self.value(argument)[0]})", False
         raise TypeError(f"unsupported call {expression!r}")
 
     def builtin_is_fresh(self, namespace: str, name: str) -> bool:
@@ -1849,7 +2149,7 @@ class CCompiler:
 
         if namespace == "render":
             return False
-        if namespace == "math" or namespace == "engine" or namespace == "input" or namespace == "image":
+        if namespace in ("math", "engine", "input", "image", "font"):
             return False
         if namespace == "list":
             return name == "join"
@@ -1895,14 +2195,21 @@ class CCompiler:
         }[kind]
         name = callee.name
         if name == "push":
-            # MANUAL: direct, no keep
-            value = self.value(expression.args[0])[0] if element.is_handle else self.element_value(
-                expression.args[0], element)
+            # String lists own private duplicates; a fresh value is the
+            # statement's temp and is freed after the push duplicated it.
+            if element == STRING:
+                value = self.owned_string(expression.args[0])
+            else:
+                value = self.value(expression.args[0])[0] if element.is_handle else self.element_value(
+                    expression.args[0], element)
             return f"ds_list_push_{suffix}({code}, {value})"
         if name == "insert":
             index = self.value(expression.args[0])[0]
-            value = self.value(expression.args[1])[0] if element.is_handle else self.element_value(
-                expression.args[1], element)
+            if element == STRING:
+                value = self.owned_string(expression.args[1])
+            else:
+                value = self.value(expression.args[1])[0] if element.is_handle else self.element_value(
+                    expression.args[1], element)
             return f"ds_list_insert_{suffix}({code}, (int64_t)({index}), {value})"
         if name in ("delete", "remove_at"):
             index = self.value(expression.args[0])[0]
@@ -1960,6 +2267,29 @@ class CCompiler:
 
     def expression_type(self, expression: Expr) -> DType:
         return self.model.expression_types.get(id(expression), UNKNOWN)
+
+
+def compile_program(program: Program, filename: str = "<string>") -> Tuple[str, SemanticModel]:
+    compiler = CCompiler(program, filename=filename)
+    return compiler.compile(), compiler.model
+
+
+def compile_header(program: Optional[Program] = None, filename: str = "<string>") -> str:
+    program = program or Program(line=1, column=1)
+    return CCompiler(program, filename=filename).header()
+
+
+def compile_source(source: str, filename: str = "<string>") -> Tuple[str, SemanticModel]:
+    from .parser import parse
+
+    return compile_program(parse(source, filename=filename), filename=filename)
+
+
+def compile_project(project, name: Optional[str] = None) -> Tuple[str, SemanticModel]:
+    """Compile a loaded game folder (see dimscript.project.load_project)."""
+
+    filenames = ", ".join(script.name for script in getattr(project, "scripts", []))
+    return compile_program(project.program, filename=name or filenames or "<game>")
 
 
 def compile_program(program: Program, filename: str = "<string>") -> Tuple[str, SemanticModel]:

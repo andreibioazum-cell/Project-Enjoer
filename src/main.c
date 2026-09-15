@@ -1,5 +1,5 @@
 /* Android native activity entry point. Vulkan owns the window surface; C only
- * forwards lifecycle and input events to the small cube game layer. */
+ * forwards lifecycle and input events to the small 2D game layer. */
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -42,7 +42,7 @@ static void handle_command(struct android_app *app, int32_t command) {
         if (screen_w < 1 || screen_h < 1) return;
         game_shutdown();
         app_clear_error();
-        if (!app_call(protected_init, app->window, "cube init")) return;
+        if (!app_call(protected_init, app->window, "game init")) return;
         initialized = 1;
         active = 1;
         previous_ns = 0;
@@ -141,7 +141,7 @@ void android_main(struct android_app *app) {
      * .ds files next to it are the whole project, read through the asset
      * manager so the same folder layout works on a device and on disk. */
     ds_files_set_asset_manager(app->activity->assetManager);
-    app_log("Enjoer: native C game + C++ Vulkan cube");
+    app_log("Enjoer: native C game + C++ Vulkan 2D renderer");
 
     for (;;) {
         struct android_poll_source *source = NULL;
@@ -159,8 +159,8 @@ void android_main(struct android_app *app) {
         const uint64_t now = monotonic_ns();
         dt = previous_ns ? (double)(now - previous_ns) / 1000000000.0 : 0.0;
         previous_ns = now;
-        if (!app_call(protected_update, NULL, "cube update") ||
-            !app_call(protected_draw, NULL, "cube draw")) {
+        if (!app_call(protected_update, NULL, "game update") ||
+            !app_call(protected_draw, NULL, "game draw")) {
             active = 0;
             app_log_error("%s", app_error());
         }

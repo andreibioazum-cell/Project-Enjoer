@@ -58,8 +58,9 @@ static void print_frame(const DsGameManifest *manifest, int frames) {
     printf("texts %d\n", frame->text_count);
     for (int index = 0; index < frame->text_count; ++index) {
         const EnjoerTextCommand *text = &frame->texts[index];
-        printf("t %d %ld %ld %ld %ld %ld %ld %s\n", index, fixed(text->x), fixed(text->y),
-               fixed(text->scale), fixed(text->r), fixed(text->g), fixed(text->b), text->text);
+        printf("t %d %ld %ld %ld %ld %ld %ld %d %s\n", index, fixed(text->x), fixed(text->y),
+               fixed(text->scale), fixed(text->r), fixed(text->g), fixed(text->b),
+               (int)text->font, text->text);
     }
     printf("hash %lu\n", hash);
     printf("error %s\n", driver_error());

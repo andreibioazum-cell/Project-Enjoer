@@ -1,9 +1,8 @@
 #version 450
-// Enjoer vertex stage.  One shader serves both pipelines: the cube and the 2D
-// batch share the vertex format (position, colour, uv, layer) and the pushed
-// matrix, so a script's sprite and the 3D cube go through exactly the same
-// vertex shader.
-layout(push_constant) uniform Push { mat4 mvp; } push;
+// Enjoer vertex stage.  The 2D batch is the only thing the engine draws: each
+// vertex carries its screen position, tint colour, texture coordinate and
+// sprite layer, and the pushed orthographic matrix maps pixels to clip space.
+layout(push_constant) uniform Push { mat4 ortho; } push;
 layout(location = 0) in vec3 in_position;
 layout(location = 1) in vec3 in_color;
 layout(location = 2) in vec2 in_uv;

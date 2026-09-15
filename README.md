@@ -1,23 +1,22 @@
 # Enjoer + DimScript
 
-Enjoer is a small Vulkan game host, and **DimScript** is the game language it
-runs. A game is a folder of `.ds` files plus a `game.manifest`; the engine opens
-that folder and interprets it, so a game changes without recompiling anything.
+Enjoer is a small Vulkan **2D** game host, and **DimScript** is the language for
+2D games it runs. A game is a folder of `.ds` files plus a `game.manifest`;
+there is no 3D in the language and no 3D scene behind the game — what the game
+draws each frame is the whole picture.
 
 There are two DimScript implementations and they are kept identical on purpose:
 
 | | what it is | where |
 |---|---|---|
-| **VM** | the interpreter that ships: arena + mark/sweep GC, lists, full language | `src/ds_vm.c`, `src/ds_vm_lang.c`, `src/ds_vm_exec.c`, `src/ds_vm_heap.c` |
-| **reference interpreter** | same AST, same frame, no GC: used by tools, tests and `--run` | `dimscript/interpreter.py` |
-| **AOT compiler** | the same syntax lowered to plain C99 (smaller subset, see below) | `dimscript/compiler.py`, `tools/dimscriptc.py` |
+| **reference interpreter** | same AST, same frame: used by tools, tests and `--run` | `dimscript/interpreter.py` |
+| **AOT compiler** | the same syntax lowered to plain C99 with manual memory — this is what ships | `dimscript/compiler.py`, `tools/dimscriptc.py` |
 
-`tools/tests/parity.py` runs the brick game on both interpreters and diffs every
-vertex and every text command, so the two cannot drift apart silently.
-
-Everything is drawn through the same triangle batch that the Vulkan pipeline
-consumes: shapes from `render.*` become vertices in `src/enjoer_draw.c`, and a
-game that looks right in the browser preview looks right on the device.
+There is no VM and no refcount: strictly the compiler, the C runtime and the
+renderer. Everything is drawn through the same triangle batch that the Vulkan
+pipeline consumes: shapes from `render.*` become vertices in
+`src/enjoer_draw.c`, and a game that looks right in the host preview looks
+right on the device.
 
 ## The language
 
@@ -129,7 +128,7 @@ quit() {
 | `string` | UTF-8, immutable, `..` concatenates |
 | `bool` | `true`/`false`; `and`/`or` short-circuit and yield a `bool` |
 | `nil` | unset struct field, or a deleted object |
-| `list` | growable array of any values (interpreter only) |
+| `list` | growable array of any values |
 
 `+ - *` keep the integer type when both sides are integers; `/` always produces
 a `float`; `%` is a floored remainder. Division or remainder by zero is a script
@@ -148,9 +147,31 @@ indices count from the end), and `x[i] = v`.
   `render.circle(x, y, radius)`, `render.ring(x, y, radius, thickness)`,
   `render.line(x0, y0, x1, y1, thickness)`, `render.tri(x0, y0, x1, y1, x2, y2)`
 * `render.text(text, x, y, scale)` — coordinates are pixels from the top left.
-  **There is no font backend yet**: the call is recorded in the frame and shown
-  by the preview as real browser text, and a future text pass will read the same
-  record. Nothing rasterizes glyphs in C or Vulkan today.
+  The call is recorded in the frame together with the current font (see
+  `render.font`); `src/ds_ttf.c` then rasterizes the glyphs on the CPU
+  (scanline fill, nonzero winding, 3x3 box antialiasing) into a per-font
+  atlas, and the renderer draws them as tinted glyph quads — plain textured
+  triangles, so Vulkan and the software fallback show the same pixels.
+  Scale contract: 1.0 is a 16 px em box, so body text on phones wants 2.0
+  and up. Texts with the default face (`-1`, or a broken face) stay recorded
+  but undrawn — a game that wants pixels must load a font first.
+* `render.image(handle, x, y, w, h)`,
+  `render.image_region(handle, x, y, w, h, u0, v0, u1, v1)` — sprites from
+  `image.load`, tinted by the current `render.color`.
+* `render.font(handle)` — the face for the following `render.text` calls;
+  `-1` is the default face.
+* `image.load("sprites.png")`, `image.width(h)`, `image.height(h)`,
+  `image.count()` — PNG sprite sheets, decoded once, sampled by the renderer
+  as a texture array. PNG is the only format: JPEG, GIF, BMP, WebP and TIFF
+  are refused at every layer — the manifest parser rejects non-`.png` names,
+  the packer checks the magic bytes, and the loader names the format
+  (`photo.jpg: only PNG images are supported (JPEG data)`) and returns `-1`.
+  A missing or broken PNG is `-1` too, never a crash.
+* `font.load("font.ttf")`, `font.count()` — game fonts (`.ttf`/`.otf`).
+  A missing file or a non-font is handle `-1`, not a crash; a file with valid
+  magic but broken tables keeps its handle while its texts stay undrawn.
+  Loading the same file twice returns the first handle. Both shipped games
+  bundle DejaVu Sans Bold — see "Bundled font" below.
 * `math.floor/ceil/round/abs/sign/sqrt/sin/cos/tan/min/max/mod/pow/lerp/random`,
   `math.pi`, `math.e`
 * `engine.width()`, `engine.height()`, `engine.time()`, `engine.delta()`,
@@ -165,12 +186,9 @@ A game implements any subset of: `load()`, `resized(width, height)`,
 `touchpressed(id, touch_x, touch_y)`, `touchmoved(...)`, `touchreleased(...)`,
 `keypressed(name)`, `keyreleased(name)`, `update(dt)`, `draw()`, `quit()`.
 They run in order per frame: input callbacks first, then `update`, then `draw`.
-A script error stops the game loop for that callback, reports the file, line and
-column, and the preview shows it in a banner instead of a black screen.
-
-The VM also enforces a per-frame statement budget and a recursion limit, so a
-mistaken `while true do` in a game fails with a readable error instead of
-freezing the device.
+A script error reports the file, line and column, and aborts. There is no
+per-frame statement budget: a mistaken
+`while true do` in a game really hangs, so mind your loops.
 
 ## Game folder and manifest
 
@@ -179,8 +197,12 @@ games/brick/
 ├── game.manifest
 ├── main.ds      -- structs, globals, the engine callbacks
 ├── blocks.ds    -- level building and physics
-└── hud.ds       -- everything on screen
+├── hud.ds       -- everything on screen
+├── font.ttf     -- DejaVu Sans Bold (see "Bundled font")
+└── FONT-LICENSE.txt
 ```
+
+(`games/clicker/` has the same shape with a single `main.ds`.)
 
 `game.manifest` is a flat `key = value` file with `--` comments:
 
@@ -198,15 +220,38 @@ scripts = ["main.ds", "blocks.ds", "hud.ds"]
 ```
 
 `clear_color` also accepts `"#rrggbb"`. Any `icon`, `icons` or `icon_*` key is
-**rejected with an error**: icons are not supported yet, and a silently ignored
-key is worse than a build that refuses to lie about it. The same rules are
-implemented twice — `src/ds_manifest.c` (device) and `dimscript/manifest.py`
+**rejected with an error**: launcher icons are not supported yet, and a silently
+ignored key is worse than a build that refuses to lie about it. The same rules
+are implemented twice — `src/ds_manifest.c` (device) and `dimscript/manifest.py`
 (host tooling) — and both produce the same defaults.
 
-Files that the manifest does not list are still loaded, after the listed ones,
+```ini
+images = ["sprites.png", "ui/coin.png"]
+fonts = ["font.ttf"]
+```
+
+Image and font files live next to the scripts (subfolders allowed) and are
+staged into the APK by `tools/gamepack.py`, so `image.load`/`font.load` find
+them on the device. A listed file must exist and be a real PNG / TrueType /
+OpenType file — the packer checks the magic bytes on the host.
+
+Files that the manifest does not list are still staged, after the listed ones,
 so a forgotten entry is not a silent no-op on disk. An Android build only sees
-what is packaged, which is why `tools/gamepack.py` writes the complete list into
-the packaged copy of the manifest.
+what is packaged, which is why `tools/gamepack.py` writes the complete lists
+into the packaged copy of the manifest.
+
+### Bundled font
+
+`games/clicker/font.ttf` and `games/brick/font.ttf` are both **DejaVu Sans
+Bold** — the same file in each folder, because every game folder packs on its
+own and fonts travel with the game, never by symlink. It was picked for full
+Cyrillic coverage (the clicker's text is Russian) and bold legibility at
+small sizes. DejaVu's changes are public domain; the Bitstream Vera base
+allows bundling in commercial builds as long as the notice travels with it —
+that is what `FONT-LICENSE.txt` next to each copy is for. To swap the font,
+drop another `.ttf`/`.otf` into the game folder and list it under
+`fonts = [...]` in `game.manifest`; `font.load` resolves it from the staged
+assets on the device exactly like on the host.
 
 ### Packing an APK's data
 
@@ -218,14 +263,16 @@ python3 tools/gamepack.py games/brick --print-manifest
 python3 tools/gamepack.py games/brick --staging staging --manifest-out apk-manifest/AndroidManifest.xml
 ```
 
-`staging/` then holds `assets/game/*.ds` and `assets/game/game.manifest`, and a
-generated `AndroidManifest.xml` (package, label, orientation, versions,
+`staging/` then holds `assets/game/*.ds`, `assets/game/game.manifest`, the
+staged images and fonts (subfolders preserved), and a generated
+`AndroidManifest.xml` (package, label, orientation, versions,
 `resizeableActivity`) is derived from the game manifest, so the two never
 disagree. `--manifest-out` writes that file elsewhere, which is what the APK
 step does — `aapt` walks the folder it is given and would otherwise try to store
 a second `AndroidManifest.xml` as a plain file. `CMakeLists.txt` runs the same
 tool when `ENJOER_GAME_DIR` is set (the variable is a `PATH` cache entry, so
-CMake has already made a relative path absolute).
+CMake has already made a relative path absolute), but only when a game file
+changed.
 
 ## Building
 
@@ -235,16 +282,31 @@ device see the same compiler and optimisation level. `tools/toolchain.sh` picks
 
 ```sh
 tools/preview/build.sh          # -> ./preview
-sh tools/tests/run.sh           # python + VM + parity + engine/renderer tests
+sh tools/tests/run.sh           # frontend + AOT + gamepack + string temps + engine
 ASAN=1 sh tools/tests/run.sh    # same tests under -fsanitize=address,undefined
 ```
 
+### APK (fast path)
+
+```sh
+# Needs ANDROID_SDK_ROOT (+ NDK), a JDK and python3. No Gradle: gamepack +
+# CMake + aapt2/d8/apksigner directly, skipping every step whose outputs are
+# already fresh, so a no-change rebuild finishes in seconds.
+tools/apk/build.sh                                 # games/clicker, arm64-v8a
+tools/apk/build.sh --game games/brick --abi all    # + armeabi-v7a
+tools/apk/build.sh --install --launch             # install and start on device
+```
+
+Install `ninja` and `ccache` for the full speed: the script prefers Ninja and
+CMake wraps the compiler in ccache automatically. The manual equivalent of the
+native step is:
+
 ```sh
 # Android (Vulkan is the default and needs no external SDK)
-cmake -B build \
+cmake -B build -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 \
-  -DCMAKE_BUILD_TYPE=Release -DENJOER_GAME_DIR=games/brick
+  -DCMAKE_BUILD_TYPE=Release -DENJOER_GAME_DIR=games/clicker
 cmake --build build -j
 ```
 
@@ -254,41 +316,50 @@ the directory given by `--game` (or `$ENJOER_GAME`).
 ### Preview
 
 ```sh
-./preview --port 8090 --w 960 --h 540 --game games/brick
+sh tools/preview/build.sh
+./preview --port 8090 --w 960 --h 540 --game games/clicker
 ```
 
 The server binds `0.0.0.0`, uses relative URLs, and renders on demand: each
 `/frame.jpg` advances one frame, so a backgrounded tab costs nothing.
-`GET /info` reports the title, the mode (`interpreted`/`compiled`), the
-renderer, the last script error and the recorded `render.text` commands, which
-the page overlays in the browser font — the font-less engine and a readable
-debug view at the same time.
+`GET /info` reports the title, the mode, the renderer, the fonts the game
+loaded, the last script error and a debug mirror of the last frame's
+`render.text` calls (each names its font handle). The pixels themselves are
+real rasterized glyphs drawn by the same C renderer the APK runs — no
+overlay, no browser text.
 
-Without a `game.manifest` in the folder, the preview runs the ahead-of-time
-compiled `examples/clicker.ds` and shows the cube instead, so a fresh checkout
-is never a blank window.
+The game logic is always the ahead-of-time compiled clicker; `--game`
+(`ENJOER_GAME`) only picks the asset folder — manifest, fonts, images — and
+defaults to `games/clicker`, so a fresh checkout is never a blank window.
 
 ## Ahead-of-time compilation
 
 ```sh
-python3 tools/dimscriptc.py examples/clicker.ds --check
-python3 tools/dimscriptc.py examples/clicker.ds --emit-c \
+python3 tools/dimscriptc.py games/clicker --check
+python3 tools/dimscriptc.py games/clicker --emit-c \
   -o src/generated/clicker.c --header src/generated/clicker.h
 python3 tools/dimscriptc.py games/brick --run --frames 3     # whole folder
 python3 tools/dimscriptc.py games/brick --check
 ```
 
 The C backend lowers a program to plain C99 against `src/dimscript_runtime.h`:
-structs become C structs, `render.*` becomes the same batch calls the VM makes,
+structs become C structs, `render.*` becomes the same batch calls the reference
+interpreter records,
 and the engine callbacks become `dimscript_load`, `dimscript_update`, … Wrappers
 are emitted for every callback, so a game that implements only `update` still
 links.
 
-`list`, indexing and list methods exist in the interpreter only. Compiling a
-game that uses them stops with an explicit message pointing at `src/ds_vm.c`
-rather than emitting half a file — which is exactly the case for `games/brick`.
-`src/generated/clicker.c` is the checked-in output of the list-free example and
-is what the fallback path runs.
+The backend covers the whole language — lists, structs, strings, methods —
+lowered to manual memory with no refcount. The ownership rules fit in one
+paragraph: strings are immutable values (storing one into a variable, field
+or slot replaces the old value; `return` and list push/insert/set hand over a
+duplicate), fresh strings consumed in place live in statement temps (`__ds_tN`,
+declared above the call, released below it), lists and structs are identity
+(stored raw, freed by their owner), and function parameters are borrowed.
+`src/generated/clicker.c` is the checked-in output for `games/clicker` —
+regenerate it with the command above after any compiler or game change — and
+is what the linked game runs. `tools/tests/temps.py` tortures every one of
+these paths under ASan+UBSan.
 
 ## Tests
 
@@ -298,45 +369,54 @@ sh tools/tests/run.sh
 
 1. `tools/tests/dimscript.py` — lexer, parser, interpreter, type checker and the
    generated C of the example, compared against the checked-in file.
-2. `tools/tests/vm.c` — the native VM: multi-file linking and `require` order,
-   lists, loops, builtins, the render batch, GC staying under a heap bound, and
-   five error paths (unknown name, bad callback arity, missing file, division by
-   zero, statement budget).
-3. `tools/tests/parity.py` — the same brick game on both interpreters, vertex by
-   vertex (1068 vertices, three texts).
-4. `tools/tests/aot.py` — `examples/shapes.ds` compiled to C *and* interpreted,
-   linked as two binaries whose dumps are diffed (`for`/`while`/`break`/`local`,
-   `math.`/`engine.`/`input.`, every render primitive): identical, 1071 vertices.
-5. `tools/tests/cube.c` — the engine boundary: manifest → VM → batch →
-   rasterizer, input reaching a script, resize, and the compiled fallback.
+2. `tools/tests/aot.py` — `examples/shapes.ds` compiled to C99 and linked
+   against the runtime (`for`/`while`/`break`/`local`,
+   `math.`/`engine.`/`input.`, every render primitive): 1071 vertices.
+3. `tools/tests/pack.py` — `gamepack.py` staging images + fonts (listed and
+   discovered, subfolders preserved), the failure paths, and an AOT game that
+   loads the staged PNG and font through `image.load`/`font.load`.
+4. `tools/tests/temps.py` — the string-ownership torture test: one script
+   nesting every fresh-string path (concats, converts, compares, stores,
+   returns, calls, loop conditions, list elements) is compiled to C99 and run
+   under ASan+UBSan, with all 13 recorded texts asserted exact.
+5. `tools/tests/engine.c` — the engine boundary: manifest parsing (including
+   the removed `cube` key failing loudly), the 2D batch → rasterizer,
+   input reaching a script, resize, image/font registries, and the compiled
+   fallback.
 
 `ASAN=1 sh tools/tests/run.sh` runs all five under
-`-fsanitize=address,undefined`, which is the check the GC and the arena get.
+`-fsanitize=address,undefined`. The object cache is mode-sensitive: switching
+between plain and `ASAN=1` runs needs `ENJOER_CLEAN=1` first.
 
 ## Layout
 
 ```text
 dimscript/                Python front-end: lexer, AST, parser, checker,
                           reference interpreter, C backend, manifest, project
-examples/clicker.ds       the original example, also the AOT source
-examples/shapes.ds        loops + builtins + shapes: the AOT/VM parity fixture
-games/brick/              a real multi-file game: manifest + 3 .ds files
+examples/shapes.ds        loops + builtins + shapes: the AOT fixture
+games/clicker/            the shipped clicker: manifest + main.ds + font
+games/brick/              a real multi-file game: manifest + 3 .ds files + font
 tools/dimscriptc.py       compiler/interpreter CLI
-tools/gamepack.py         packs a game folder and generates AndroidManifest.xml
+tools/gamepack.py         packs scripts, images and fonts, generates AndroidManifest.xml
+tools/apk/build.sh        fast no-Gradle APK build (gamepack + NDK + aapt2/d8/apksigner)
 tools/toolchain.sh        clang -O3 selection, shared by every build script
-src/ds_vm.*               the shipping interpreter (VM, GC, lists, builtins)
 src/ds_manifest.*         game.manifest reader used at startup
 src/ds_files.*            game folder access: disk on host, assets on Android
+src/ds_image.*            PNG registry behind image.load
+src/ds_png.c              dependency-free PNG decoder
+src/ds_font.*             font registry behind font.load
+src/ds_ttf.*              TrueType text pass: glyph rasterizer + per-font atlas
 src/enjoer_draw.*         the triangle batch both renderers consume
-src/dimscript_runtime.*   native ABI shared by the VM and generated C
-src/generated/            C + header generated from examples/clicker.ds
+src/dimscript_runtime.*   native ABI the generated C links against
+src/generated/            C + header generated from games/clicker
 src/engine.h              C game API and Buffer type
-src/cube_game.c           lifecycle, input, manifest, interpreter-vs-AOT choice
-src/vulkan_cube.*         Vulkan renderer (device) and software fallback (host)
+src/game.c                lifecycle, input, manifest, asset folder
+src/renderer.h            C ABI of the 2D renderer
+src/vulkan_2d.cpp         Vulkan 2D renderer (device) and software fallback (host)
 src/shaders/              GLSL sources and the generated SPIR-V header
 src/main.c                Android NativeActivity loop, asset manager wiring
 game/                     Android Activity and the fallback manifest
-tools/preview/            HTTP frame/input preview with the text overlay
-tools/tests/              native, VM, parity and AOT regression tests
+tools/preview/            HTTP frame/input preview (glyphs in /frame.jpg, mirror in /info)
+tools/tests/              engine, AOT, gamepack, string-temps and frontend tests
 tools/ci/annotate.py      turns a build log into check annotations (CI helper)
 ```

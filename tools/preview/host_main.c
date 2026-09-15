@@ -1,10 +1,13 @@
-/* Tiny HTTP transport for the C/C++ cube preview. The browser is only an
- * input surface; all pixels are produced by the native cube renderer. */
+/* Tiny HTTP transport for the C/C++ 2D preview. The browser is only an
+ * input surface and a bitmap viewer; all pixels — shapes, sprites and the
+ * TrueType text pass — are produced by the native software renderer, so the
+ * preview shows exactly what the device draws. */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 #include "engine.h"
-#include "vulkan_cube.h"
+#include "renderer.h"
+#include "ds_font.h"
 #include "enjoer_draw.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -190,8 +193,9 @@ static void json_escape(const char *text, char *out, size_t capacity) {
 }
 
 /* What the browser needs to know about the running game: its name, whether it
- * is interpreted or compiled, the recorded render.text calls (there is no font
- * backend yet, so the page paints them) and any error that stopped the script. */
+ * is interpreted or compiled, the fonts the game loaded, a debug mirror of
+ * the last frame's render.text calls (each names its font handle; the pixels
+ * themselves come from /frame.jpg) and any error that stopped the script. */
 static int write_info(char *out, size_t capacity) {
     const EnjoerFrame *frame = enjoer_frame();
     const DsGameManifest *manifest = game_manifest();
@@ -203,21 +207,34 @@ static int write_info(char *out, size_t capacity) {
     size_t used = 0;
     int n = snprintf(out, capacity,
         "{\"w\":%d,\"h\":%d,\"backend\":\"%s\",\"title\":\"%s\",\"mode\":\"%s\","
-        "\"show_fps\":%d,\"error\":\"%s\",\"texts\":[",
-        screen_w, screen_h, cube_renderer_backend(), title,
+        "\"show_fps\":%d,\"error\":\"%s\",\"fonts\":[",
+        screen_w, screen_h, renderer_backend(), title,
         game_is_interpreted() ? "interpreted" : "compiled",
         manifest && manifest->show_fps, error);
     if (n < 0 || (size_t)n >= capacity) return (int)(capacity - 1);
     used = (size_t)n;
+    for (int32_t index = 0; index < ds_font_count(); ++index) {
+        const DsFont *font = ds_font_at(index);
+        char safe[DS_FONT_NAME_LENGTH * 2];
+        json_escape(font ? font->name : "", safe, sizeof(safe));
+        n = snprintf(out + used, capacity - used, "%s{\"name\":\"%s\"}",
+                     index ? "," : "", safe);
+        if (n < 0 || used + (size_t)n + 3 >= capacity) break;
+        used += (size_t)n;
+    }
+    n = snprintf(out + used, capacity - used, "],\"texts\":[");
+    if (n < 0 || used + (size_t)n + 3 >= capacity) return (int)used;
+    used += (size_t)n;
     for (int index = 0; index < frame->text_count; ++index) {
         const EnjoerTextCommand *text = &frame->texts[index];
         char safe[ENJOER_DRAW_TEXT_LENGTH * 2];
         json_escape(text->text, safe, sizeof(safe));
         n = snprintf(out + used, capacity - used,
                      "%s{\"text\":\"%s\",\"x\":%.2f,\"y\":%.2f,\"scale\":%.3f,"
-                     "\"r\":%.3f,\"g\":%.3f,\"b\":%.3f}",
+                     "\"r\":%.3f,\"g\":%.3f,\"b\":%.3f,\"font\":%d}",
                      index ? "," : "", safe, (double)text->x, (double)text->y,
-                     (double)text->scale, (double)text->r, (double)text->g, (double)text->b);
+                     (double)text->scale, (double)text->r, (double)text->g, (double)text->b,
+                     (int)text->font);
         if (n < 0 || used + (size_t)n + 3 >= capacity) break;
         used += (size_t)n;
     }
@@ -225,6 +242,7 @@ static int write_info(char *out, size_t capacity) {
     if (n > 0 && used + (size_t)n < capacity) used += (size_t)n;
     return (int)used;
 }
+
 
 int main(int argc, char **argv) {
     int port = 8090, width = 960, height = 540;
@@ -264,7 +282,7 @@ int main(int argc, char **argv) {
     if (bind(server, (struct sockaddr *)&address, sizeof(address)) != 0 ||
         listen(server, 16) != 0) return 1;
     fprintf(stderr, "Enjoer preview: http://0.0.0.0:%d (%dx%d, backend=%s, game=%s)\n",
-            port, width, height, cube_renderer_backend(), game_title());
+            port, width, height, renderer_backend(), game_title());
 
     char request[32768];
     char info[16384];

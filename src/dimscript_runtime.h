@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "ds_font.h"
 #include "ds_image.h"
 #include "enjoer_draw.h"
 
@@ -68,6 +69,13 @@ DsString *ds_float_to_string(double value);
 DsString *ds_bool_to_string(int value);
 DsString *ds_concat(DsString *left, DsString *right); /* borrows both, returns owned */
 DsString *ds_text_join(int count, ...); /* borrows all, returns owned */
+/* Ownership: strings are immutable values, so storing one always copies.
+ * ds_string_dup(NULL) is NULL; ds_string_replace frees the old slot value
+ * after duplicating (self-assignment safe); ds_string_dtor is the list
+ * element destructor for string lists, which own private duplicates. */
+DsString *ds_string_dup(const DsString *value);
+void ds_string_replace(DsString **slot, DsString *value); /* borrows value */
+void ds_string_dtor(void *value);
 const char *ds_cstr(const DsString *value);
 int64_t ds_string_length(const DsString *value);
 int32_t ds_string_compare(const DsString *left, const DsString *right);
@@ -161,11 +169,23 @@ void ds_render_ring(float x, float y, float radius, float thickness);
 void ds_render_line(float x0, float y0, float x1, float y1, float thickness);
 void ds_render_triangle(float x0, float y0, float x1, float y1, float x2, float y2);
 void ds_render_text(DsString *text, float x, float y, float scale); /* borrows */
+void ds_render_font(int32_t handle);
+int32_t ds_render_current_font(void);
 void ds_render_image(int32_t handle, float x, float y, float width, float height);
 void ds_render_image_region(int32_t handle, float x, float y, float width, float height,
                             float u0, float v0, float u1, float v1);
 uint64_t ds_render_text_count(void);
 uint64_t ds_render_image_count(void);
+
+/* --- assets ------------------------------------------------------------ */
+
+/* `image.load("sprites.png")`: decode once, return the registry handle (-1 on
+ * a missing or broken file).  The compiler emits this call; generated games
+ * must see the declaration. */
+int32_t ds_image_load(DsString *name); /* borrows */
+/* `font.load("font.ttf")`: read once, validate the header, return the handle
+ * (-1 on a missing or non-font file). */
+int32_t ds_font_load(DsString *name); /* borrows */
 
 /* --- math -------------------------------------------------------------- */
 

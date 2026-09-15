@@ -44,6 +44,7 @@ void enjoer_frame_begin(int width, int height) {
     frame_height = height > 0 ? height : 1;
     frame.vertex_count = 0;
     frame.text_count = 0;
+    frame.texts_resolved = 0;
     frame.has_clear = 0;
     frame.overflow = 0;
 }
@@ -64,8 +65,8 @@ static void push_vertex_full(float x, float y, float r, float g, float b, float 
                              float layer) {
     if (!reserve(frame.vertex_count + 1)) return;
     EnjoerVertex *vertex = &frame.vertices[frame.vertex_count];
-    /* 2D geometry lives just in front of the cube so a single depth test keeps
-     * the ordering the script asked for. */
+    /* The batch keeps script order: triangles paint over each other in the order
+     * the game drew them, with no depth test anywhere in the pipeline. */
     vertex->x = x;
     vertex->y = y;
     vertex->z = 0.0f;

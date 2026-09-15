@@ -22,7 +22,9 @@
 #include <string.h>
 
 #include "ds_files.h"
+#include "ds_font.h"
 #include "ds_image.h"
+#include "ds_ttf.h"
 #include "engine.h"
 #include "enjoer_draw.h"
 
@@ -126,6 +128,26 @@ DsString *ds_string_new(const char *bytes, size_t length) {
     if (length && bytes) memcpy(s->bytes, bytes, length);
     return s;
 }
+
+DsString *ds_string_dup(const DsString *value) {
+    DsString *copy = NULL;
+    if (!value) return NULL;
+    copy = string_alloc(value->length);
+    if (value->length) memcpy(copy->bytes, value->bytes, value->length);
+    return copy;
+}
+
+void ds_string_replace(DsString **slot, DsString *value) {
+    DsString *fresh = ds_string_dup(value);
+    if (!slot) {
+        ds_release(fresh);
+        return;
+    }
+    if (*slot) ds_release(*slot);
+    *slot = fresh;
+}
+
+void ds_string_dtor(void *value) { ds_release(value); }
 
 static DsString **interned = NULL;
 static int interned_count = 0;
@@ -322,7 +344,7 @@ static void *object_slot(const DsList *list, int64_t idx, const char *where) {
 void ds_list_push_float(DsList *l, double v) { *(double*)list_append_slot(l) = v; }
 void ds_list_push_int(DsList *l, int64_t v) { *(int64_t*)list_append_slot(l) = v; }
 void ds_list_push_bool(DsList *l, int v) { *(int*)list_append_slot(l) = v ? 1 : 0; }
-void ds_list_push_string(DsList *l, DsString *v) { *(void**)list_append_slot(l) = v; }
+void ds_list_push_string(DsList *l, DsString *v) { *(void**)list_append_slot(l) = ds_string_dup(v); }
 void ds_list_push_list(DsList *l, DsList *v) { *(void**)list_append_slot(l) = v; }
 void ds_list_push_object(DsList *l, void *v) { *(void**)list_append_slot(l) = v; }
 
@@ -336,7 +358,14 @@ void *ds_list_get_object(const DsList *l, int64_t i, const char *w) { return *(v
 void ds_list_set_float(DsList *l, int64_t i, double v) { double *s = (double*)list_slot(l,i,NULL); if(s) *s=v; }
 void ds_list_set_int(DsList *l, int64_t i, int64_t v) { int64_t *s = (int64_t*)list_slot(l,i,NULL); if(s) *s=v; }
 void ds_list_set_bool(DsList *l, int64_t i, int v) { int *s = (int*)list_slot(l,i,NULL); if(s) *s=v?1:0; }
-void ds_list_set_string(DsList *l, int64_t i, DsString *v) { void **s = (void**)list_slot(l,i,NULL); if(s) *s=v; }
+void ds_list_set_string(DsList *l, int64_t i, DsString *v) {
+    /* Owning slot: duplicate first so `list[i] = list[i]` stays safe. */
+    void **s = (void**)list_slot(l,i,NULL);
+    if (!s) { return; }
+    DsString *fresh = ds_string_dup(v);
+    if (*s) ds_release(*s);
+    *s = fresh;
+}
 void ds_list_set_list(DsList *l, int64_t i, DsList *v) { void **s = (void**)list_slot(l,i,NULL); if(s) *s=v; }
 void ds_list_set_object(DsList *l, int64_t i, void *v) { void **s = (void**)list_slot(l,i,NULL); if(s) *s=v; }
 
@@ -400,7 +429,7 @@ static void *list_insert_slot(DsList *l, int64_t idx) {
 void ds_list_insert_float(DsList *l, int64_t i, double v) { *(double*)list_insert_slot(l,i)=v; }
 void ds_list_insert_int(DsList *l, int64_t i, int64_t v) { *(int64_t*)list_insert_slot(l,i)=v; }
 void ds_list_insert_bool(DsList *l, int64_t i, int v) { *(int*)list_insert_slot(l,i)=v?1:0; }
-void ds_list_insert_string(DsList *l, int64_t i, DsString *v) { *(void**)list_insert_slot(l,i)=v; }
+void ds_list_insert_string(DsList *l, int64_t i, DsString *v) { *(void**)list_insert_slot(l,i)=ds_string_dup(v); }
 void ds_list_insert_list(DsList *l, int64_t i, DsList *v) { *(void**)list_insert_slot(l,i)=v; }
 void ds_list_insert_object(DsList *l, int64_t i, void *v) { *(void**)list_insert_slot(l,i)=v; }
 
@@ -450,7 +479,7 @@ DsList *ds_list_of_bools(int64_t c, const int *v) {
     return l;
 }
 DsList *ds_list_of_strings(int64_t c, DsString *const *v) {
-    DsList *l=ds_list_new(DS_ELEM_STRING,0,NULL,c);
+    DsList *l=ds_list_new(DS_ELEM_STRING,0,ds_string_dtor,c);
     for(int64_t i=0;i<c;++i) ds_list_push_string(l,v[i]);
     return l;
 }
@@ -474,6 +503,14 @@ int32_t ds_image_load(DsString *name) {
     size_t len=0;
     char *bytes = ds_files_read(file,&len);
     if (!bytes) { app_log_error("no image %s", file); return -1; }
+    /* PNG only: JPEG and friends are named and refused here, never decoded
+     * to garbage and never handed to the renderer. */
+    if (!ds_png_magic_ok((const uint8_t*)bytes,len)) {
+        app_log_error("%s: only PNG images are supported (%s data)", file,
+                      ds_image_format_name((const uint8_t*)bytes,len));
+        free(bytes);
+        return -1;
+    }
     int32_t w=0, ht=0;
     const char *err=NULL;
     uint8_t *rgba = ds_png_decode((const uint8_t*)bytes,len,&w,&ht,&err);
@@ -484,8 +521,31 @@ int32_t ds_image_load(DsString *name) {
     return h;
 }
 
+/* --- fonts --- */
+int32_t ds_font_load(DsString *name) {
+    const char *file = ds_cstr(name);
+    if (!file[0]) return -1;
+    int32_t h = ds_font_find(file);
+    if (h >= 0) return h;
+    size_t len=0;
+    char *bytes = ds_files_read(file,&len);
+    if (!bytes) { app_log_error("no font %s", file); return -1; }
+    if (!ds_font_magic_ok((const uint8_t*)bytes,len)) {
+        app_log_error("%s: not a TrueType/OpenType font", file);
+        free(bytes);
+        return -1;
+    }
+    h = ds_font_add(file, (uint8_t*)bytes, len);
+    if (h<0) { app_log_error("%s too many fonts", file); free(bytes); }
+    /* A broken face keeps its registry entry: texts in it stay recorded but
+     * undrawn, exactly like the default face (see ds_ttf.h). */
+    else ds_ttf_load_face(h);
+    return h;
+}
+
 /* --- render --- */
 static float current_color[3] = {1.0f,1.0f,1.0f};
+static int32_t current_font = -1;
 static uint64_t text_calls;
 static uint64_t image_calls;
 
@@ -502,12 +562,19 @@ void ds_render_circle(float x,float y,float r){ enjoer_draw_circle(x,y,r,0,curre
 void ds_render_ring(float x,float y,float r,float t){ enjoer_draw_ring(x,y,r,t,0,current_color[0],current_color[1],current_color[2]); }
 void ds_render_line(float x0,float y0,float x1,float y1,float th){ enjoer_draw_line(x0,y0,x1,y1,th,current_color[0],current_color[1],current_color[2]); }
 void ds_render_triangle(float x0,float y0,float x1,float y1,float x2,float y2){ enjoer_draw_triangle(x0,y0,x1,y1,x2,y2,current_color[0],current_color[1],current_color[2]); }
+void ds_render_font(int32_t h){
+    /* -1 selects the default face; a bogus positive handle is ignored rather
+     * than recorded, so a typo cannot poison the rest of the frame. */
+    if (h == -1 || ds_font_valid(h)) current_font = h;
+}
+int32_t ds_render_current_font(void){ return current_font; }
 void ds_render_text(DsString *text,float x,float y,float scale){
     EnjoerFrame *f=enjoer_frame();
     if (f->text_count < ENJOER_DRAW_MAX_TEXT && text) {
         EnjoerTextCommand *c=&f->texts[f->text_count++];
         snprintf(c->text,sizeof(c->text),"%s", ds_cstr(text));
         c->x=x; c->y=y; c->scale=scale; c->r=current_color[0]; c->g=current_color[1]; c->b=current_color[2];
+        c->font=current_font;
     }
     ++text_calls; ++f->text_total;
 }
@@ -603,5 +670,5 @@ int ds_engine_key_down(DsString *name){
     for(int i=0;i<engine_state.key_count;++i) if(!strcmp(engine_state.key_names[i],txt)) d=engine_state.key_down[i];
     return d;
 }
-void ds_runtime_init(void){ text_calls=0; image_calls=0; current_color[0]=current_color[1]=current_color[2]=1.0f; ds_image_reset(); }
-void ds_runtime_shutdown(void){ free_interned(); ds_image_reset(); }
+void ds_runtime_init(void){ text_calls=0; image_calls=0; current_color[0]=current_color[1]=current_color[2]=1.0f; current_font=-1; ds_image_reset(); ds_font_reset(); ds_ttf_reset(); }
+void ds_runtime_shutdown(void){ free_interned(); ds_image_reset(); ds_font_reset(); ds_ttf_reset(); }

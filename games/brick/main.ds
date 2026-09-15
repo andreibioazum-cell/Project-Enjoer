@@ -1,8 +1,8 @@
 -- Кирпич — a real Enjoer game, split over three .ds files.
 --
 -- main.ds owns the state and the lifecycle callbacks, blocks.ds the layout and
--- the ball physics, hud.ds the fontless HUD.  The engine interprets this file
--- directly, so changing a number here and restarting the preview is enough.
+-- the ball physics, hud.ds the HUD.  Compile with dimscriptc (or run it with
+-- --run) after changing a number here; the device executes the AOT build.
 require "blocks"
 require "hud"
 
@@ -36,6 +36,7 @@ struct BrickGame {
 
 game = new BrickGame
 target_x = 0.0
+game_font = -1 -- handle from font.load, refreshed by load()
 
 load() {
     game.score = 0
@@ -50,6 +51,7 @@ load() {
     game.paddle.speed = 700.0
     game.ball.radius = 9.0
     game.blocks = build_blocks(11)
+    game_font = font.load("font.ttf")
     center_paddle()
     launch_ball()
 }
