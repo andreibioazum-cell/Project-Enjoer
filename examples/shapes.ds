@@ -1,0 +1,99 @@
+-- DimScript example: shapes, math and input, no lists.
+--
+-- This file is the language surface that both implementations must agree on:
+-- the interpreter in src/ds_vm.c and the ahead-of-time C backend.  Lists are
+-- deliberately absent, so `tools/tests/aot.py` can compile it to C, link it
+-- against src/dimscript_runtime.c and compare the result with the interpreter.
+
+struct Field {
+    columns: int
+    rows: int
+    cell: float
+    time: float
+}
+
+field = new Field
+
+load() {
+    field.columns = 7
+    field.rows = 4
+    field.cell = 42.0
+    field.time = 0.0
+    render.clear(0.06, 0.07, 0.11)
+}
+
+resized(width: float, height: float) {
+    field.cell = math.floor(math.min(64.0, width / (field.columns + 1)))
+}
+
+cell_color(index: int): float {
+    local wrapped = index % 5
+    return 0.20 + 0.15 * wrapped
+}
+
+update(dt: float) {
+    field.time = field.time + dt
+    if input.key("space") then {
+        field.time = 0.0
+    }
+}
+
+draw() {
+    render.color(0.90, 0.94, 1.0)
+    render.text("Фигуры", 18.0, 16.0, 1.0)
+
+    -- A grid of rectangles: for, local, integer division and a function call.
+    for row = 0, field.rows - 1 do
+        for column = 0, field.columns - 1 do
+            local index = row * field.columns + column
+            local shade = cell_color(index)
+            local x = 18.0 + column * (field.cell + 6.0)
+            local y = 54.0 + row * (field.cell + 6.0)
+            local wobble = math.sin(field.time + index * 0.25) * 3.0
+            render.color(shade, 0.35 + shade * 0.4, 0.95 - shade * 0.3)
+            render.rect(x, y + wobble, field.cell, field.cell * 0.6)
+            render.frame(x, y + wobble, field.cell, field.cell * 0.6, 1.5)
+        }
+    }
+
+    -- One circle, one ring and a line built from math and the screen size.
+    local cx = engine.width() * 0.5
+    local cy = engine.height() - 60.0
+    render.color(1.0, 0.80, 0.35)
+    render.circle(cx, cy, 18.0)
+    render.color(0.45, 0.85, 1.0)
+    render.ring(cx, cy, 26.0, 3.0)
+    render.color(1.0, 1.0, 1.0)
+    render.line(18.0, engine.height() - 24.0, engine.width() - 18.0, engine.height() - 24.0, 2.0)
+
+    -- A triangle, and text that mixes numbers into a string.
+    render.color(0.55, 1.0, 0.62)
+    render.tri(cx - 30.0, cy - 44.0, cx + 30.0, cy - 44.0, cx, cy - 84.0)
+    render.text("cells " .. field.rows * field.columns .. "  t " .. math.round(field.time * 100.0),
+                18.0, engine.height() - 44.0, 0.9)
+
+    -- while: the same loop the interpreter counts, bounded by the budget.
+    local countdown = 3
+    local drawn = 0
+    while countdown > 0 do
+        countdown = countdown - 1
+        drawn = drawn + 1
+        if countdown == 1 then {
+            drawn = drawn + 10
+            break
+        }
+    }
+    render.color(0.85, 0.85, 0.85)
+    render.text("loop " .. drawn, engine.width() - 120.0, 16.0, 0.8)
+
+    if engine.frame() % 2 == 0 then {
+        render.color(0.20, 0.24, 0.30)
+    } else {
+        render.color(0.24, 0.28, 0.34)
+    }
+    render.rect(0.0, engine.height() - 6.0, engine.width(), 6.0)
+}
+
+quit() {
+    delete field
+}

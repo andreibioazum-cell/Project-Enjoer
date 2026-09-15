@@ -10,18 +10,46 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101a32;ove
 canvas{display:block;touch-action:none;user-select:none;outline:none;cursor:grab;image-rendering:auto}
 canvas:active{cursor:grabbing}
 .hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);font:14px system-ui,sans-serif;color:#d9e7ff;opacity:.8;pointer-events:none;text-shadow:0 1px 2px #000}
+.overlay{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.overlay span{position:absolute;white-space:pre;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,.85)}
+.error{position:fixed;left:50%;top:14px;transform:translateX(-50%);max-width:80vw;font:13px/1.4 ui-monospace,monospace;color:#ffd7d7;background:rgba(120,16,26,.88);border:1px solid #ff6b6b;border-radius:8px;padding:8px 12px;white-space:pre-wrap}
+.title{position:fixed;left:14px;top:12px;font:600 13px system-ui,sans-serif;color:#eaf2ff;opacity:.75;pointer-events:none}
 </style>
 </head>
 <body>
-<main class="game"><canvas id="c" tabindex="0" aria-label="Enjoer 3D cube preview. Drag to orbit. Use arrow keys or WASD to look, Space reverses the spin, R resets."></canvas></main>
-<div class="hint">drag to orbit · touch runs DimScript · arrows / WASD · space reverses spin · R resets · fontless</div>
+<main class="game"><canvas id="c" tabindex="0" aria-label="Enjoer game preview. Drag to orbit. Use arrow keys or WASD to look, Space reverses the spin, R resets."></canvas></main>
+<div class="overlay" id="overlay"></div>
+<div class="title" id="title"></div>
+<div class="error" id="error" hidden></div>
+<div class="hint">drag to orbit · touch and keys go to the game · arrows / WASD · space · R resets · text is drawn by the browser (no font backend yet)</div>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');let W=960,H=540;
 function fit(){const s=Math.min(innerWidth/W,innerHeight/H);cv.style.width=W*s+'px';cv.style.height=H*s+'px'}
-fetch('/info').then(r=>r.json()).then(async info=>{W=info.w;H=info.h;cv.width=W;cv.height=H;fit();await fetch('/event',{method:'POST',body:'t=cancel'});loop()});
+const overlay=document.getElementById('overlay'),errBox=document.getElementById('error'),title=document.getElementById('title');
+function paint(info){
+  document.title=(info.title||'Enjoer')+' — DimScript preview';
+  title.textContent=(info.title||'Enjoer')+' · '+(info.mode==='interpreted'?'interpreter':'AOT')+' · '+info.backend;
+  errBox.hidden=!info.error;if(info.error)errBox.textContent=info.error;
+  /* There is no font backend in the engine yet: render.text is recorded by the
+     runtime and drawn here in the browser, so a text game is still playable.
+     The script's (x, y) is the top-left corner and scale multiplies a 16 px em. */
+  const k=Math.min(innerWidth/W,innerHeight/H);
+  overlay.replaceChildren(...(info.texts||[]).map(t=>{
+    const node=document.createElement('span');
+    node.textContent=t.text;
+    node.style.left=(t.x*k)+'px';node.style.top=(t.y*k)+'px';
+    node.style.fontSize=Math.max(6,16*t.scale*k)+'px';
+    node.style.color=`rgb(${Math.round(t.r*255)},${Math.round(t.g*255)},${Math.round(t.b*255)})`;
+    return node;
+  }));
+}
+let info=0;
+async function poll(){try{const r=await fetch('/info',{cache:'no-store'});if(r.ok){const j=await r.json();if(j.w!==W||j.h!==H){W=j.w;H=j.h;cv.width=W;cv.height=H;fit()}paint(j);info=1}}catch(e){}}
+fetch('/info').then(r=>r.json()).then(async j=>{W=j.w;H=j.h;cv.width=W;cv.height=H;fit();paint(j);info=1;await fetch('/event',{method:'POST',body:'t=cancel'});loop()});setInterval(poll,120);
 let nextFrame=null;
 async function requestFrame(){try{const r=await fetch('/frame.jpg',{cache:'no-store'});return r.ok?await r.blob():null}catch(e){return null}}
 async function loop(){try{if(!document.hidden){const blob=await(nextFrame||requestFrame());nextFrame=null;if(!document.hidden){nextFrame=requestFrame();if(blob){const image=await createImageBitmap(blob);ctx.drawImage(image,0,0);image.close()}}}else nextFrame=null}catch(e){}requestAnimationFrame(loop)}
+addEventListener('resize',()=>{if(info)poll()});
 const queue=[];let sending=false;
 function ev(body){if(body.t==='move'){for(let i=queue.length-1;i>=0&&queue[i].t==='move';i--)if(queue[i].id===body.id){queue[i]=body;return}}queue.push(body);flush()}
 async function flush(){if(sending||!queue.length)return;sending=true;const batch=queue.splice(0,64);try{await fetch('/event',{method:'POST',body:batch.map(x=>new URLSearchParams(x)).join('\n'),keepalive:true})}catch(e){queue.length=0;queue.push({t:'cancel'})}finally{sending=false;if(queue.length)flush()}}
