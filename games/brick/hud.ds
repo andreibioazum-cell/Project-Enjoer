@@ -1,12 +1,11 @@
 -- Кирпич: HUD.
 --
--- There is no font backend yet, so every number a player must read is drawn
--- with shapes: the score becomes a bar, the lives become pips.  render.text is
--- still called, because the call is recorded by the runtime and shown as an
--- overlay in the browser preview; on the device it will be rasterized as soon
--- as a font atlas exists.
+-- Numbers a player must read at a glance stay shapes (the score bar, the life
+-- pips); labels go through render.text in the bundled font.ttf, rasterized by
+-- the TrueType text pass into the same batch on the device and the preview.
 
 draw_hud() {
+    render.font(game_font)
     render.color(1.0, 1.0, 1.0)
     render.text("Кирпич", 20.0, 24.0, 1.0)
 

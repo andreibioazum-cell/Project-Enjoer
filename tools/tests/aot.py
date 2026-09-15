@@ -29,6 +29,8 @@ ENGINE_C = [
     "src/ds_files.c",
     "src/ds_image.c",
     "src/ds_png.c",
+    "src/ds_font.c",
+    "src/ds_ttf.c",
     "src/core/log.c",
     "src/core/state.c",
 ]
@@ -73,6 +75,7 @@ def main() -> int:
 
     cc = compiler()
     flags = ["-std=c99", "-O3", "-Wall", "-Wextra", "-Werror", "-I./src"]
+    flags += shlex.split(os.environ.get("ENJOER_SANITIZE", ""))
 
     # STRICT COMPILER: only AOT binary, no VM
     run([*cc, *flags, "-DENJOER_AOT_DRIVER=1", f"-I{OUT}",

@@ -29,8 +29,9 @@ MANIFEST_NAME = "game.manifest"
 ORIENTATIONS = ("portrait", "landscape", "sensor", "sensorLandscape", "sensorPortrait")
 STRING_KEYS = ("title", "author", "package", "version", "orientation")
 INT_KEYS = ("version_code", "target_fps")
-BOOL_KEYS = ("resizeable", "show_fps", "cube")
-KNOWN_KEYS = STRING_KEYS + INT_KEYS + BOOL_KEYS + ("clear_color", "scripts")
+BOOL_KEYS = ("resizeable", "show_fps")
+LIST_KEYS = {"scripts": (".ds", 32), "images": (".png", 32), "fonts": ((".ttf", ".otf"), 8)}
+KNOWN_KEYS = STRING_KEYS + INT_KEYS + BOOL_KEYS + ("clear_color",) + tuple(LIST_KEYS)
 
 _PACKAGE = re.compile(r"^[a-z_][a-zA-Z0-9_]*(\.[a-z_][a-zA-Z0-9_]*)+$")
 _KEY = re.compile(r"^[a-z_]+$")
@@ -49,9 +50,10 @@ class GameManifest:
     target_fps: int = 60
     resizeable: bool = True
     show_fps: bool = False
-    show_cube: bool = False
     clear_color: Tuple[float, float, float] = (0.05, 0.08, 0.15)
     scripts: List[str] = field(default_factory=list)
+    images: List[str] = field(default_factory=list)
+    fonts: List[str] = field(default_factory=list)
     directory: Path = None  # type: ignore[assignment]
 
     @property
@@ -73,9 +75,10 @@ class GameManifest:
             "targetFps": self.target_fps,
             "resizeable": self.resizeable,
             "showFps": self.show_fps,
-            "cube": self.show_cube,
             "clearColor": list(self.clear_color),
             "scripts": list(self.scripts),
+            "images": list(self.images),
+            "fonts": list(self.fonts),
         }
 
 
@@ -145,6 +148,10 @@ def parse_manifest(text: str, source: str = "game.manifest") -> GameManifest:
             raise ManifestError(
                 f"{source}:{number}: иконки пока не поддерживаются, уберите ключ '{key}'"
             )
+        if key == "cube":
+            raise ManifestError(
+                f"{source}:{number}: 3D-куб удалён — Enjoer теперь только 2D, уберите ключ 'cube'"
+            )
         if key not in KNOWN_KEYS:
             raise ManifestError(
                 f"{source}:{number}: неизвестный ключ '{key}' "
@@ -187,20 +194,29 @@ def parse_manifest(text: str, source: str = "game.manifest") -> GameManifest:
             flag = value in {"true", "1"}
             if key == "resizeable":
                 manifest.resizeable = flag
-            elif key == "show_fps":
-                manifest.show_fps = flag
             else:
-                manifest.show_cube = flag
+                manifest.show_fps = flag
         elif key == "clear_color":
             manifest.clear_color = _parse_color(value, number)
-        elif key == "scripts":
+        elif key in LIST_KEYS:
+            wanted, limit = LIST_KEYS[key]
+            if isinstance(wanted, str):
+                wanted = (wanted,)
             names = [item for item in re.split(r"[\s,]+", value.strip("[] ")) if item]
-            manifest.scripts = [_unquote(name) for name in names]
-            for name in manifest.scripts:
-                if not name.endswith(".ds"):
-                    raise ManifestError(f"{source}:{number}: скрипт {name!r} должен заканчиваться на .ds")
-            if len(manifest.scripts) > 32:
-                raise ManifestError(f"{source}:{number}: больше 32 скриптов в игре")
+            parsed = [_unquote(name) for name in names]
+            for name in parsed:
+                if not name.endswith(wanted):
+                    raise ManifestError(
+                        f"{source}:{number}: {name!r} в '{key}' должен заканчиваться на "
+                        + "/".join(wanted)
+                    )
+                if ".." in Path(name).parts or Path(name).is_absolute():
+                    raise ManifestError(
+                        f"{source}:{number}: {name!r} в '{key}' — путь внутри папки игры, без '..'"
+                    )
+            if len(parsed) > limit:
+                raise ManifestError(f"{source}:{number}: больше {limit} имён в '{key}'")
+            setattr(manifest, key, parsed)
     return manifest
 
 

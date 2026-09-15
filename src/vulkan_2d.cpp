@@ -1,14 +1,19 @@
 /*
- * The C++ half of Enjoer: a deliberately tiny Vulkan renderer.
+ * The C++ half of Enjoer: a deliberately tiny 2D Vulkan renderer.
  *
  * The Vulkan path is compiled when ENJOER_USE_VULKAN is enabled.  Keeping
  * the preview fallback in this translation unit is useful on a fresh
- * checkout: the C game and its controls can be tested on a host without a
- * GPU, while Android/device builds use exactly the same cube data and the
- * SPIR-V shaders from src/shaders/.
+ * checkout: the C game can be tested on a host without a GPU, while
+ * Android/device builds present the same triangle batch through Vulkan and
+ * the SPIR-V shaders from src/shaders/.
+ *
+ * There is no 3D here on purpose.  DimScript is a language for 2D games:
+ * scripts draw in screen pixels, the batch is presented as-is, and the only
+ * matrix in the building maps those pixels onto the swapchain image.
  */
-#include "vulkan_cube.h"
+#include "renderer.h"
 #include "ds_image.h"
+#include "ds_ttf.h"
 
 #include <algorithm>
 #include <array>
@@ -31,105 +36,20 @@
 #define VK_USE_PLATFORM_ANDROID_KHR 1
 #endif
 #include <vulkan/vulkan.h>
-#include "shaders/cube_spv.h"
+#include "shaders/draw_spv.h"
 #endif
 
 namespace {
 
-/* The cube and the 2D batch share one vertex format: position, colour, texture
- * coordinate and array layer (negative = untextured shape).  One pipeline
- * layout, one shader pair, two states. */
+/* The 2D batch vertex: position in screen pixels, tint colour, texture
+ * coordinate and array layer (negative = untextured shape). */
 using Vertex = EnjoerVertex;
-
-struct Projected {
-    float x, y, z;
-};
 
 static uint32_t rgba(int r, int g, int b) {
     auto byte = [](int value) -> uint32_t {
         return static_cast<uint32_t>(std::max(0, std::min(255, value)));
     };
     return byte(r) | (byte(g) << 8) | (byte(b) << 16) | 0xff000000u;
-}
-
-static void put_pixel(Buffer *buffer, int x, int y, uint32_t color) {
-    if (!buffer || !buffer->pixels || x < 0 || y < 0 ||
-        x >= buffer->width || y >= buffer->height) return;
-    buffer->pixels[y * buffer->stride + x] = color;
-}
-
-static Projected transform(float x, float y, float z, float rotation, float pitch,
-                           float aspect) {
-    const float sy = std::sin(rotation), cy = std::cos(rotation);
-    const float sx = std::sin(pitch), cx = std::cos(pitch);
-
-    /* Model rotation: pitch around X, then the continuous turn around Y. */
-    float px = cy * x + sy * z;
-    float pz = -sy * x + cy * z;
-    float py = cx * y - sx * pz;
-    pz = sx * y + cx * pz;
-    pz += 5.0f;
-
-    const float focal = 1.0f / std::tan(62.0f * 3.1415926535f / 360.0f);
-    return {focal * px / (pz * aspect), focal * py / pz, pz};
-}
-
-static void fill_triangle(Buffer *buffer, std::vector<float> &depth,
-                          Projected a, Projected b, Projected c,
-                          uint32_t color) {
-    if (!buffer || !buffer->pixels) return;
-    const float area = (b.x - a.x) * (c.y - a.y) -
-                       (b.y - a.y) * (c.x - a.x);
-    if (std::fabs(area) < 0.00001f) return;
-
-    int left = static_cast<int>(std::floor(std::min({a.x, b.x, c.x}) *
-                                           buffer->height / 2.0f + buffer->width / 2.0f));
-    int right = static_cast<int>(std::ceil(std::max({a.x, b.x, c.x}) *
-                                            buffer->height / 2.0f + buffer->width / 2.0f));
-    int top = static_cast<int>(std::floor(buffer->height / 2.0f -
-                                          std::max({a.y, b.y, c.y}) * buffer->height / 2.0f));
-    int bottom = static_cast<int>(std::ceil(buffer->height / 2.0f -
-                                             std::min({a.y, b.y, c.y}) * buffer->height / 2.0f));
-    left = std::max(0, left); right = std::min(buffer->width, right);
-    top = std::max(0, top); bottom = std::min(buffer->height, bottom);
-
-    for (int py = top; py < bottom; ++py) {
-        for (int px = left; px < right; ++px) {
-            const float x = (static_cast<float>(px) + .5f - buffer->width / 2.0f) *
-                            2.0f / buffer->height;
-            const float y = (buffer->height / 2.0f - static_cast<float>(py) - .5f) *
-                            2.0f / buffer->height;
-            const float wa = ((b.x - x) * (c.y - y) - (b.y - y) * (c.x - x)) / area;
-            const float wb = ((c.x - x) * (a.y - y) - (c.y - y) * (a.x - x)) / area;
-            const float wc = 1.0f - wa - wb;
-            if (wa < 0 || wb < 0 || wc < 0) continue;
-            const float z = wa * a.z + wb * b.z + wc * c.z;
-            const size_t index = static_cast<size_t>(py) * buffer->width + px;
-            if (z < depth[index]) {
-                depth[index] = z;
-                put_pixel(buffer, px, py, color);
-            }
-        }
-    }
-}
-
-static const std::array<Vertex, 36> &cube_vertices() {
-    /* Two triangles per face. Each face has its own cheerful material color. */
-    static const std::array<Vertex, 36> vertices = {{
-        {-1,-1, 1, .95f,.28f,.28f, 0.0f, 0.0f, -1.0f}, {1,-1, 1, .95f,.28f,.28f, 0.0f, 0.0f, -1.0f}, {1, 1, 1, .95f,.28f,.28f, 0.0f, 0.0f, -1.0f},
-        {-1,-1, 1, .95f,.28f,.28f, 0.0f, 0.0f, -1.0f}, {1, 1, 1, .95f,.28f,.28f, 0.0f, 0.0f, -1.0f}, {-1, 1, 1, .95f,.28f,.28f, 0.0f, 0.0f, -1.0f},
-        {1,-1,-1, .25f,.72f,1.0f, 0.0f, 0.0f, -1.0f}, {-1,-1,-1, .25f,.72f,1.0f, 0.0f, 0.0f, -1.0f}, {-1, 1,-1, .25f,.72f,1.0f, 0.0f, 0.0f, -1.0f},
-        {1,-1,-1, .25f,.72f,1.0f, 0.0f, 0.0f, -1.0f}, {-1, 1,-1, .25f,.72f,1.0f, 0.0f, 0.0f, -1.0f}, {1, 1,-1, .25f,.72f,1.0f, 0.0f, 0.0f, -1.0f},
-        {-1, 1, 1, .35f,1.0f,.55f, 0.0f, 0.0f, -1.0f}, {1, 1, 1, .35f,1.0f,.55f, 0.0f, 0.0f, -1.0f}, {1, 1,-1, .35f,1.0f,.55f, 0.0f, 0.0f, -1.0f},
-        {-1, 1, 1, .35f,1.0f,.55f, 0.0f, 0.0f, -1.0f}, {1, 1,-1, .35f,1.0f,.55f, 0.0f, 0.0f, -1.0f}, {-1, 1,-1, .35f,1.0f,.55f, 0.0f, 0.0f, -1.0f},
-        {-1,-1,-1, 1.0f,.78f,.22f, 0.0f, 0.0f, -1.0f}, {1,-1,-1, 1.0f,.78f,.22f, 0.0f, 0.0f, -1.0f}, {1,-1, 1, 1.0f,.78f,.22f, 0.0f, 0.0f, -1.0f},
-        {-1,-1,-1, 1.0f,.78f,.22f, 0.0f, 0.0f, -1.0f}, {1,-1, 1, 1.0f,.78f,.22f, 0.0f, 0.0f, -1.0f}, {-1,-1, 1, 1.0f,.78f,.22f, 0.0f, 0.0f, -1.0f},
-        {1,-1, 1, 1.0f,.42f,.92f, 0.0f, 0.0f, -1.0f}, {1,-1,-1, 1.0f,.42f,.92f, 0.0f, 0.0f, -1.0f}, {1, 1,-1, 1.0f,.42f,.92f, 0.0f, 0.0f, -1.0f},
-        {1,-1, 1, 1.0f,.42f,.92f, 0.0f, 0.0f, -1.0f}, {1, 1,-1, 1.0f,.42f,.92f, 0.0f, 0.0f, -1.0f}, {1, 1, 1, 1.0f,.42f,.92f, 0.0f, 0.0f, -1.0f},
-        {-1,-1,-1, .38f,.48f,1.0f, 0.0f, 0.0f, -1.0f}, {-1,-1, 1, .38f,.48f,1.0f, 0.0f, 0.0f, -1.0f}, {-1, 1, 1, .38f,.48f,1.0f, 0.0f, 0.0f, -1.0f},
-        {-1,-1,-1, .38f,.48f,1.0f, 0.0f, 0.0f, -1.0f}, {-1, 1, 1, .38f,.48f,1.0f, 0.0f, 0.0f, -1.0f}, {-1, 1,-1, .38f,.48f,1.0f, 0.0f, 0.0f, -1.0f},
-    }};
-    return vertices;
 }
 
 /* Bilinear sample of a sprite sheet layer, clamped to the edge.  The GPU side
@@ -170,9 +90,11 @@ static void sample_image(const DsImage *image, float u, float v, int *red, int *
     *alpha = mix(3);
 }
 
-/* Rasterizes one already projected triangle from the script batch.  The batch is
- * in pixels, so this is a plain screen-space walk with the same interpolation
- * the fragment shader does: tint colour, texture coordinate, array layer. */
+/* Rasterizes one triangle from the script batch.  The batch is in pixels, so
+ * this is a plain screen-space walk with the same interpolation the fragment
+ * shader does: tint colour, texture coordinate, array layer.  Triangles arrive
+ * in script order and paint over each other — the painter's algorithm the GPU
+ * pipeline mirrors with alpha blending. */
 static void fill_pixel_triangle(Buffer *buffer, const EnjoerVertex &a, const EnjoerVertex &b,
                                 const EnjoerVertex &c) {
     if (!buffer || !buffer->pixels) return;
@@ -231,8 +153,7 @@ static void draw_batch(Buffer *buffer, const EnjoerFrame *frame) {
                             frame->vertices[index + 2]);
 }
 
-static void render_fallback(Buffer *buffer, float rotation, float pitch,
-                            const EnjoerFrame *frame, int show_cube) {
+static void render_fallback(Buffer *buffer, const EnjoerFrame *frame) {
     if (!buffer || !buffer->pixels || buffer->width < 1 || buffer->height < 1) return;
     const float clear_r = frame ? frame->clear_color[0] : 0.05f;
     const float clear_g = frame ? frame->clear_color[1] : 0.08f;
@@ -244,29 +165,6 @@ static void render_fallback(Buffer *buffer, float rotation, float pitch,
         uint32_t *row = buffer->pixels + static_cast<size_t>(y) * buffer->stride;
         for (int x = 0; x < buffer->width; ++x) row[x] = background;
     }
-    if (!show_cube) {
-        draw_batch(buffer, frame);
-        return;
-    }
-
-    std::vector<float> depth(static_cast<size_t>(buffer->width) * buffer->height,
-                             std::numeric_limits<float>::infinity());
-    const auto &vertices = cube_vertices();
-    const float aspect = static_cast<float>(buffer->width) /
-                         static_cast<float>(std::max(1, buffer->height));
-    for (size_t i = 0; i < vertices.size(); i += 3) {
-        const Vertex &va = vertices[i];
-        const Vertex &vb = vertices[i + 1];
-        const Vertex &vc = vertices[i + 2];
-        const Projected a = transform(va.x, va.y, va.z, rotation, pitch, aspect);
-        const Projected b = transform(vb.x, vb.y, vb.z, rotation, pitch, aspect);
-        const Projected c = transform(vc.x, vc.y, vc.z, rotation, pitch, aspect);
-        const int shade = static_cast<int>(92 + 70 * std::max(0.0f, 1.0f - a.z / 8.0f));
-        const int red = static_cast<int>(255 * va.r) * shade / 160;
-        const int green = static_cast<int>(255 * va.g) * shade / 160;
-        const int blue = static_cast<int>(255 * va.b) * shade / 160;
-        fill_triangle(buffer, depth, a, b, c, rgba(red, green, blue));
-    }
     draw_batch(buffer, frame);
 }
 
@@ -274,15 +172,6 @@ static void render_fallback(Buffer *buffer, float rotation, float pitch,
 
 /* A compact column-major 4 by 4 matrix, matching GLSL's mat4 layout. */
 struct Mat4 { float value[16]{}; };
-static Mat4 multiply(const Mat4 &a, const Mat4 &b) {
-    Mat4 result{};
-    for (int col = 0; col < 4; ++col)
-        for (int row = 0; row < 4; ++row)
-            for (int k = 0; k < 4; ++k)
-                result.value[col * 4 + row] +=
-                    a.value[k * 4 + row] * b.value[col * 4 + k];
-    return result;
-}
 
 /* Zero-initialise a Vulkan struct and set its sType. */
 template <class T> static T vk_struct(VkStructureType type) {
@@ -291,7 +180,7 @@ template <class T> static T vk_struct(VkStructureType type) {
     return value;
 }
 
-class VulkanCube {
+class VulkanRenderer {
 public:
     bool init(void *native_window, int width, int height) {
         width_ = std::max(1, width);
@@ -302,11 +191,9 @@ public:
         if (!create_device()) return false;
         if (!create_swapchain()) return false;
         if (!create_render_pass()) return false;
-        if (!create_depth()) return false;
         if (!create_framebuffers()) return false;
-        if (!create_pipelines()) return false;
+        if (!create_pipeline()) return false;
         if (!create_sampler()) return false;
-        if (!create_vertex_buffer()) return false;
         if (!create_batch_buffer()) return false;
         if (!create_commands()) return false;
         if (!create_sync()) return false;
@@ -320,10 +207,9 @@ public:
         if (initialized_) recreate_swapchain();
     }
 
-    void render(float rotation, float pitch, const EnjoerFrame *frame, int show_cube) {
+    void render(const EnjoerFrame *frame) {
         if (!initialized_ || swapchain_ == VK_NULL_HANDLE) return;
         frame_ = frame;
-        show_cube_ = show_cube;
 
         vkWaitForFences(device_, 1, &in_flight_, VK_TRUE, UINT64_MAX);
         uint32_t image = 0;
@@ -333,10 +219,9 @@ public:
         if (acquired != VK_SUCCESS && acquired != VK_SUBOPTIMAL_KHR) return;
         vkResetFences(device_, 1, &in_flight_);
 
-        const Mat4 mvp = compute_mvp(rotation, pitch);
         upload_batch();
         refresh_textures();
-        record(image, mvp);
+        record(image);
 
         const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo submit = vk_struct<VkSubmitInfo>(VK_STRUCTURE_TYPE_SUBMIT_INFO);
@@ -368,8 +253,6 @@ public:
             if (render_finished_) vkDestroySemaphore(device_, render_finished_, nullptr);
             if (image_available_) vkDestroySemaphore(device_, image_available_, nullptr);
             if (command_pool_) vkDestroyCommandPool(device_, command_pool_, nullptr);
-            if (vertex_buffer_) vkDestroyBuffer(device_, vertex_buffer_, nullptr);
-            if (vertex_memory_) vkFreeMemory(device_, vertex_memory_, nullptr);
             if (batch_mapped_) vkUnmapMemory(device_, batch_memory_);
             if (batch_buffer_) vkDestroyBuffer(device_, batch_buffer_, nullptr);
             if (batch_memory_) vkFreeMemory(device_, batch_memory_, nullptr);
@@ -377,51 +260,21 @@ public:
             if (sampler_) vkDestroySampler(device_, sampler_, nullptr);
             if (descriptor_layout_) vkDestroyDescriptorSetLayout(device_, descriptor_layout_, nullptr);
             if (pipeline_) vkDestroyPipeline(device_, pipeline_, nullptr);
-            if (pipeline_2d_) vkDestroyPipeline(device_, pipeline_2d_, nullptr);
             if (pipeline_layout_) vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
             if (render_pass_) vkDestroyRenderPass(device_, render_pass_, nullptr);
             vkDestroyDevice(device_, nullptr);
         }
         if (surface_) vkDestroySurfaceKHR(instance_, surface_, nullptr);
         if (instance_) vkDestroyInstance(instance_, nullptr);
-        *this = VulkanCube{};
+        *this = VulkanRenderer{};
     }
 
 private:
-    Mat4 compute_mvp(float rotation, float pitch) const {
-        const float aspect = static_cast<float>(width_) / height_;
-        const float f = 1.0f / std::tan(62.0f * 3.1415926535f / 360.0f);
-        /* Vulkan clip space: depth 0..1, Y points down. */
-        Mat4 projection{};
-        projection.value[0] = f / aspect;
-        projection.value[5] = -f;
-        projection.value[10] = 100.0f / 99.9f;
-        projection.value[11] = 1.0f;
-        projection.value[14] = -10.0f / 99.9f;
-
-        const float sy = std::sin(rotation), cy = std::cos(rotation);
-        const float sx = std::sin(pitch), cx = std::cos(pitch);
-        Mat4 yaw{};
-        yaw.value[0] = cy;  yaw.value[2] = -sy;
-        yaw.value[5] = 1.0f;
-        yaw.value[8] = sy;  yaw.value[10] = cy;
-        yaw.value[15] = 1.0f;
-        Mat4 tilt{};
-        tilt.value[0] = 1.0f;
-        tilt.value[5] = cx;  tilt.value[6] = sx;
-        tilt.value[9] = -sx; tilt.value[10] = cx;
-        tilt.value[15] = 1.0f;
-        Mat4 translate{};
-        translate.value[0] = translate.value[5] = translate.value[10] = translate.value[15] = 1.0f;
-        translate.value[14] = 5.0f;
-        return multiply(projection, multiply(translate, multiply(tilt, yaw)));
-    }
-
     bool create_instance() {
         VkApplicationInfo app = vk_struct<VkApplicationInfo>(VK_STRUCTURE_TYPE_APPLICATION_INFO);
         app.pApplicationName = "Enjoer";
         app.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-        app.pEngineName = "Enjoer cube";
+        app.pEngineName = "Enjoer 2D";
         app.engineVersion = VK_MAKE_VERSION(1, 0, 0);
         app.apiVersion = VK_API_VERSION_1_0;
         std::vector<const char *> extensions = {VK_KHR_SURFACE_EXTENSION_NAME};
@@ -554,45 +407,33 @@ private:
     }
 
     bool create_render_pass() {
-        VkAttachmentDescription attachments[2]{};
-        attachments[0].format = surface_format_;
-        attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        attachments[1].format = depth_format_;
-        attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        VkAttachmentDescription attachment{};
+        attachment.format = surface_format_;
+        attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
         VkAttachmentReference color{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-        VkAttachmentReference depth{1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &color;
-        subpass.pDepthStencilAttachment = &depth;
 
         VkSubpassDependency dependency{};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         dependency.dstSubpass = 0;
-        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dependency.dstStageMask = dependency.srcStageMask;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         dependency.srcAccessMask = 0;
-        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
         VkRenderPassCreateInfo info = vk_struct<VkRenderPassCreateInfo>(VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO);
-        info.attachmentCount = 2;
-        info.pAttachments = attachments;
+        info.attachmentCount = 1;
+        info.pAttachments = &attachment;
         info.subpassCount = 1;
         info.pSubpasses = &subpass;
         info.dependencyCount = 1;
@@ -609,59 +450,13 @@ private:
         return UINT32_MAX;
     }
 
-    bool create_depth() {
-        const VkFormat candidates[] = {VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT,
-                                       VK_FORMAT_D16_UNORM};
-        depth_format_ = VK_FORMAT_UNDEFINED;
-        for (VkFormat candidate : candidates) {
-            VkFormatProperties props{};
-            vkGetPhysicalDeviceFormatProperties(physical_, candidate, &props);
-            if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-                depth_format_ = candidate;
-                break;
-            }
-        }
-        if (depth_format_ == VK_FORMAT_UNDEFINED) return false;
-        if (render_pass_ == VK_NULL_HANDLE && !create_render_pass()) return false;
-
-        VkImageCreateInfo image = vk_struct<VkImageCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
-        image.imageType = VK_IMAGE_TYPE_2D;
-        image.format = depth_format_;
-        image.extent = {extent_.width, extent_.height, 1};
-        image.mipLevels = 1;
-        image.arrayLayers = 1;
-        image.samples = VK_SAMPLE_COUNT_1_BIT;
-        image.tiling = VK_IMAGE_TILING_OPTIMAL;
-        image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        if (vkCreateImage(device_, &image, nullptr, &depth_image_) != VK_SUCCESS) return false;
-        VkMemoryRequirements requirements{};
-        vkGetImageMemoryRequirements(device_, depth_image_, &requirements);
-        VkMemoryAllocateInfo alloc = vk_struct<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
-        alloc.allocationSize = requirements.size;
-        alloc.memoryTypeIndex = find_memory(requirements.memoryTypeBits,
-                                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        if (alloc.memoryTypeIndex == UINT32_MAX)
-            alloc.memoryTypeIndex = find_memory(requirements.memoryTypeBits, 0);
-        if (alloc.memoryTypeIndex == UINT32_MAX) return false;
-        if (vkAllocateMemory(device_, &alloc, nullptr, &depth_memory_) != VK_SUCCESS) return false;
-        vkBindImageMemory(device_, depth_image_, depth_memory_, 0);
-        VkImageViewCreateInfo view = vk_struct<VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
-        view.image = depth_image_;
-        view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        view.format = depth_format_;
-        view.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
-        return vkCreateImageView(device_, &view, nullptr, &depth_view_) == VK_SUCCESS;
-    }
-
     bool create_framebuffers() {
         framebuffers_.assign(image_views_.size(), VK_NULL_HANDLE);
         for (size_t i = 0; i < image_views_.size(); ++i) {
-            const VkImageView attachments[] = {image_views_[i], depth_view_};
             VkFramebufferCreateInfo info = vk_struct<VkFramebufferCreateInfo>(VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO);
             info.renderPass = render_pass_;
-            info.attachmentCount = 2;
-            info.pAttachments = attachments;
+            info.attachmentCount = 1;
+            info.pAttachments = &image_views_[i];
             info.width = extent_.width;
             info.height = extent_.height;
             info.layers = 1;
@@ -680,12 +475,10 @@ private:
         return module;
     }
 
-    /* One layout, two pipelines: a 3D cube and a depth-free 2D batch share the
-     * same vertex format (position + colour) and the same vertex shader, which
-     * multiplies by the pushed matrix.  Drawing the batch therefore means
-     * pushing an orthographic matrix instead of the MVP. */
-    bool create_pipeline_layout() {
-        if (pipeline_layout_ != VK_NULL_HANDLE) return true;
+    /* One pipeline for the 2D batch: no culling, no depth test, painter's
+     * order with alpha blending.  The script decides what covers what by the
+     * order it draws in, on the GPU exactly like in the software fallback. */
+    bool create_pipeline() {
         if (descriptor_layout_ == VK_NULL_HANDLE) {
             /* One binding: the array of every image the game loaded. */
             VkDescriptorSetLayoutBinding binding{};
@@ -699,24 +492,19 @@ private:
             if (vkCreateDescriptorSetLayout(device_, &descriptor, nullptr, &descriptor_layout_) != VK_SUCCESS)
                 return false;
         }
-        VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4)};
-        VkPipelineLayoutCreateInfo layout = vk_struct<VkPipelineLayoutCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
-        layout.setLayoutCount = 1;
-        layout.pSetLayouts = &descriptor_layout_;
-        layout.pushConstantRangeCount = 1;
-        layout.pPushConstantRanges = &push;
-        return vkCreatePipelineLayout(device_, &layout, nullptr, &pipeline_layout_) == VK_SUCCESS;
-    }
+        if (pipeline_layout_ == VK_NULL_HANDLE) {
+            VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4)};
+            VkPipelineLayoutCreateInfo layout = vk_struct<VkPipelineLayoutCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
+            layout.setLayoutCount = 1;
+            layout.pSetLayouts = &descriptor_layout_;
+            layout.pushConstantRangeCount = 1;
+            layout.pPushConstantRanges = &push;
+            if (vkCreatePipelineLayout(device_, &layout, nullptr, &pipeline_layout_) != VK_SUCCESS)
+                return false;
+        }
 
-    bool create_pipelines() {
-        if (!create_pipeline_layout()) return false;
-        if (!create_pipeline(false, &pipeline_)) return false;
-        return create_pipeline(true, &pipeline_2d_);
-    }
-
-    bool create_pipeline(bool for_2d, VkPipeline *target) {
-        VkShaderModule vert = make_shader(cube_vert_spv, sizeof(cube_vert_spv));
-        VkShaderModule frag = make_shader(cube_frag_spv, sizeof(cube_frag_spv));
+        VkShaderModule vert = make_shader(draw_vert_spv, sizeof(draw_vert_spv));
+        VkShaderModule frag = make_shader(draw_frag_spv, sizeof(draw_frag_spv));
         if (!vert || !frag) {
             if (vert) vkDestroyShaderModule(device_, vert, nullptr);
             if (frag) vkDestroyShaderModule(device_, frag, nullptr);
@@ -758,7 +546,7 @@ private:
 
         VkPipelineRasterizationStateCreateInfo raster = vk_struct<VkPipelineRasterizationStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO);
         raster.polygonMode = VK_POLYGON_MODE_FILL;
-        raster.cullMode = for_2d ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT;
+        raster.cullMode = VK_CULL_MODE_NONE;
         /* Y is flipped in the projection, so counter-clockwise data becomes
          * clockwise on screen. */
         raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
@@ -768,24 +556,22 @@ private:
         multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineDepthStencilStateCreateInfo depth = vk_struct<VkPipelineDepthStencilStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO);
-        depth.depthTestEnable = for_2d ? VK_FALSE : VK_TRUE;
-        depth.depthWriteEnable = for_2d ? VK_FALSE : VK_TRUE;
+        depth.depthTestEnable = VK_FALSE;
+        depth.depthWriteEnable = VK_FALSE;
         depth.depthCompareOp = VK_COMPARE_OP_LESS;
 
         VkPipelineColorBlendAttachmentState blend_attachment{};
         blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        if (for_2d) {
-            /* Painter's order: sprites and shapes are drawn in script order and
-             * alpha blends over what is already there. */
-            blend_attachment.blendEnable = VK_TRUE;
-            blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
-            blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
-        }
+        /* Painter's order: sprites and shapes are drawn in script order and
+         * alpha blends over what is already there. */
+        blend_attachment.blendEnable = VK_TRUE;
+        blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+        blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
         VkPipelineColorBlendStateCreateInfo blend = vk_struct<VkPipelineColorBlendStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO);
         blend.attachmentCount = 1;
         blend.pAttachments = &blend_attachment;
@@ -805,7 +591,7 @@ private:
         info.renderPass = render_pass_;
         info.subpass = 0;
         const VkResult result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &info,
-                                                          nullptr, target);
+                                                          nullptr, &pipeline_);
         vkDestroyShaderModule(device_, vert, nullptr);
         vkDestroyShaderModule(device_, frag, nullptr);
         return result == VK_SUCCESS;
@@ -1068,31 +854,6 @@ private:
         texture_layers_ = 0;
     }
 
-    bool create_vertex_buffer() {
-        const auto &vertices = cube_vertices();
-        VkBufferCreateInfo info = vk_struct<VkBufferCreateInfo>(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
-        info.size = sizeof(Vertex) * vertices.size();
-        info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        if (vkCreateBuffer(device_, &info, nullptr, &vertex_buffer_) != VK_SUCCESS) return false;
-        VkMemoryRequirements requirements{};
-        vkGetBufferMemoryRequirements(device_, vertex_buffer_, &requirements);
-        VkMemoryAllocateInfo alloc = vk_struct<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
-        alloc.allocationSize = requirements.size;
-        alloc.memoryTypeIndex = find_memory(requirements.memoryTypeBits,
-                                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        if (alloc.memoryTypeIndex == UINT32_MAX) return false;
-        if (vkAllocateMemory(device_, &alloc, nullptr, &vertex_memory_) != VK_SUCCESS) return false;
-        vkBindBufferMemory(device_, vertex_buffer_, vertex_memory_, 0);
-        void *mapped = nullptr;
-        if (vkMapMemory(device_, vertex_memory_, 0, info.size, 0, &mapped) != VK_SUCCESS)
-            return false;
-        std::memcpy(mapped, vertices.data(), static_cast<size_t>(info.size));
-        vkUnmapMemory(device_, vertex_memory_);
-        return true;
-    }
-
     bool create_commands() {
         VkCommandPoolCreateInfo pool = vk_struct<VkCommandPoolCreateInfo>(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO);
         pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -1120,24 +881,23 @@ private:
                vkCreateFence(device_, &fence, nullptr, &in_flight_) == VK_SUCCESS;
     }
 
-    void record(uint32_t image, const Mat4 &mvp) {
+    void record(uint32_t image) {
         VkCommandBuffer cmd = command_buffers_[image];
         vkResetCommandBuffer(cmd, 0);
         VkCommandBufferBeginInfo begin = vk_struct<VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
         begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         vkBeginCommandBuffer(cmd, &begin);
 
-        VkClearValue clears[2]{};
+        VkClearValue clear{};
         const float *tint = frame_ ? frame_->clear_color : nullptr;
-        clears[0].color = {{tint ? tint[0] : 0.05f, tint ? tint[1] : 0.08f,
-                           tint ? tint[2] : 0.15f, 1.0f}};
-        clears[1].depthStencil = {1.0f, 0};
+        clear.color = {{tint ? tint[0] : 0.05f, tint ? tint[1] : 0.08f,
+                        tint ? tint[2] : 0.15f, 1.0f}};
         VkRenderPassBeginInfo pass = vk_struct<VkRenderPassBeginInfo>(VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO);
         pass.renderPass = render_pass_;
         pass.framebuffer = framebuffers_[image];
         pass.renderArea = {{0, 0}, extent_};
-        pass.clearValueCount = 2;
-        pass.pClearValues = clears;
+        pass.clearValueCount = 1;
+        pass.pClearValues = &clear;
         vkCmdBeginRenderPass(cmd, &pass, VK_SUBPASS_CONTENTS_INLINE);
 
         VkViewport viewport{0.0f, 0.0f, static_cast<float>(extent_.width),
@@ -1145,16 +905,8 @@ private:
         VkRect2D scissor{{0, 0}, extent_};
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
-        if (show_cube_) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-            const VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers(cmd, 0, 1, &vertex_buffer_, &offset);
-            vkCmdPushConstants(cmd, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                               sizeof(Mat4), mvp.value);
-            vkCmdDraw(cmd, static_cast<uint32_t>(cube_vertices().size()), 1, 0, 0);
-        }
         if (batch_vertices_ >= 3) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_2d_);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout_, 0, 1,
                                     &descriptor_set_, 0, nullptr);
             const VkDeviceSize offset = 0;
@@ -1172,10 +924,6 @@ private:
         if (device_ == VK_NULL_HANDLE) return;
         for (VkFramebuffer fb : framebuffers_) if (fb) vkDestroyFramebuffer(device_, fb, nullptr);
         framebuffers_.clear();
-        if (depth_view_) vkDestroyImageView(device_, depth_view_, nullptr);
-        if (depth_image_) vkDestroyImage(device_, depth_image_, nullptr);
-        if (depth_memory_) vkFreeMemory(device_, depth_memory_, nullptr);
-        depth_view_ = VK_NULL_HANDLE; depth_image_ = VK_NULL_HANDLE; depth_memory_ = VK_NULL_HANDLE;
         for (VkImageView view : image_views_) if (view) vkDestroyImageView(device_, view, nullptr);
         image_views_.clear();
         images_.clear();
@@ -1191,17 +939,14 @@ private:
         if (surface_format_ != previous_format) {
             /* Rare, but the render pass and pipeline bake the colour format. */
             vkDestroyPipeline(device_, pipeline_, nullptr);
-            vkDestroyPipeline(device_, pipeline_2d_, nullptr);
             vkDestroyRenderPass(device_, render_pass_, nullptr);
             pipeline_ = VK_NULL_HANDLE;
-            pipeline_2d_ = VK_NULL_HANDLE;
             render_pass_ = VK_NULL_HANDLE;
             if (!create_render_pass()) return;
             vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
             pipeline_layout_ = VK_NULL_HANDLE;
-            if (!create_pipelines()) return;
+            if (!create_pipeline()) return;
         }
-        if (!create_depth()) return;
         if (!create_framebuffers()) return;
         if (command_buffers_.size() != images_.size()) {
             vkFreeCommandBuffers(device_, command_pool_,
@@ -1214,9 +959,7 @@ private:
     bool initialized_ = false;
     int width_ = 1, height_ = 1;
     const EnjoerFrame *frame_ = nullptr;
-    int show_cube_ = 1;
     int batch_vertices_ = 0;
-    VkPipeline pipeline_2d_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout descriptor_layout_ = VK_NULL_HANDLE;
     VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
     VkDescriptorSet descriptor_set_ = VK_NULL_HANDLE;
@@ -1237,19 +980,13 @@ private:
     VkQueue queue_ = VK_NULL_HANDLE;
     VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
     VkFormat surface_format_ = VK_FORMAT_R8G8B8A8_UNORM;
-    VkFormat depth_format_ = VK_FORMAT_UNDEFINED;
     VkExtent2D extent_{1, 1};
     std::vector<VkImage> images_;
     std::vector<VkImageView> image_views_;
     std::vector<VkFramebuffer> framebuffers_;
-    VkImage depth_image_ = VK_NULL_HANDLE;
-    VkDeviceMemory depth_memory_ = VK_NULL_HANDLE;
-    VkImageView depth_view_ = VK_NULL_HANDLE;
     VkRenderPass render_pass_ = VK_NULL_HANDLE;
     VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
     VkPipeline pipeline_ = VK_NULL_HANDLE;
-    VkBuffer vertex_buffer_ = VK_NULL_HANDLE;
-    VkDeviceMemory vertex_memory_ = VK_NULL_HANDLE;
     VkCommandPool command_pool_ = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> command_buffers_;
     VkSemaphore image_available_ = VK_NULL_HANDLE;
@@ -1257,7 +994,7 @@ private:
     VkFence in_flight_ = VK_NULL_HANDLE;
 };
 
-static VulkanCube vulkan_cube;
+static VulkanRenderer vulkan_renderer;
 static bool vulkan_active;
 #endif
 
@@ -1267,12 +1004,12 @@ static int height = 1;
 
 } // namespace
 
-extern "C" int cube_renderer_init(void *window, int w, int h) {
+extern "C" int renderer_init(void *window, int w, int h) {
     native_window = window;
     width = std::max(1, w);
     height = std::max(1, h);
 #if ENJOER_USE_VULKAN
-    if (native_window && vulkan_cube.init(native_window, width, height)) {
+    if (native_window && vulkan_renderer.init(native_window, width, height)) {
         vulkan_active = true;
         return 1;
     }
@@ -1283,24 +1020,27 @@ extern "C" int cube_renderer_init(void *window, int w, int h) {
     return 1;
 }
 
-extern "C" void cube_renderer_resize(int w, int h) {
+extern "C" void renderer_resize(int w, int h) {
     width = std::max(1, w);
     height = std::max(1, h);
 #if ENJOER_USE_VULKAN
-    if (vulkan_active) vulkan_cube.resize(width, height);
+    if (vulkan_active) vulkan_renderer.resize(width, height);
 #endif
 }
 
-extern "C" void cube_renderer_render(Buffer *preview_target, float rotation, float pitch,
-                                     const EnjoerFrame *frame, int show_cube) {
+extern "C" void renderer_render(Buffer *preview_target, const EnjoerFrame *frame) {
+    /* The text pass runs before either branch: recorded texts with loaded
+     * fonts become glyph quads inside the same batch, so the GPU upload and
+     * the software walk below see identical triangles. */
+    ds_ttf_resolve_frame();
 #if ENJOER_USE_VULKAN
     if (vulkan_active) {
-        vulkan_cube.render(rotation, pitch, frame, show_cube);
+        vulkan_renderer.render(frame);
         return;
     }
 #endif
     if (preview_target) {
-        render_fallback(preview_target, rotation, pitch, frame, show_cube);
+        render_fallback(preview_target, frame);
         return;
     }
 #ifdef __ANDROID__
@@ -1313,25 +1053,25 @@ extern "C" void cube_renderer_render(Buffer *preview_target, float rotation, flo
             target.width = locked.width;
             target.height = locked.height;
             target.stride = locked.stride;
-            render_fallback(&target, rotation, pitch, frame, show_cube);
+            render_fallback(&target, frame);
             ANativeWindow_unlockAndPost(window);
         }
     }
 #endif
 }
 
-extern "C" void cube_renderer_shutdown(void) {
+extern "C" void renderer_shutdown(void) {
 #if ENJOER_USE_VULKAN
-    if (vulkan_active) vulkan_cube.shutdown();
+    if (vulkan_active) vulkan_renderer.shutdown();
     vulkan_active = false;
 #endif
     native_window = nullptr;
 }
 
-extern "C" const char *cube_renderer_backend(void) {
+extern "C" const char *renderer_backend(void) {
 #if ENJOER_USE_VULKAN
-    return vulkan_active ? "Vulkan" : "Vulkan-compatible preview fallback";
+    return vulkan_active ? "Vulkan" : "software 2D fallback";
 #else
-    return "C++ preview fallback (enable Vulkan for GPU presentation)";
+    return "software 2D fallback (enable Vulkan for GPU presentation)";
 #endif
 }

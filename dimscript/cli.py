@@ -81,8 +81,9 @@ def _load(source_argument: str) -> tuple[object, str]:
 
 
 def _run_interpreter(program, filename: str, clicks: int, frames: int, dt: float,
-                     width: float, height: float) -> int:
+                     width: float, height: float, asset_dir: Optional[str] = None) -> int:
     interpreter = Interpreter(program, filename=filename)
+    interpreter.asset_dir = asset_dir
     interpreter.engine.resize(int(width), int(height))
     interpreter.initialize()
     interpreter.load()
@@ -106,6 +107,7 @@ def _run_interpreter(program, filename: str, clicks: int, frames: int, dt: float
                 "y": command.y,
                 "scale": command.scale,
                 "color": list(command.color),
+                "font": command.font,
             }
             for command in commands
         ],
@@ -141,8 +143,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         program = loaded if hasattr(loaded, "functions") else loaded.program
 
         if args.run:
+            # A folder run resolves image.load/font.load against the game
+            # folder, exactly like the device (see ds_files).
+            asset_dir = filename if manifest is not None else None
             return _run_interpreter(program, filename, args.click, args.frames, args.dt,
-                                     args.width, args.height)
+                                     args.width, args.height, asset_dir)
 
         if args.check:
             from .compiler import Analyzer
