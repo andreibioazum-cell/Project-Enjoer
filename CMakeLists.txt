@@ -32,13 +32,15 @@ add_library(enjoer SHARED
     src/dimscript_runtime.c
     src/ds_manifest.c
     src/ds_files.c
-    src/ds_vm.c
-    src/ds_vm_heap.c
-    src/ds_vm_lang.c
-    src/ds_vm_exec.c
+    src/ds_image.c
+    src/ds_png.c
     src/generated/clicker.c
     src/vulkan_cube.cpp
     ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
+
+# STRICT COMPILER MODE: NO VM, NO REFCOUNT, MANUAL MEMORY, SPEED LIKE C, AOT TO MACHINE CODE
+# VM files removed: ds_vm.c, ds_vm_heap.c, ds_vm_lang.c, ds_vm_exec.c
+# Only AOT compiler (dimscript/compiler.py -> C99 -> clang -O3 -> .so) remains
 
 set_target_properties(enjoer PROPERTIES OUTPUT_NAME ds_game)
 target_include_directories(enjoer PRIVATE
