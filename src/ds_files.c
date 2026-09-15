@@ -109,9 +109,11 @@ int ds_files_list_ds(char names[][DS_FILES_NAME], int capacity) {
     struct dirent *entry = NULL;
     while ((entry = readdir(directory)) != NULL) {
         if (!has_ds_extension(entry->d_name)) continue;
-        if (strlen(entry->d_name) >= DS_FILES_NAME) continue;
         if (count >= capacity) break;
-        snprintf(names[count], DS_FILES_NAME, "%s", entry->d_name);
+        /* A name that does not fit is skipped: the manifest never refers to it. */
+        const size_t name_length = strlen(entry->d_name);
+        if (name_length >= DS_FILES_NAME) continue;
+        memcpy(names[count], entry->d_name, name_length + 1);
         ++count;
     }
     closedir(directory);

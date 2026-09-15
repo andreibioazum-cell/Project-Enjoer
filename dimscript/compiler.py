@@ -1,10 +1,30 @@
-"""Semantic checks and native C99 code generation for DimScript.
+"""DimScript front end: semantic checks and native C99 code generation.
 
-The compiler intentionally performs no interpretation while emitting a game:
-DimScript values become ordinary C values, structs become C structs and the
-callbacks become C functions.  The only support code is the tiny
-``dimscript_runtime`` ABI used for allocation, string concatenation and the
-font-less render API.
+A game is *compiled*, never interpreted.  ``tools/aot.py`` loads a game folder,
+merges every ``.ds`` file into one program and hands it to :class:`CCompiler`,
+whose output is plain C99 against :file:`src/dimscript_runtime.h`.  clang (the
+Android NDK is clang) then produces the machine code that ships inside the APK,
+so no bytecode, no dispatch loop and no runtime type checks exist anywhere in
+the hot path.
+
+Ownership
+---------
+There is no garbage collector.  Every value that lives on the heap — a string, a
+list, a struct object — is reference counted, and the compiler decides
+statically where a reference is created, moved or dropped, because the checker
+knows the type of every expression:
+
+* ``new X`` and a freshly built string/list are *owned rvalues*; assigning one
+  emits ``ds_move`` (release the old value, store, never retain);
+* reading a variable, a field or a list element is a *borrow*; assigning a
+  borrow emits ``ds_assign``/``ds_keep`` (retain, then release the old one);
+* function parameters are owned by the callee and released when it returns, so
+  a call site keeps a borrowed argument and passes an owned rvalue through;
+* ``delete x`` emits ``ds_release_slot``.
+
+Because of that a frame performs no tracing, no scanning and no allocation for
+scripts that only draw, and ``ds_ref_stats()`` (built with ``-DDS_REF_COUNTERS``)
+proves in the tests that every retain has its release.
 """
 
 from __future__ import annotations
@@ -33,6 +53,7 @@ from .ast import (
     Member,
     Name,
     New,
+    Node,
     Program,
     Return,
     Stmt,
@@ -48,9 +69,12 @@ class SemanticError(DimScriptError):
 
 @dataclass(frozen=True)
 class DType:
-    """A small nominal type used by the checker and code generator."""
+    """A script type.  `element` is set for ``list`` and makes the type of
+    ``list[i]`` statically known, which is what lets the C backend store bricks
+    in a list without boxing them."""
 
     name: str
+    element: Optional["DType"] = None
 
     @property
     def is_struct(self) -> bool:
@@ -60,6 +84,11 @@ class DType:
     def struct_name(self) -> str:
         return self.name.split(":", 1)[1] if self.is_struct else ""
 
+    @property
+    def is_handle(self) -> bool:
+        """True for types that own a reference on the runtime heap."""
+        return self.is_struct or self.name in ("string", "list")
+
 
 INT = DType("int")
 FLOAT = DType("float")
@@ -68,113 +97,111 @@ BOOL = DType("bool")
 VOID = DType("void")
 NIL = DType("nil")
 UNKNOWN = DType("unknown")
+LIST = DType("list")
 RENDER = DType("namespace:render")
 MATH = DType("namespace:math")
 ENGINE = DType("namespace:engine")
 INPUT = DType("namespace:input")
-LIST = DType("list")
+IMAGE = DType("namespace:image")
 
-#: Everything the VM offers on a list value; only `count` is a property.
+
+def list_of(element: DType) -> DType:
+    return DType("list", element)
+
+
 LIST_METHODS = frozenset({"push", "insert", "delete", "remove_at", "clear", "index_of", "join",
                           "count"})
 
-#: What the ahead-of-time backend knows about.  Anything outside it is a clear
-#: error rather than silently missing code — `list` and indexing are the two
-#: constructs the interpreter (src/ds_vm.c) has and compiled games do not.
-NAMESPACE_TYPES = {"render": RENDER, "math": MATH, "engine": ENGINE, "input": INPUT}
+NAMESPACE_TYPES = {"render": RENDER, "math": MATH, "engine": ENGINE, "input": INPUT, "image": IMAGE}
 
-#: namespace -> callable name -> (argument count, C call template)
-BUILTIN_CALLS = {
+
+@dataclass(frozen=True)
+class Builtin:
+    """One ``namespace.name`` call.
+
+    ``c`` is a C template; ``{n}`` is the n-th argument, already converted.
+    ``strings`` lists the argument indexes that are ``DsString *`` — those are
+    passed with their reference (the runtime function consumes it; a borrowed
+    argument is wrapped in ds_keep).  ``where`` appends the script location,
+    which is what an out-of-range index or a division by zero reports.
+    """
+
+    args: int
+    returns: DType
+    c: str
+    strings: Tuple[int, ...] = ()
+    where: bool = False
+    numbers: str = "double"  # numeric cast used for the remaining arguments
+
+
+BUILTINS: Dict[str, Dict[str, Builtin]] = {
     "render": {
-        # -1 means "any count the VM accepts": render.color takes three or four
-        # components, the fourth one being alpha.
-        "color": (-1, "ds_render_color({0}, {1}, {2})"),
-        "color_alpha": (4, "ds_render_color_alpha({0}, {1}, {2}, {3})"),
-        "clear": (3, "ds_render_clear({0}, {1}, {2})"),
-        "rect": (4, "ds_render_rect({0}, {1}, {2}, {3})"),
-        "frame": (5, "ds_render_frame({0}, {1}, {2}, {3}, {4})"),
-        "circle": (3, "ds_render_circle({0}, {1}, {2})"),
-        "ring": (4, "ds_render_ring({0}, {1}, {2}, {3})"),
-        "line": (5, "ds_render_line({0}, {1}, {2}, {3}, {4})"),
-        "tri": (6, "ds_render_triangle({0}, {1}, {2}, {3}, {4}, {5})"),
-        "text": (4, "ds_render_text({0}, {1}, {2}, {3})"),
+        "color": Builtin(-1, VOID, "ds_render_color((float)({0}), (float)({1}), (float)({2}))",
+                         numbers="float"),
+        "color_alpha": Builtin(4, VOID,
+                               "ds_render_color_alpha((float)({0}), (float)({1}), (float)({2}), (float)({3}))",
+                               numbers="float"),
+        "clear": Builtin(3, VOID, "ds_render_clear((float)({0}), (float)({1}), (float)({2}))",
+                         numbers="float"),
+        "rect": Builtin(4, VOID, "ds_render_rect({0}, {1}, {2}, {3})", numbers="float"),
+        "frame": Builtin(5, VOID, "ds_render_frame({0}, {1}, {2}, {3}, {4})", numbers="float"),
+        "circle": Builtin(3, VOID, "ds_render_circle({0}, {1}, {2})", numbers="float"),
+        "ring": Builtin(4, VOID, "ds_render_ring({0}, {1}, {2}, {3})", numbers="float"),
+        "line": Builtin(5, VOID, "ds_render_line({0}, {1}, {2}, {3}, {4})", numbers="float"),
+        "tri": Builtin(6, VOID, "ds_render_triangle({0}, {1}, {2}, {3}, {4}, {5})", numbers="float"),
+        "text": Builtin(4, VOID, "ds_render_text({0}, {1}, {2}, {3})", strings=(0,), numbers="float"),
+        "image": Builtin(5, VOID, "ds_render_image((int32_t)({0}), {1}, {2}, {3}, {4})",
+                         numbers="float"),
+        "image_region": Builtin(
+            9, VOID, "ds_render_image_region((int32_t)({0}), {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8})",
+            numbers="float"),
+    },
+    "image": {
+        "load": Builtin(1, INT, "ds_image_load({0})", strings=(0,)),
+        "width": Builtin(1, INT, "ds_image_width((int32_t)({0}))"),
+        "height": Builtin(1, INT, "ds_image_height((int32_t)({0}))"),
+        "count": Builtin(0, INT, "ds_image_count()"),
     },
     "math": {
-        "floor": (1, "ds_math_floor({0})"),
-        "ceil": (1, "ds_math_ceil({0})"),
-        "round": (1, "ds_math_round({0})"),
-        "abs": (1, "ds_math_abs({0})"),
-        "sign": (1, "ds_math_sign({0})"),
-        "sqrt": (1, "ds_math_sqrt({0})"),
-        "sin": (1, "ds_math_sin({0})"),
-        "cos": (1, "ds_math_cos({0})"),
-        "tan": (1, "ds_math_tan({0})"),
-        "min": (2, "ds_math_min({0}, {1})"),
-        "max": (2, "ds_math_max({0}, {1})"),
-        "mod": (2, "ds_math_mod({0}, {1})"),
-        "pow": (2, "ds_math_pow({0}, {1})"),
-        "lerp": (3, "ds_math_lerp({0}, {1}, {2})"),
-        "random": (-1, "ds_engine_random()"),
-        "pi": (0, "ds_math_pi()"),
-        "e": (0, "ds_math_e()"),
+        "floor": Builtin(1, FLOAT, "ds_math_floor({0})"),
+        "ceil": Builtin(1, FLOAT, "ds_math_ceil({0})"),
+        "round": Builtin(1, FLOAT, "ds_math_round({0})"),
+        "abs": Builtin(1, FLOAT, "ds_math_abs({0})"),
+        "sign": Builtin(1, INT, "ds_math_sign({0})"),
+        "sqrt": Builtin(1, FLOAT, "ds_math_sqrt({0})"),
+        "sin": Builtin(1, FLOAT, "ds_math_sin({0})"),
+        "cos": Builtin(1, FLOAT, "ds_math_cos({0})"),
+        "tan": Builtin(1, FLOAT, "ds_math_tan({0})"),
+        "min": Builtin(2, FLOAT, "ds_math_min({0}, {1})"),
+        "max": Builtin(2, FLOAT, "ds_math_max({0}, {1})"),
+        "mod": Builtin(2, FLOAT, "ds_mod({0}, {1}, {2})", where=True),
+        "pow": Builtin(2, FLOAT, "ds_math_pow({0}, {1})"),
+        "lerp": Builtin(3, FLOAT, "ds_math_lerp({0}, {1}, {2})"),
+        "random": Builtin(0, FLOAT, "ds_engine_random()"),
+        "pi": Builtin(0, FLOAT, "ds_math_pi()"),
+        "e": Builtin(0, FLOAT, "ds_math_e()"),
     },
     "engine": {
-        "width": (0, "ds_engine_width()"),
-        "height": (0, "ds_engine_height()"),
-        "time": (0, "ds_engine_time()"),
-        "delta": (0, "ds_engine_delta()"),
-        "fps": (0, "ds_engine_fps()"),
-        "frame": (0, "ds_engine_frame()"),
-        "quit": (0, "ds_engine_quit()"),
+        "width": Builtin(0, FLOAT, "ds_engine_width()"),
+        "height": Builtin(0, FLOAT, "ds_engine_height()"),
+        "time": Builtin(0, FLOAT, "ds_engine_time()"),
+        "delta": Builtin(0, FLOAT, "ds_engine_delta()"),
+        "fps": Builtin(0, FLOAT, "ds_engine_fps()"),
+        "frame": Builtin(0, INT, "ds_engine_frame()"),
+        "quit": Builtin(0, VOID, "ds_engine_quit()"),
     },
     "input": {
-        "touches": (0, "ds_engine_touch_count()"),
-        "touch_x": (1, "ds_engine_touch_x((int)({0}))"),
-        "touch_y": (1, "ds_engine_touch_y((int)({0}))"),
-        "touch_down": (1, "ds_engine_touch_down((int)({0}))"),
-        "key": (1, "ds_engine_key_down({0})"),
+        "touches": Builtin(0, INT, "ds_engine_touch_count()"),
+        "touch_x": Builtin(1, FLOAT, "ds_engine_touch_x((int)({0}))"),
+        "touch_y": Builtin(1, FLOAT, "ds_engine_touch_y((int)({0}))"),
+        "touch_down": Builtin(1, BOOL, "ds_engine_touch_down((int)({0}))"),
+        "key": Builtin(1, BOOL, "ds_engine_key_down({0})", strings=(0,)),
     },
-}
-
-#: What a builtin *call* evaluates to.  Anything drawing has no result.
-BUILTIN_RETURNS = {
-    ("math", "floor"): FLOAT,
-    ("math", "ceil"): FLOAT,
-    ("math", "round"): FLOAT,
-    ("math", "abs"): FLOAT,
-    ("math", "sign"): INT,
-    ("math", "sqrt"): FLOAT,
-    ("math", "sin"): FLOAT,
-    ("math", "cos"): FLOAT,
-    ("math", "tan"): FLOAT,
-    ("math", "min"): FLOAT,
-    ("math", "max"): FLOAT,
-    ("math", "mod"): FLOAT,
-    ("math", "pow"): FLOAT,
-    ("math", "lerp"): FLOAT,
-    ("math", "random"): FLOAT,
-    ("math", "pi"): FLOAT,
-    ("math", "e"): FLOAT,
-    ("engine", "width"): FLOAT,
-    ("engine", "height"): FLOAT,
-    ("engine", "time"): FLOAT,
-    ("engine", "delta"): FLOAT,
-    ("engine", "fps"): FLOAT,
-    ("engine", "frame"): INT,
-    ("engine", "quit"): VOID,
-    ("input", "touches"): INT,
-    ("input", "touch_x"): FLOAT,
-    ("input", "touch_y"): FLOAT,
-    ("input", "touch_down"): BOOL,
-    ("input", "key"): BOOL,
 }
 
 #: Names that read like a field (`engine.width`) but are really getters.
 BUILTIN_PROPERTIES = {
-    "math": {
-        "pi": "ds_math_pi()",
-        "e": "ds_math_e()",
-    },
+    "math": {"pi": "ds_math_pi()", "e": "ds_math_e()"},
     "engine": {
         "width": "ds_engine_width()",
         "height": "ds_engine_height()",
@@ -183,9 +210,7 @@ BUILTIN_PROPERTIES = {
         "fps": "ds_engine_fps()",
         "frame": "ds_engine_frame()",
     },
-    "input": {
-        "touches": "ds_engine_touch_count()",
-    },
+    "input": {"touches": "ds_engine_touch_count()"},
 }
 
 _TYPE_NAMES = {
@@ -200,20 +225,6 @@ _TYPE_NAMES = {
 }
 
 
-@dataclass
-class SemanticModel:
-    structs: Dict[str, Dict[str, DType]] = field(default_factory=dict)
-    global_types: Dict[str, DType] = field(default_factory=dict)
-    function_params: Dict[str, List[DType]] = field(default_factory=dict)
-    function_returns: Dict[str, List[DType]] = field(default_factory=dict)
-    function_locals: Dict[str, Dict[str, DType]] = field(default_factory=dict)
-    expression_types: Dict[int, DType] = field(default_factory=dict)
-    target_types: Dict[int, DType] = field(default_factory=dict)
-    loop_variables: Dict[int, str] = field(default_factory=dict)
-    list_types: Dict[int, DType] = field(default_factory=dict)
-    list_expressions: set = field(default_factory=set)
-
-
 def _type_from_name(name: Optional[str], structs: Dict[str, Dict[str, DType]]) -> DType:
     if not name:
         return UNKNOWN
@@ -225,6 +236,8 @@ def _type_from_name(name: Optional[str], structs: Dict[str, Dict[str, DType]]) -
 
 
 def _display_type(dtype: DType) -> str:
+    if dtype.name == "list" and dtype.element is not None:
+        return f"list[{_display_type(dtype.element)}]"
     if dtype.is_struct:
         return dtype.struct_name
     if dtype.name.startswith("unresolved:"):
@@ -239,29 +252,32 @@ def _is_numeric(dtype: DType) -> bool:
 def _compatible(expected: DType, actual: DType) -> bool:
     if expected == UNKNOWN or actual == UNKNOWN or expected == actual:
         return True
+    if expected.name == "list" and actual.name == "list":
+        if expected.element is None or actual.element is None:
+            return True
+        return _compatible(expected.element, actual.element)
     if expected == FLOAT and actual == INT:
         return True
     if expected.is_struct and actual == NIL:
         return True
-    if expected == STRING and actual == NIL:
+    if expected in (STRING, LIST) and actual == NIL:
         return True
     return False
 
 
 def _error(node: object, message: str) -> SemanticError:
+    location = _location(node)
+    return SemanticError(f"{location}: {message}")
+
+
+def _location(node: object) -> str:
     line = getattr(node, "line", 0)
     column = getattr(node, "column", 0)
-    return SemanticError(f"{line}:{column}: {message}")
+    return f"{line}:{column}"
 
 
 def _default_param_type(function_name: str, parameter_name: str) -> DType:
-    """Give untyped event parameters a predictable C ABI type.
-
-    The syntax permits concise callback declarations such as
-    ``touchpressed(id, touch_x, touch_y)``.  Event ids are integers and
-    coordinates/time values are floats; other untyped parameters default to
-    float so they remain useful in animation callbacks.
-    """
+    """Give untyped event parameters a predictable C ABI type."""
 
     lower = parameter_name.lower()
     if lower == "id" or lower.endswith("_id"):
@@ -273,9 +289,325 @@ def _default_param_type(function_name: str, parameter_name: str) -> DType:
     return FLOAT
 
 
+def _walk(node: object) -> Iterable[Node]:
+    yield node
+    for value in getattr(node, "__dict__", {}).values():
+        if isinstance(value, Node):
+            yield from _walk(value)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                if isinstance(item, Node):
+                    yield from _walk(item)
+
+
+@dataclass
+class SemanticModel:
+    structs: Dict[str, Dict[str, DType]] = field(default_factory=dict)
+    global_types: Dict[str, DType] = field(default_factory=dict)
+    function_params: Dict[str, List[DType]] = field(default_factory=dict)
+    function_returns: Dict[str, DType] = field(default_factory=dict)
+    function_locals: Dict[str, Dict[str, DType]] = field(default_factory=dict)
+    expression_types: Dict[int, DType] = field(default_factory=dict)
+    target_types: Dict[int, DType] = field(default_factory=dict)
+    #: element type of every list variable, field, parameter and return value
+    list_elements: Dict[Tuple[str, str], DType] = field(default_factory=dict)
+    literal_types: Dict[int, DType] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# List element inference
+# ---------------------------------------------------------------------------
+
+#: Key of the "list that a function returns".
+RETURN_KEY = "<return>"
+
+
+class ListInference:
+    """Finds what every list holds.
+
+    DimScript lists are homogeneous: a list of bricks stays a list of bricks, so
+    one pass over the program — literals, ``push``/``insert`` calls, element
+    assignments, arguments and return values, iterated to a fixed point —
+    decides the element type of every list variable, field, parameter and return
+    value.  The C backend needs that type to store values inline (``Brick *``
+    elements, not boxed cells), and a list whose element type cannot be derived
+    is a compile error instead of a surprise at runtime.
+    """
+
+    def __init__(self, program: Program, structs: Dict[str, Dict[str, DType]]) -> None:
+        self.program = program
+        self.structs = structs
+        self.elements: Dict[Tuple[str, str], DType] = {}
+        self.functions = {function.name: function for function in program.functions}
+        self.function_returns: Dict[str, DType] = {}
+
+    def run(self, global_types: Dict[str, DType], function_returns: Dict[str, DType],
+            function_params: Dict[str, List[DType]]) -> Dict[Tuple[str, str], DType]:
+        self.function_returns = function_returns
+        self.model_function_params = function_params
+        for _ in range(64):
+            changed = False
+            for declaration in self.program.globals:
+                changed |= self._element_of(declaration.value, ("", declaration.name), "", {},
+                                            global_types)
+            for function in self.program.functions:
+                seed = {parameter.name: dtype for parameter, dtype in
+                        zip(function.params, self.model_function_params[function.name])}
+                changed |= self._visit_statements(function.body, function.name, seed, global_types)
+            if not changed:
+                break
+        return self.elements
+
+    # -- helpers ----------------------------------------------------------
+
+    def _merge(self, key: Tuple[str, str], element: DType) -> bool:
+        if element is None or element == UNKNOWN or element.name in ("nil", "void"):
+            return False
+        if element.name == "list" and element.element is None:
+            # A bare `list` (an empty literal, an untyped value) says nothing
+            # about the element type, so it never widens an inference result.
+            return False
+        if element.name.startswith("unresolved:"):
+            return False
+        current = self.elements.get(key)
+        if current is None:
+            self.elements[key] = element
+            return True
+        if current == element:
+            return False
+        if current == UNKNOWN:
+            self.elements[key] = element
+            return True
+        if element == UNKNOWN:
+            return False
+        if _is_numeric(current) and _is_numeric(element):
+            merged = FLOAT if FLOAT in (current, element) else INT
+            if merged != current:
+                self.elements[key] = merged
+                return True
+            return False
+        raise SemanticError(
+            f"список хранит и {_display_type(current)}, и {_display_type(element)}: "
+            "элементы одного списка должны быть одного типа"
+        )
+
+    def _key_for(self, target: Expr, function: str,
+                 locals_: Optional[Dict[str, DType]] = None) -> Optional[Tuple[str, str]]:
+        if isinstance(target, Name):
+            if target.name not in (locals_ or {}) and target.name in self.model_global_types:
+                return ("", target.name)
+            return (function, target.name)
+        if isinstance(target, Member):
+            owner = self._owner_name(target.object)
+            if owner is not None:
+                return (f"field:{owner}", target.name)
+        return None
+
+    def _owner_name(self, expression: Expr) -> Optional[str]:
+        if isinstance(expression, Name):
+            if expression.name in self.model_global_types:
+                return _display_struct(self.model_global_types[expression.name])
+            return expression.name
+        if isinstance(expression, Member):
+            parent = self._owner_name(expression.object)
+            return f"{parent}.{expression.name}" if parent else None
+        return None
+
+    model_global_types: Dict[str, DType] = {}
+    model_function_params: Dict[str, List[DType]] = {}
+
+    def _type(self, expression: Expr, function: str, locals_: Dict[str, DType],
+              global_types: Dict[str, DType]) -> DType:
+        """The type of an expression as far as list inference needs it."""
+
+        if isinstance(expression, Literal):
+            return _TYPE_NAMES.get(expression.literal_type,
+                                   NIL if expression.literal_type == "nil" else UNKNOWN)
+        if isinstance(expression, Name):
+            return locals_.get(expression.name, global_types.get(expression.name, UNKNOWN))
+        if isinstance(expression, Member):
+            owner = self._type(expression.object, function, locals_, global_types)
+            if owner in (RENDER, MATH, ENGINE, INPUT, IMAGE):
+                return UNKNOWN
+            if owner.name == "list":
+                return INT if expression.name == "count" else UNKNOWN
+            if owner.is_struct:
+                return self.structs.get(owner.struct_name, {}).get(expression.name, UNKNOWN)
+            return UNKNOWN
+        if isinstance(expression, Index):
+            owner = self._type(expression.object, function, locals_, global_types)
+            if owner.name == "list":
+                return self._lookup_element(expression.object, function, locals_)
+            return STRING if owner == STRING else UNKNOWN
+        if isinstance(expression, New):
+            return _type_from_name(expression.type_name, self.structs)
+        if isinstance(expression, Unary):
+            return self._type(expression.operand, function, locals_, global_types)
+        if isinstance(expression, Binary):
+            if expression.operator == "..":
+                return STRING
+            left = self._type(expression.left, function, locals_, global_types)
+            right = self._type(expression.right, function, locals_, global_types)
+            if expression.operator in ("+", "-", "*", "/", "%"):
+                if FLOAT in (left, right) or expression.operator == "/":
+                    return FLOAT
+                return INT
+            return BOOL
+        if isinstance(expression, ListLiteral):
+            return LIST
+        if isinstance(expression, Call):
+            callee = expression.callee
+            if isinstance(callee, Name) and callee.name in self.function_returns:
+                return self.function_returns[callee.name]
+            return UNKNOWN
+        return UNKNOWN
+
+    def _lookup_element(self, expression: Expr, function: str,
+                        locals_: Optional[Dict[str, DType]] = None) -> DType:
+        """Element type of a list-valued expression."""
+
+        if isinstance(expression, Name):
+            key = self._key_for(expression, function, locals_)
+            return self.elements.get(key, UNKNOWN) if key else UNKNOWN
+        if isinstance(expression, Member):
+            key = self._key_for(expression, function, locals_)
+            if key:
+                return self.elements.get(key, UNKNOWN)
+        if isinstance(expression, Call):
+            callee = expression.callee
+            if isinstance(callee, Name):
+                return self.elements.get((callee.name, RETURN_KEY), UNKNOWN)
+        if isinstance(expression, Index):
+            outer = self._lookup_element(expression.object, function, locals_)
+            if outer.name == "list" and outer.element is not None:
+                return outer.element
+        return UNKNOWN
+
+    def _element_of(self, expression: Expr, key: Tuple[str, str], function: str,
+                    locals_: Dict[str, DType], global_types: Dict[str, DType]) -> bool:
+        """Merge the element type carried by `expression` into `key`."""
+
+        changed = False
+        if isinstance(expression, ListLiteral):
+            for item in expression.items:
+                changed |= self._merge(key, self._type(item, function, locals_, global_types))
+            return changed
+        if isinstance(expression, Index):
+            # `x = other[i]` where other is a list of lists
+            outer = self._lookup_element(expression.object, function, locals_)
+            if outer.name == "list" and outer.element is not None and outer.element.name == "list":
+                changed |= self._merge(key, self._lookup_element(expression, function, locals_))
+        if isinstance(expression, Name) or isinstance(expression, Member):
+            source = self._lookup_element(expression, function, locals_)
+            if source != UNKNOWN:
+                changed |= self._merge(key, source)
+        if isinstance(expression, Call):
+            callee = expression.callee
+            if isinstance(callee, Name) and callee.name in self.functions:
+                returned = self._lookup_element(expression, function, locals_)
+                if returned != UNKNOWN:
+                    changed |= self._merge(key, returned)
+                # arguments flow into parameters
+                parameters = list(self.functions[callee.name].params)
+                for parameter, argument in zip(parameters, expression.args):
+                    argument_element = self._lookup_element(argument, function, locals_)
+                    if argument_element != UNKNOWN:
+                        changed |= self._merge((callee.name, parameter.name), argument_element)
+        return changed
+
+    def _visit_statements(self, statements: Sequence[Stmt], function: str,
+                          locals_: Dict[str, DType], global_types: Dict[str, DType]) -> bool:
+        changed = False
+        for statement in statements:
+            if isinstance(statement, Assign):
+                target_key = self._key_for(statement.target, function, locals_)
+                if target_key:
+                    changed |= self._element_of(statement.value, target_key, function, locals_,
+                                                global_types)
+                if isinstance(statement.target, Name):
+                    declared = self._type(statement.value, function, locals_, global_types)
+                    if declared != UNKNOWN and declared.name != "nil":
+                        previous = locals_.get(statement.target.name)
+                        locals_[statement.target.name] = declared
+                        if previous != declared:
+                            changed = True
+                changed |= self._visit_expression(statement.value, function, locals_, global_types)
+                continue
+            if isinstance(statement, ExprStmt):
+                changed |= self._visit_expression(statement.expression, function, locals_,
+                                                  global_types)
+                continue
+            if isinstance(statement, Delete):
+                changed |= self._visit_expression(statement.expression, function, locals_,
+                                                  global_types)
+                continue
+            if isinstance(statement, If):
+                changed |= self._visit_expression(statement.condition, function, locals_, global_types)
+                changed |= self._visit_statements(statement.then_body, function, locals_, global_types)
+                changed |= self._visit_statements(statement.else_body, function, locals_, global_types)
+                continue
+            if isinstance(statement, While):
+                changed |= self._visit_expression(statement.condition, function, locals_, global_types)
+                changed |= self._visit_statements(statement.body, function, locals_, global_types)
+                continue
+            if isinstance(statement, For):
+                locals_[statement.variable] = INT
+                for part in (statement.start, statement.stop, statement.step):
+                    if part is not None:
+                        changed |= self._visit_expression(part, function, locals_, global_types)
+                changed |= self._visit_statements(statement.body, function, locals_, global_types)
+                continue
+            if isinstance(statement, Return):
+                if statement.expression is not None:
+                    changed |= self._element_of(statement.expression, (function, RETURN_KEY),
+                                                function, locals_, global_types)
+                    changed |= self._visit_expression(statement.expression, function, locals_,
+                                                      global_types)
+                continue
+        return changed
+
+    def _visit_expression(self, expression: Expr, function: str, locals_: Dict[str, DType],
+                          global_types: Dict[str, DType]) -> bool:
+        changed = False
+        if isinstance(expression, Call):
+            callee = expression.callee
+            if (isinstance(callee, Member) and isinstance(callee.object, (Name, Member)) and
+                    callee.name in ("push", "insert")):
+                value = expression.args[-1]
+                key = self._key_for(callee.object, function, locals_)
+                if key:
+                    changed |= self._merge(key, self._type(value, function, locals_, global_types))
+                    changed |= self._element_of(value, key, function, locals_, global_types)
+            for argument in expression.args:
+                changed |= self._visit_expression(argument, function, locals_, global_types)
+            return changed
+        if isinstance(expression, Binary):
+            changed |= self._visit_expression(expression.left, function, locals_, global_types)
+            changed |= self._visit_expression(expression.right, function, locals_, global_types)
+            return changed
+        if isinstance(expression, Unary):
+            return self._visit_expression(expression.operand, function, locals_, global_types)
+        if isinstance(expression, Index):
+            changed |= self._visit_expression(expression.object, function, locals_, global_types)
+            changed |= self._visit_expression(expression.index, function, locals_, global_types)
+            return changed
+        if isinstance(expression, Member):
+            return self._visit_expression(expression.object, function, locals_, global_types)
+        if isinstance(expression, ListLiteral):
+            for item in expression.items:
+                changed |= self._visit_expression(item, function, locals_, global_types)
+            return changed
+        return changed
+
+
+def _display_struct(dtype: DType) -> str:
+    return dtype.struct_name if dtype.is_struct else "?"
+
+
 class Analyzer:
-    #: Engine callbacks and how many parameters they receive.  A script may
-    #: implement any subset of them; the rest simply never run.
+    """Types every expression and records what the code generator needs."""
+
+    #: Engine callbacks and how many parameters they receive.
     CALLBACK_ARITY = {
         "load": 0,
         "resized": 2,
@@ -301,22 +633,32 @@ class Analyzer:
         self._collect_structs()
         self._collect_function_signatures()
         self._collect_globals()
+        inference = ListInference(self.program, self.model.structs)
+        inference.model_global_types = self.model.global_types
+        self.model.list_elements = inference.run(self.model.global_types,
+                                                 self.model.function_returns,
+                                                 self.model.function_params)
         for function in self.program.functions:
             self._analyze_function(function)
+        # `blocks = []` can only be typed once every push is known, so the
+        # element type inferred above is attached to the literal afterwards.
+        self._apply_inferred_elements()
         return self.model
+
+    # -- collection -------------------------------------------------------
 
     def _collect_structs(self) -> None:
         for struct in self.program.structs:
             if struct.name in self.model.structs:
                 raise _error(struct, f"структура {struct.name!r} объявлена дважды")
             fields: Dict[str, DType] = {}
-            for field in struct.fields:
-                if field.name in fields:
-                    raise _error(field, f"поле {field.name!r} объявлено дважды")
-                dtype = _type_from_name(field.type_name, self.model.structs)
+            for field_decl in struct.fields:
+                if field_decl.name in fields:
+                    raise _error(field_decl, f"поле {field_decl.name!r} объявлено дважды")
+                dtype = _type_from_name(field_decl.type_name, self.model.structs)
                 if dtype.name.startswith("unresolved:"):
-                    raise _error(field, f"неизвестный тип {field.type_name!r}")
-                fields[field.name] = dtype
+                    raise _error(field_decl, f"неизвестный тип {field_decl.type_name!r}")
+                fields[field_decl.name] = dtype
             self.model.structs[struct.name] = fields
 
     def _collect_function_signatures(self) -> None:
@@ -353,6 +695,7 @@ class Analyzer:
             dtype = self._expression_type(declaration.value, {})
             if dtype == VOID:
                 raise _error(declaration, "нельзя сохранить значение void")
+            self._apply_inferred_element(declaration.value, ("", declaration.name))
             self.model.global_types[declaration.name] = dtype
 
     def _analyze_function(self, function: FunctionDecl) -> None:
@@ -363,18 +706,20 @@ class Analyzer:
         }
         for statement in function.body:
             self._analyze_statement(statement)
-        # Parameters are not locals for declaration purposes, but retaining
-        # the map makes the result useful to tools inspecting the compiler.
         self.model.function_locals[function.name] = dict(self._locals)
         self._current_function = None
         self._locals = {}
+
+    # -- statements -------------------------------------------------------
 
     def _analyze_statement(self, statement: Stmt) -> None:
         if isinstance(statement, Assign):
             value_type = self._expression_type(statement.value, self._locals)
             target_type = self._target_type(statement.target, value_type)
+            self._apply_inferred_element(statement.value, self._target_key(statement.target))
             if not _compatible(target_type, value_type):
-                raise _error(statement, f"нельзя присвоить {_display_type(value_type)} переменной типа {_display_type(target_type)}")
+                raise _error(statement, f"нельзя присвоить {_display_type(value_type)} переменной типа "
+                                        f"{_display_type(target_type)}")
             self.model.target_types[id(statement.target)] = target_type
             return
         if isinstance(statement, ExprStmt):
@@ -382,8 +727,8 @@ class Analyzer:
             return
         if isinstance(statement, Delete):
             dtype = self._expression_type(statement.expression, self._locals)
-            if not dtype.is_struct and dtype != LIST:
-                raise _error(statement, "delete применим только к объекту struct")
+            if not dtype.is_handle or isinstance(statement.expression, Index):
+                raise _error(statement, "delete применим к переменной или полю объекта")
             return
         if isinstance(statement, If):
             condition = self._expression_type(statement.condition, self._locals)
@@ -398,7 +743,8 @@ class Analyzer:
             actual = VOID if statement.expression is None else self._expression_type(statement.expression, self._locals)
             expected = self.model.function_returns[self._current_function.name]  # type: ignore[union-attr]
             if not _compatible(expected, actual):
-                raise _error(statement, f"функция возвращает {_display_type(expected)}, а получено {_display_type(actual)}")
+                raise _error(statement, f"функция возвращает {_display_type(expected)}, а получено "
+                                        f"{_display_type(actual)}")
             return
         if isinstance(statement, While):
             condition = self._expression_type(statement.condition, self._locals)
@@ -416,7 +762,6 @@ class Analyzer:
                 if not _is_numeric(step):
                     raise _error(statement.step, "шаг for должен быть числом")
             self._locals[statement.variable] = INT
-            self.model.loop_variables[id(statement)] = statement.variable
             self._analyze_loop_body(statement.body)
             return
         if isinstance(statement, (Break, Continue)):
@@ -426,14 +771,10 @@ class Analyzer:
         raise _error(statement, "неизвестная конструкция")
 
     def _analyze_loop_body(self, body: List[Stmt]) -> None:
-        saved = dict(self._locals)
         self._loop_depth += 1
         for child in body:
             self._analyze_statement(child)
         self._loop_depth -= 1
-        # A loop variable stays visible as a C local, everything the body
-        # introduced stays in the map because the C function declares it too.
-        del saved
 
     def _target_type(self, target: Expr, value_type: DType) -> DType:
         if isinstance(target, Name):
@@ -441,13 +782,38 @@ class Analyzer:
                 return self._locals[target.name]
             if target.name in self.model.global_types:
                 return self.model.global_types[target.name]
-            # Assignment introduces a local variable.  This keeps small game
-            # scripts concise while still producing a statically typed C local.
+            # Assignment introduces a local variable.
             self._locals[target.name] = value_type
             return value_type
-        if isinstance(target, Member):
+        if isinstance(target, (Member, Index)):
             return self._expression_type(target, self._locals)
-        raise _error(target, "слева от '=' должно быть имя или поле объекта")
+        raise _error(target, "слева от '=' должно быть имя, поле объекта или элемент списка")
+
+    # -- expressions ------------------------------------------------------
+
+    def _element_type(self, name: str, object_expression: Optional[Expr] = None) -> DType:
+        """Element type of a list variable, field or return value."""
+
+        function = self._current_function.name if self._current_function else ""
+        if isinstance(object_expression, Member):
+            owner = self._owner_name(object_expression.object)
+            key = (f"field:{owner}", object_expression.name) if owner else None
+        else:
+            key = (function, name) if name else None
+        if key is None:
+            return UNKNOWN
+        return self.model.list_elements.get(key, UNKNOWN)
+
+    def _owner_name(self, expression: Expr) -> Optional[str]:
+        if isinstance(expression, Name):
+            dtype = self.model.global_types.get(expression.name) or self._locals.get(expression.name)
+            if dtype is None:
+                return expression.name
+            return _display_struct(dtype) if dtype.is_struct else "?"
+        if isinstance(expression, Member):
+            parent = self._owner_name(expression.object)
+            return f"{parent}.{expression.name}" if parent else None
+        return None
 
     def _expression_type(self, expression: Expr, locals_: Dict[str, DType]) -> DType:
         cached = self.model.expression_types.get(id(expression))
@@ -456,51 +822,23 @@ class Analyzer:
 
         dtype = UNKNOWN
         if isinstance(expression, Literal):
-            dtype = _TYPE_NAMES.get(expression.literal_type, NIL if expression.literal_type == "nil" else UNKNOWN)
+            dtype = _TYPE_NAMES.get(expression.literal_type,
+                                    NIL if expression.literal_type == "nil" else UNKNOWN)
+            if expression.literal_type == "list":
+                dtype = LIST
         elif isinstance(expression, Name):
             if expression.name in locals_:
                 dtype = locals_[expression.name]
             elif expression.name in self.model.global_types:
                 dtype = self.model.global_types[expression.name]
-            elif expression.name == "render":
-                dtype = RENDER
+            elif expression.name in NAMESPACE_TYPES:
+                dtype = NAMESPACE_TYPES[expression.name]
             elif expression.name in self.functions:
                 dtype = DType(f"function:{expression.name}")
             else:
                 raise _error(expression, f"неизвестное имя {expression.name!r}")
         elif isinstance(expression, Member):
-            object_type = self._expression_type(expression.object, locals_)
-            if object_type in (RENDER, MATH, ENGINE, INPUT):
-                namespace = object_type.name.split(":", 1)[1]
-                properties = BUILTIN_PROPERTIES.get(namespace, {})
-                if expression.name in properties:
-                    dtype = FLOAT
-                elif expression.name in BUILTIN_CALLS.get(namespace, {}):
-                    dtype = DType(f"builtin:{expression.name}")
-                else:
-                    raise _error(expression, f"у {namespace} нет свойства {expression.name!r}")
-            elif object_type == LIST:
-                # Elements of a list are only reachable at runtime, so they get
-                # the permissive type; `count` is the one real property.
-                if expression.name == "count":
-                    dtype = INT
-                elif expression.name in LIST_METHODS:
-                    dtype = DType(f"builtin:{expression.name}")
-                else:
-                    raise _error(expression, f"у списка нет свойства {expression.name!r}")
-            elif object_type == UNKNOWN:
-                dtype = UNKNOWN
-            elif object_type == STRING:
-                # The interpreter has a few string properties; compiled games
-                # keep the language subset that maps to plain C.
-                raise _error(expression, f"строка не имеет поля {expression.name!r}; length доступен только в интерпретаторе")
-            elif object_type.is_struct:
-                fields = self.model.structs.get(object_type.struct_name, {})
-                if expression.name not in fields:
-                    raise _error(expression, f"у {object_type.struct_name} нет поля {expression.name!r}")
-                dtype = fields[expression.name]
-            else:
-                raise _error(expression, f"тип {_display_type(object_type)} не имеет полей")
+            dtype = self._member_type(expression, locals_)
         elif isinstance(expression, New):
             dtype = _type_from_name(expression.type_name, self.model.structs)
             if not dtype.is_struct:
@@ -516,65 +854,192 @@ class Analyzer:
             else:
                 raise _error(expression, f"неизвестный унарный оператор {expression.operator!r}")
         elif isinstance(expression, Binary):
-            left = self._expression_type(expression.left, locals_)
-            right = self._expression_type(expression.right, locals_)
-            operator = expression.operator
-            if operator == "..":
-                dtype = STRING
-            elif operator in ("+", "-", "*", "/", "%"):
-                if not _is_numeric(left) or not _is_numeric(right):
-                    raise _error(expression, f"оператор {operator} работает только с числами")
-                dtype = FLOAT if FLOAT in (left, right) or operator == "/" else INT
-            elif operator in ("==", "!=", "~=", ">", "<", ">=", "<="):
-                dtype = BOOL
-            elif operator in ("and", "or", "&&", "||"):
-                dtype = BOOL
-            else:
-                raise _error(expression, f"неизвестный оператор {operator!r}")
+            dtype = self._binary_type(expression, locals_)
         elif isinstance(expression, Index):
-            # `[i]` reads a number out of a list or a character out of a string;
-            # both are interpreter features, so the checker only types them and
-            # leaves the rejection to the code generator.
             object_type = self._expression_type(expression.object, locals_)
             self._expression_type(expression.index, locals_)
-            # Unknown: the element type of a list is only known at runtime, and
-            # the code generator refuses to reach this far anyway.
-            dtype = STRING if object_type == STRING else UNKNOWN
+            if object_type == STRING:
+                dtype = STRING
+            elif object_type.name == "list":
+                element = self._element_for(expression.object)
+                if element == UNKNOWN:
+                    raise _error(expression,
+                                 "не удалось вывести тип элементов списка: добавьте элемент через "
+                                 "push(...) или задайте список литералом [..]")
+                dtype = element
+            else:
+                raise _error(expression, f"индекс применим к списку или строке, а не к "
+                                         f"{_display_type(object_type)}")
         elif isinstance(expression, ListLiteral):
+            element = UNKNOWN
             for item in expression.items:
-                self._expression_type(item, locals_)
-            dtype = LIST
+                item_type = self._expression_type(item, locals_)
+                if element == UNKNOWN:
+                    element = item_type
+                elif item_type != UNKNOWN and not _compatible(element, item_type):
+                    raise _error(item, f"элементы списка должны быть одного типа: {_display_type(element)} "
+                                       f"и {_display_type(item_type)}")
+            dtype = list_of(element) if element != UNKNOWN else LIST
         elif isinstance(expression, Call):
             dtype = self._call_type(expression, locals_)
         else:
             raise _error(expression, "неизвестное выражение")
 
+        # A list whose elements were inferred carries them in its type: that is
+        # what lets the C backend store bricks in the list without boxing.
+        if dtype.name == "list" and dtype.element is None:
+            element = self._element_for(expression)
+            if element != UNKNOWN:
+                dtype = list_of(element)
         self.model.expression_types[id(expression)] = dtype
         return dtype
+
+    def _apply_inferred_elements(self) -> None:
+        for declaration in self.program.globals:
+            self._apply_inferred_element(declaration.value, ("", declaration.name))
+        for function in self.program.functions:
+            self._current_function = function
+            self._locals = dict(self.model.function_locals.get(function.name, {}))
+            self._apply_in_statements(function.body)
+            self._current_function = None
+            self._locals = {}
+
+    def _apply_in_statements(self, statements: Sequence[Stmt]) -> None:
+        for statement in statements:
+            if isinstance(statement, Assign):
+                self._apply_inferred_element(statement.value, self._target_key(statement.target))
+                continue
+            if isinstance(statement, If):
+                self._apply_in_statements(statement.then_body)
+                self._apply_in_statements(statement.else_body)
+                continue
+            if isinstance(statement, While):
+                self._apply_in_statements(statement.body)
+                continue
+            if isinstance(statement, For):
+                self._apply_in_statements(statement.body)
+
+    def _target_key(self, target: Expr) -> Optional[Tuple[str, str]]:
+        """Where the element type of an assignment target lives."""
+
+        function = self._current_function.name if self._current_function else ""
+        if isinstance(target, Name):
+            if target.name in self._locals:
+                return (function, target.name)
+            if target.name in self.model.global_types:
+                return ("", target.name)
+            return None
+        if isinstance(target, Member):
+            owner = self._owner_name(target.object)
+            return (f"field:{owner}", target.name) if owner else None
+        return None
+
+    def _apply_inferred_element(self, value: Expr, key: Optional[Tuple[str, str]]) -> None:
+        """Give `[]` the element type its variable was inferred to hold."""
+
+        if key is None or not isinstance(value, ListLiteral) or value.items:
+            return
+        element = self.model.list_elements.get(key)
+        if element is None or element == UNKNOWN:
+            return
+        self.model.expression_types[id(value)] = list_of(element)
+
+    def _element_for(self, expression: Expr) -> DType:
+        """Element type behind a list-valued expression."""
+
+        function = self._current_function.name if self._current_function else ""
+        if isinstance(expression, Name):
+            if expression.name in self._locals:
+                key = (function, expression.name)
+            elif expression.name in self.model.global_types:
+                key = ("", expression.name)
+            else:
+                return UNKNOWN
+            return self.model.list_elements.get(key, UNKNOWN)
+        if isinstance(expression, Member):
+            owner = self._owner_name(expression.object)
+            return self.model.list_elements.get((f"field:{owner}", expression.name), UNKNOWN) if owner else UNKNOWN
+        if isinstance(expression, Call):
+            callee = expression.callee
+            if isinstance(callee, Name):
+                return self.model.list_elements.get((callee.name, RETURN_KEY), UNKNOWN)
+        if isinstance(expression, Index):
+            outer = self._element_for(expression.object)
+            if outer.name == "list" and outer.element is not None:
+                return outer.element
+        if isinstance(expression, ListLiteral) and expression.items:
+            return self._expression_type(expression.items[0], self._locals)
+        return UNKNOWN
+
+    def _member_type(self, expression: Member, locals_: Dict[str, DType]) -> DType:
+        object_type = self._expression_type(expression.object, locals_)
+        if object_type in (RENDER, MATH, ENGINE, INPUT, IMAGE):
+            namespace = object_type.name.split(":", 1)[1]
+            properties = BUILTIN_PROPERTIES.get(namespace, {})
+            if expression.name in properties:
+                return FLOAT
+            if expression.name in BUILTINS.get(namespace, {}):
+                return DType(f"builtin:{namespace}.{expression.name}")
+            raise _error(expression, f"у {namespace} нет свойства {expression.name!r}")
+        if object_type.name == "list":
+            if expression.name == "count":
+                return INT
+            if expression.name in LIST_METHODS:
+                return DType(f"builtin:list.{expression.name}")
+            raise _error(expression, f"у списка нет свойства {expression.name!r}")
+        if object_type == UNKNOWN:
+            return UNKNOWN
+        if object_type == STRING:
+            raise _error(expression, f"строка не имеет поля {expression.name!r}")
+        if object_type.is_struct:
+            fields = self.model.structs.get(object_type.struct_name, {})
+            if expression.name not in fields:
+                raise _error(expression, f"у {object_type.struct_name} нет поля {expression.name!r}")
+            return fields[expression.name]
+        raise _error(expression, f"тип {_display_type(object_type)} не имеет полей")
+
+    def _binary_type(self, expression: Binary, locals_: Dict[str, DType]) -> DType:
+        left = self._expression_type(expression.left, locals_)
+        right = self._expression_type(expression.right, locals_)
+        operator = expression.operator
+        if operator == "..":
+            return STRING
+        if operator in ("+", "-", "*", "/", "%"):
+            if not _is_numeric(left) or not _is_numeric(right):
+                raise _error(expression, f"оператор {operator} работает только с числами")
+            return FLOAT if FLOAT in (left, right) or operator == "/" else INT
+        if operator in ("==", "!=", "~=", ">", "<", ">=", "<="):
+            return BOOL
+        if operator in ("and", "or", "&&", "||"):
+            return BOOL
+        raise _error(expression, f"неизвестный оператор {operator!r}")
 
     def _call_type(self, expression: Call, locals_: Dict[str, DType]) -> DType:
         callee = expression.callee
         if isinstance(callee, Member) and isinstance(callee.object, Name) and callee.object.name in NAMESPACE_TYPES:
             namespace = callee.object.name
-            table = BUILTIN_CALLS.get(namespace, {})
+            table = BUILTINS.get(namespace, {})
             if callee.name not in table:
                 raise _error(callee, f"нет функции {namespace}.{callee.name}")
-            expected_count, _ = table[callee.name]
-            if expected_count < 0:
-                # Variadic: render.color(r, g, b) and render.color(r, g, b, a).
-                if not 1 <= len(expression.args) <= 6:
-                    raise _error(expression, f"{namespace}.{callee.name} ожидает от 1 до 6 аргументов")
-            elif len(expression.args) != expected_count:
-                plural = "" if expected_count == 1 else "а"
-                raise _error(expression, f"{namespace}.{callee.name} ожидает {expected_count} аргумент{plural}")
+            builtin = table[callee.name]
+            if builtin.args < 0:
+                if not 3 <= len(expression.args) <= 4:
+                    raise _error(expression, f"{namespace}.{callee.name} ожидает 3 или 4 аргумента")
+            elif len(expression.args) != builtin.args:
+                plural = "" if builtin.args == 1 else "а"
+                raise _error(expression, f"{namespace}.{callee.name} ожидает {builtin.args} аргумент{plural}")
             for index, argument in enumerate(expression.args):
                 dtype = self._expression_type(argument, locals_)
-                if namespace == "render" and callee.name == "text" and index == 0:
-                    if dtype not in (STRING, INT, FLOAT, BOOL, UNKNOWN):
-                        raise _error(argument, "первый аргумент render.text должен быть текстом или числом")
-                elif not _is_numeric(dtype) and dtype not in (STRING, UNKNOWN):
+                if index in builtin.strings:
+                    if dtype not in (STRING, UNKNOWN):
+                        raise _error(argument, f"аргумент {namespace}.{callee.name} должен быть строкой")
+                elif not _is_numeric(dtype) and dtype != UNKNOWN:
                     raise _error(argument, f"аргумент {namespace}.{callee.name} должен быть числом")
-            return BUILTIN_RETURNS.get((namespace, callee.name), VOID)
+            return builtin.returns
+        if isinstance(callee, Member) and isinstance(callee.object, (Name, Member, Index)):
+            owner = self._expression_type(callee.object, locals_)
+            if owner.name == "list":
+                return self._list_call_type(expression, callee, owner, locals_)
         if isinstance(callee, Name) and callee.name in self.functions:
             params = self.model.function_params[callee.name]
             if len(params) != len(expression.args):
@@ -582,36 +1047,82 @@ class Analyzer:
             for expected, argument in zip(params, expression.args):
                 actual = self._expression_type(argument, locals_)
                 if not _compatible(expected, actual):
-                    raise _error(argument, f"ожидался {_display_type(expected)}, получено {_display_type(actual)}")
+                    raise _error(argument, f"ожидался {_display_type(expected)}, получено "
+                                           f"{_display_type(actual)}")
             return self.model.function_returns[callee.name]
         if isinstance(callee, Name) and callee.name in {"print", "log", "str", "len", "num"}:
-            if callee.name == "str":
-                expected = 1
-            elif callee.name in {"len", "num"}:
-                expected = 1
-            else:
-                expected = -1
-            if expected > 0 and len(expression.args) != expected:
-                raise _error(expression, f"{callee.name} ожидает {expected} аргумент")
-            if expected < 0 and not expression.args:
+            if callee.name in {"str", "len", "num"} and len(expression.args) != 1:
+                raise _error(expression, f"{callee.name} ожидает 1 аргумент")
+            if callee.name in {"print", "log"} and not expression.args:
                 raise _error(expression, f"{callee.name} ожидает аргументы")
             for argument in expression.args:
                 self._expression_type(argument, locals_)
-            return STRING if callee.name == "str" else (FLOAT if callee.name == "num" else
-                                                        (INT if callee.name == "len" else VOID))
-        if isinstance(callee, Member) and isinstance(callee.object, (Name, Member, Index)):
-            owner = self._expression_type(callee.object, locals_)
-            if owner == LIST:
-                # `list.push(x)` and friends exist in the VM; the expression is
-                # legal, the C backend simply cannot emit it.
-                for argument in expression.args:
-                    self._expression_type(argument, locals_)
-                self.model.list_expressions.add(id(expression))
-                return VOID
-        raise _error(callee, "вызвать можно функцию скрипта или builtin (render./math./engine./input.)")
+            if callee.name == "str":
+                return STRING
+            if callee.name == "num":
+                return FLOAT
+            if callee.name == "len":
+                dtype = self._expression_type(expression.args[0], locals_)
+                if dtype != STRING and dtype.name != "list":
+                    raise _error(expression.args[0], "len работает со строкой или списком")
+                return INT
+            return VOID
+        raise _error(callee, "вызвать можно функцию скрипта или builtin (render./math./engine./input./image.)")
+
+    def _list_call_type(self, expression: Call, callee: Member, owner: DType,
+                        locals_: Dict[str, DType]) -> DType:
+        element = self._element_for(callee.object)
+        name = callee.name
+        if name in ("push", "insert"):
+            expected = 1 if name == "push" else 2
+            if len(expression.args) != expected:
+                raise _error(expression, f"list.{name} ожидает {expected} аргумент(а)")
+            value = expression.args[-1]
+            value_type = self._expression_type(value, locals_)
+            if element == UNKNOWN:
+                raise _error(value, "тип элементов списка не выведен: добавьте элемент литералом [..] "
+                                    "или через push(...)")
+            if not _compatible(element, value_type):
+                raise _error(value, f"список хранит {_display_type(element)}, а добавлено "
+                                    f"{_display_type(value_type)}")
+            if name == "insert":
+                index_type = self._expression_type(expression.args[0], locals_)
+                if not _is_numeric(index_type):
+                    raise _error(expression.args[0], "индекс должен быть числом")
+            return VOID
+        if name in ("delete", "remove_at"):
+            if len(expression.args) != 1:
+                raise _error(expression, "list.delete ожидает индекс")
+            index_type = self._expression_type(expression.args[0], locals_)
+            if not _is_numeric(index_type):
+                raise _error(expression.args[0], "индекс должен быть числом")
+            return VOID
+        if name == "clear":
+            if expression.args:
+                raise _error(expression, "list.clear не принимает аргументов")
+            return VOID
+        if name == "index_of":
+            if len(expression.args) != 1:
+                raise _error(expression, "list.index_of ожидает значение")
+            value_type = self._expression_type(expression.args[0], locals_)
+            if element != UNKNOWN and not _compatible(element, value_type):
+                raise _error(expression.args[0], f"список хранит {_display_type(element)}")
+            return INT
+        if name == "join":
+            if len(expression.args) != 1:
+                raise _error(expression, "list.join ожидает разделитель")
+            separator = self._expression_type(expression.args[0], locals_)
+            if separator not in (STRING, UNKNOWN):
+                raise _error(expression.args[0], "разделитель должен быть строкой")
+            if element != UNKNOWN and element.is_handle and element.name == "list":
+                raise _error(expression, "список списков нельзя объединить в строку")
+            return STRING
+        raise _error(callee, f"у списка нет метода {name!r}")
 
 
-# C code generator -------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# C code generator
+# ---------------------------------------------------------------------------
 
 
 def _sanitize(name: str) -> str:
@@ -630,478 +1141,13 @@ def _c_float(value: float) -> str:
     return text + "f"
 
 
-class CCompiler:
-    #: name -> (return type, C parameter types) of the `dimscript_*` wrapper
-    #: that the host calls.  A wrapper is emitted for every one of them, so a
-    #: game that implements only `update` still links against the engine.
-    CALLBACKS = {
-        "load": ("void", []),
-        "resized": ("void", ["float", "float"]),
-        "touchpressed": ("void", ["int", "float", "float"]),
-        "touchmoved": ("void", ["int", "float", "float"]),
-        "touchreleased": ("void", ["int", "float", "float"]),
-        "keypressed": ("void", ["const char *"]),
-        "keyreleased": ("void", ["const char *"]),
-        "update": ("void", ["float"]),
-        "draw": ("void", []),
-        "quit": ("void", []),
-    }
+def _c_string(value: str) -> str:
+    """A C string literal for the bytes of a script string."""
 
-    WRAPPER_PARAMS = {
-        "load": "void",
-        "resized": "float width, float height",
-        "touchpressed": "int id, float touch_x, float touch_y",
-        "touchmoved": "int id, float touch_x, float touch_y",
-        "touchreleased": "int id, float touch_x, float touch_y",
-        "keypressed": "const char *name",
-        "keyreleased": "const char *name",
-        "update": "float dt",
-        "draw": "void",
-        "quit": "void",
-    }
-
-    def __init__(self, program: Program, filename: str = "<string>") -> None:
-        self.program = program
-        self.filename = filename
-        self.model = Analyzer(program).analyze()
-        self.functions = {function.name: function for function in program.functions}
-        self.struct_names = {struct.name: _sanitize(struct.name) for struct in program.structs}
-        self.global_c_names = {name: _sanitize(name) for name in self.model.global_types}
-        self.lines: List[str] = []
-        self.indent_level = 0
-        self.current_function: Optional[FunctionDecl] = None
-
-    def compile(self) -> str:
-        self.reject_unsupported()
-        self.emit("/* Generated by DimScript. Do not edit by hand. */")
-        self.emit(f"/* Source: {self.filename} */")
-        self.emit('#include "dimscript_runtime.h"')
-        self.emit("#include <stdint.h>")
-        self.emit("#include <stddef.h>")
-        self.emit("#include <string.h>")
-        self.emit("")
-        self.emit_structs()
-        self.emit_globals()
-        self.emit("")
-        self.emit("static int ds_program_initialized;")
-        self.emit("")
-        self.emit_global_init()
-        self.emit("")
-        for function in self.program.functions:
-            self.emit_user_function(function)
-            self.emit("")
-        self.emit_lifecycle_wrappers()
-        return "\n".join(self.lines).rstrip() + "\n"
-
-    def header(self, guard: str = "DIMSCRIPT_GENERATED_H") -> str:
-        guard = _sanitize(guard).upper()
-        lines = [
-            "/* Generated by DimScript. */",
-            f"#ifndef {guard}",
-            f"#define {guard}",
-            "#ifdef __cplusplus",
-            'extern "C" {',
-            "#endif",
-            "void dimscript_init(void);",
-            "void dimscript_shutdown(void);",
-            *[f"void dimscript_{name}({params});" for name, params in self.WRAPPER_PARAMS.items()],
-            "#ifdef __cplusplus",
-            "}",
-            "#endif",
-            f"#endif /* {guard} */",
-            "",
-        ]
-        return "\n".join(lines)
-
-    def emit(self, text: str) -> None:
-        if text:
-            self.lines.append("    " * self.indent_level + text)
-        else:
-            self.lines.append("")
-
-    def reject_unsupported(self) -> None:
-        """Lists are a runtime feature: an ahead-of-time build must say so.
-
-        The check runs before any C is emitted, so a game never ends up with a
-        half generated file.  Everything the VM has and the C ABI does not is
-        listed here.
-        """
-
-        from .ast import Node  # local import: the module already imports its children
-
-        def walk(node: object):
-            yield node
-            for child in getattr(node, "__dict__", {}).values() if hasattr(node, "__dict__") else []:
-                if isinstance(child, Node):
-                    yield from walk(child)
-                elif isinstance(child, (list, tuple)):
-                    for item in child:
-                        if isinstance(item, Node):
-                            yield from walk(item)
-
-        roots: List[Node] = list(self.program.functions) + list(self.program.structs)
-        roots += list(self.program.globals)
-        for root in roots:
-            for node in walk(root):
-                if isinstance(node, Index):
-                    raise SemanticError(
-                        f"{self.filename}:{node.line}:{node.column}: список по индексу (list[i]) "
-                        "работает только в интерпретаторе (src/ds_vm.c); для ahead-of-time сборки "
-                        "храните данные в полях struct")
-                if isinstance(node, ListLiteral):
-                    raise SemanticError(
-                        f"{self.filename}:{node.line}:{node.column}: список [..] работает только "
-                        "в интерпретаторе (src/ds_vm.c); для ahead-of-time сборки используйте struct")
-
-    def emit_structs(self) -> None:
-        for struct in self.program.structs:
-            self.emit(f"typedef struct {self.struct_names[struct.name]} {{")
-            self.indent_level += 1
-            for field in struct.fields:
-                dtype = _type_from_name(field.type_name, self.model.structs)
-                self.emit(f"{self.c_type(dtype)} {_sanitize(field.name)};")
-            self.indent_level -= 1
-            self.emit(f"}} {self.struct_names[struct.name]};")
-            self.emit("")
-
-    def emit_globals(self) -> None:
-        for declaration in self.program.globals:
-            dtype = self.model.global_types[declaration.name]
-            self.emit(f"static {self.c_type(dtype)} {self.global_c_names[declaration.name]} = {self.default_value(dtype)};")
-
-    def emit_global_init(self) -> None:
-        self.emit("void dimscript_init(void) {")
-        self.indent_level += 1
-        self.emit("if (ds_program_initialized) return;")
-        for declaration in self.program.globals:
-            self.emit_assignment(self.global_c_names[declaration.name], declaration.value, global_scope=True)
-        self.emit("ds_program_initialized = 1;")
-        self.indent_level -= 1
-        self.emit("}")
-        self.emit("")
-        self.emit("void dimscript_shutdown(void) {")
-        self.indent_level += 1
-        self.emit("if (!ds_program_initialized) return;")
-        for declaration in self.program.globals:
-            dtype = self.model.global_types[declaration.name]
-            if dtype.is_struct:
-                self.emit(f"ds_delete((void **)&{self.global_c_names[declaration.name]});")
-        self.emit("ds_program_initialized = 0;")
-        self.indent_level -= 1
-        self.emit("}")
-
-    def emit_user_function(self, function: FunctionDecl) -> None:
-        self.current_function = function
-        params = self.model.function_params[function.name]
-        parameter_text = ", ".join(
-            f"{self.c_type(dtype)} {_sanitize(parameter.name)}"
-            for parameter, dtype in zip(function.params, params)
-        ) or "void"
-        self.emit(f"static {self.c_type(self.model.function_returns[function.name])} ds_fn_{_sanitize(function.name)}({parameter_text}) {{")
-        self.indent_level += 1
-        # Explicit casts to void make generated callback parameters warning-free
-        # under -Wall -Wextra -Werror, even when the script intentionally does
-        # not use all event fields.
-        for parameter in function.params:
-            self.emit(f"(void){_sanitize(parameter.name)};")
-        local_types = self.model.function_locals.get(function.name, {})
-        parameter_names = {parameter.name for parameter in function.params}
-        for name, dtype in local_types.items():
-            if name not in parameter_names:
-                self.emit(f"{self.c_type(dtype)} {_sanitize(name)} = {self.default_value(dtype)};")
-        # `for i = a, b do` declares its counter as a plain C local so that a
-        # `break` or a later read of the loop variable behaves as in the VM.
-        for statement in function.body:
-            for loop in self._collect_loops(statement):
-                if loop not in local_types and loop not in parameter_names:
-                    self.emit(f"int32_t {_sanitize(loop)} = 0;")
-        for statement in function.body:
-            self.emit_statement(statement)
-        if self.model.function_returns[function.name] == VOID:
-            self.emit("return;")
-        self.indent_level -= 1
-        self.emit("}")
-        self.current_function = None
-
-    def emit_lifecycle_wrappers(self) -> None:
-        for name in self.CALLBACKS:
-            function = self.functions.get(name)
-            declaration = self.wrapper_params(name)
-            self.emit(f"void dimscript_{name}({declaration}) {{")
-            self.indent_level += 1
-            if function is None:
-                # A game may implement any subset of the engine callbacks, so a
-                # wrapper always exists; when there is nothing to call it simply
-                # ignores the event.
-                for parameter in _parameter_names(declaration):
-                    self.emit(f"(void){parameter};")
-            else:
-                self.emit(f"if (!ds_program_initialized) return;")
-                self.emit(f"ds_fn_{_sanitize(name)}({self.wrapper_args(name, function)});")
-            self.indent_level -= 1
-            self.emit("}")
-
-    def wrapper_params(self, name: str) -> str:
-        return self.WRAPPER_PARAMS.get(name, "void")
-
-    def wrapper_args(self, name: str, function: FunctionDecl) -> str:
-        # The canonical callbacks have the parameter count the wrapper passes;
-        # a mismatch is reported by semantic analysis before this runs.
-        return ", ".join(_sanitize(parameter.name) for parameter in function.params)
-
-    def c_type(self, dtype: DType) -> str:
-        if dtype == INT:
-            return "int32_t"
-        if dtype == FLOAT:
-            return "float"
-        if dtype == STRING:
-            return "const char *"
-        if dtype == BOOL:
-            return "int"
-        if dtype == VOID:
-            return "void"
-        if dtype.is_struct:
-            return f"{self.struct_names.get(dtype.struct_name, _sanitize(dtype.struct_name))} *"
-        if dtype == NIL or dtype == UNKNOWN:
-            return "const char *"
-        # Analyzer rejects unresolved types, but this fallback makes an error
-        # in a future extension fail at C compile time rather than Python time.
-        return "void *"
-
-    def default_value(self, dtype: DType) -> str:
-        if dtype == FLOAT:
-            return "0.0f"
-        if dtype in (INT, BOOL):
-            return "0"
-        return "NULL"
-
-    def emit_statement(self, statement: Stmt) -> None:
-        if isinstance(statement, Assign):
-            self.emit_assignment(self.target(statement.target), statement.value)
-        elif isinstance(statement, ExprStmt):
-            self.emit(f"{self.expression(statement.expression)};")
-        elif isinstance(statement, Delete):
-            if isinstance(statement.expression, Name):
-                name = self.name(statement.expression)
-                self.emit(f"ds_delete((void **)&{name});")
-            else:
-                self.emit(f"ds_delete((void **)&{self.expression(statement.expression)});")
-        elif isinstance(statement, If):
-            self.emit(f"if ({self.truthy(statement.condition)}) {{")
-            self.indent_level += 1
-            for child in statement.then_body:
-                self.emit_statement(child)
-            self.indent_level -= 1
-            if statement.else_body:
-                # `else if` parses to a single nested If, which keeps the chain
-                # flat in the C output as well.
-                nested = statement.else_body[0] if len(statement.else_body) == 1 else None
-                if isinstance(nested, If):
-                    self.emit(f"}} else if ({self.truthy(nested.condition)}) {{")
-                    self.indent_level += 1
-                    for child in nested.then_body:
-                        self.emit_statement(child)
-                    self.indent_level -= 1
-                    self._emit_else_chain(nested)
-                else:
-                    self.emit("} else {")
-                    self.indent_level += 1
-                    for child in statement.else_body:
-                        self.emit_statement(child)
-                    self.indent_level -= 1
-            self.emit("}")
-        elif isinstance(statement, While):
-            self.emit(f"while ({self.truthy(statement.condition)}) {{")
-            self.indent_level += 1
-            self.emit_body(statement.body)
-            self.indent_level -= 1
-            self.emit("}")
-        elif isinstance(statement, For):
-            variable = _sanitize(statement.variable)
-            start = self.expression(statement.start)
-            stop = self.expression(statement.stop)
-            step = self.expression(statement.step) if statement.step is not None else "1"
-            self.emit(f"for ({variable} = {start}; {variable} <= {stop}; {variable} += ({step})) {{")
-            self.indent_level += 1
-            self.emit_body(statement.body)
-            self.indent_level -= 1
-            self.emit("}")
-        elif isinstance(statement, Break):
-            self.emit("break;")
-        elif isinstance(statement, Continue):
-            self.emit("continue;")
-        elif isinstance(statement, Return):
-            if statement.expression is None:
-                self.emit("return;")
-            else:
-                self.emit(f"return {self.expression(statement.expression)};")
-        else:
-            raise TypeError(f"unsupported statement {statement!r}")
-
-    def _emit_else_chain(self, statement: If) -> None:
-        if not statement.else_body:
-            return
-        nested = statement.else_body[0] if len(statement.else_body) == 1 else None
-        if isinstance(nested, If):
-            self.emit(f"}} else if ({self.truthy(nested.condition)}) {{")
-            self.indent_level += 1
-            for child in nested.then_body:
-                self.emit_statement(child)
-            self.indent_level -= 1
-            self._emit_else_chain(nested)
-        else:
-            self.emit("} else {")
-            self.indent_level += 1
-            for child in statement.else_body:
-                self.emit_statement(child)
-            self.indent_level -= 1
-
-    def _collect_loops(self, statement: Stmt) -> List[str]:
-        """Loop counter names declared by this function (top level only)."""
-
-        if isinstance(statement, For):
-            return [statement.variable]
-        return []
-
-    def emit_body(self, body: List[Stmt]) -> None:
-        for statement in body:
-            self.emit_statement(statement)
-
-    def truthy(self, expression: Expr) -> str:
-        """DimScript truthiness: a number counts when it is not zero."""
-
-        dtype = self.expression_type(expression)
-        value = self.expression(expression)
-        if dtype == BOOL:
-            # `if ((a == b))` is what the expression emitter produces; Clang
-            # reads the doubled parentheses as a mistake, so peel one layer.
-            stripped = _strip_outer_parentheses(value)
-            return stripped if stripped is not None else value
-        return f"({value}) != 0"
-
-    def target(self, target: Expr) -> str:
-        if isinstance(target, Name):
-            return self.name(target)
-        if isinstance(target, Member):
-            return self.member(target)
-        raise TypeError(f"unsupported assignment target {target!r}")
-
-    def emit_assignment(self, target: str, value: Expr, global_scope: bool = False) -> None:
-        self.emit(f"{target} = {self.expression(value)};")
-
-    def name(self, expression: Name) -> str:
-        if self.current_function is not None:
-            local_types = self.model.function_locals.get(self.current_function.name, {})
-            if expression.name in local_types:
-                return _sanitize(expression.name)
-        if expression.name in self.global_c_names:
-            return self.global_c_names[expression.name]
-        return _sanitize(expression.name)
-
-    def member(self, expression: Member) -> str:
-        object_type = self.expression_type(expression.object)
-        if object_type.name.startswith("namespace:"):
-            namespace = object_type.name.split(":", 1)[1]
-            getter = BUILTIN_PROPERTIES.get(namespace, {}).get(expression.name)
-            if getter is not None:
-                return getter
-            raise SemanticError(f"{self.filename}: {expression.line}:{expression.column}: "
-                                f"{namespace}.{expression.name} нельзя читать как поле, вызовите функцию")
-        return f"{self.expression(expression.object)}->{_sanitize(expression.name)}"
-
-    def expression_type(self, expression: Expr) -> DType:
-        return self.model.expression_types.get(id(expression), UNKNOWN)
-
-    def expression(self, expression: Expr) -> str:
-        if isinstance(expression, Literal):
-            if expression.literal_type == "string":
-                return json.dumps(str(expression.value), ensure_ascii=False)
-            if expression.literal_type == "int":
-                return str(int(expression.value))
-            if expression.literal_type == "float":
-                return _c_float(float(expression.value))
-            if expression.literal_type == "bool":
-                return "1" if expression.value else "0"
-            if expression.literal_type == "nil":
-                return "NULL"
-        if isinstance(expression, Name):
-            return self.name(expression)
-        if isinstance(expression, Member):
-            return self.member(expression)
-        if isinstance(expression, New):
-            dtype = _type_from_name(expression.type_name, self.model.structs)
-            c_name = self.struct_names[expression.type_name]
-            return f"({self.c_type(dtype)})ds_alloc(sizeof({c_name}))"
-        if isinstance(expression, Unary):
-            operator = "!" if expression.operator == "not" else expression.operator
-            return f"({operator}{self.expression(expression.operand)})"
-        if isinstance(expression, Binary):
-            if expression.operator == "..":
-                left = self.as_string(expression.left)
-                right = self.as_string(expression.right)
-                return f"ds_concat({left}, {right})"
-            operator = {"and": "&&", "or": "||", "~=": "!="}.get(expression.operator, expression.operator)
-            left_type = self.expression_type(expression.left)
-            right_type = self.expression_type(expression.right)
-            if expression.operator in {"==", "!=", "~=", ">", "<", ">=", "<="} and (
-                left_type == STRING or right_type == STRING
-            ):
-                comparison = {"==": "==", "!=": "!=", "~=": "!=", ">": ">", "<": "<", ">=": ">=", "<=": "<="}[expression.operator]
-                return f"(strcmp({self.as_string(expression.left)}, {self.as_string(expression.right)}) {comparison} 0)"
-            return f"({self.expression(expression.left)} {operator} {self.expression(expression.right)})"
-        if isinstance(expression, Call):
-            callee = expression.callee
-            if isinstance(callee, Member) and isinstance(callee.object, Name) and callee.object.name in NAMESPACE_TYPES:
-                namespace = callee.object.name
-                entry = BUILTIN_CALLS.get(namespace, {}).get(callee.name)
-                if entry is None:
-                    raise SemanticError(f"{self.filename}:{expression.line}: нет функции {namespace}.{callee.name}")
-                template = entry[1]
-                if namespace == "render" and callee.name == "color" and len(expression.args) >= 4:
-                    template = "ds_render_color_alpha({0}, {1}, {2}, {3})"
-                # Text and key names cross the C boundary as `const char *`,
-                # every other builtin argument is a double.
-                rendered = []
-                for index, argument in enumerate(expression.args):
-                    if namespace == "render" and callee.name == "text" and index == 0:
-                        rendered.append(self.as_string(argument))
-                    elif namespace == "input" and callee.name == "key":
-                        rendered.append(self.as_string(argument))
-                    else:
-                        rendered.append(f"(double)({self.expression(argument)})")
-                return template.format(*rendered)
-            if isinstance(expression.callee, Name) and expression.callee.name in {"print", "log"}:
-                parts = ", ".join(self.as_string(argument) for argument in expression.args)
-                if len(expression.args) == 1:
-                    return f"ds_log({parts})"
-                return f"ds_log(ds_text_join({len(expression.args)}, {parts}))"
-            if isinstance(expression.callee, Name) and expression.callee.name == "str":
-                return self.as_string(expression.args[0])
-            if isinstance(expression.callee, Name) and expression.callee.name == "num":
-                return f"ds_number_of_text({self.as_string(expression.args[0])})"
-            if isinstance(expression.callee, Name) and expression.callee.name == "len":
-                return f"ds_length_of({self.as_string(expression.args[0])})"
-            if isinstance(expression.callee, Name):
-                return f"ds_fn_{_sanitize(expression.callee.name)}({', '.join(self.expression(argument) for argument in expression.args)})"
-        raise TypeError(f"unsupported expression {expression!r}")
-
-    def as_string(self, expression: Expr) -> str:
-        dtype = self.expression_type(expression)
-        value = self.expression(expression)
-        if dtype == STRING or dtype == UNKNOWN:
-            return value
-        if dtype == INT:
-            return f"ds_int_to_string((int64_t)({value}))"
-        if dtype == FLOAT:
-            return f"ds_float_to_string((double)({value}))"
-        if dtype == BOOL:
-            return f"ds_bool_to_string(({value}) != 0)"
-        return value
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _strip_outer_parentheses(text: str) -> Optional[str]:
-    """`(a == b)` -> `a == b`, or None when the parentheses are not a pair."""
-
     if not text.startswith("(") or not text.endswith(")"):
         return None
     depth = 0
@@ -1126,14 +1172,814 @@ def _parameter_names(declaration: str) -> List[str]:
     return names
 
 
-def compile_source(source: str, filename: str = "<string>") -> Tuple[str, SemanticModel]:
-    """Compile source text to C and return ``(c_source, semantic_model)``."""
+class CCompiler:
+    """Turns a merged program into one C99 translation unit."""
 
-    from .parser import parse
+    #: name -> C parameter types of the `dimscript_*` wrapper the host calls.
+    WRAPPER_PARAMS = {
+        "load": "void",
+        "resized": "float width, float height",
+        "touchpressed": "int id, float touch_x, float touch_y",
+        "touchmoved": "int id, float touch_x, float touch_y",
+        "touchreleased": "int id, float touch_x, float touch_y",
+        "keypressed": "const char *name",
+        "keyreleased": "const char *name",
+        "update": "float dt",
+        "draw": "void",
+        "quit": "void",
+    }
 
-    program = parse(source, filename=filename)
-    compiler = CCompiler(program, filename=filename)
-    return compiler.compile(), compiler.model
+    def __init__(self, program: Program, filename: str = "<string>") -> None:
+        self.program = program
+        self.filename = filename
+        self.model = Analyzer(program).analyze()
+        self.functions = {function.name: function for function in program.functions}
+        self.struct_names = {struct.name: _sanitize(struct.name) for struct in program.structs}
+        self.structs_by_name = {struct.name: struct for struct in program.structs}
+        self.global_c_names = {name: f"g_{_sanitize(name)}" for name in self.model.global_types}
+        self.lines: List[str] = []
+        self.indent_level = 0
+        self.current_function: Optional[FunctionDecl] = None
+        self.fresh_expression: Optional[int] = None
+        self.literals: Dict[str, int] = {}
+        self.literal_order: List[str] = []
+
+    # -- output helpers ---------------------------------------------------
+
+    def emit(self, text: str) -> None:
+        if text:
+            self.lines.append("    " * self.indent_level + text)
+        else:
+            self.lines.append("")
+
+    def compile(self) -> str:
+        self.emit("/* Generated by DimScript (tools/aot.py). Do not edit by hand. */")
+        self.emit(f"/* Source: {self.filename} */")
+        self.emit('#include "dimscript_runtime.h"')
+        self.emit("#include <string.h>")
+        self.emit("")
+        self.emit_structs()
+        self.emit_struct_dtors()
+        self.emit_globals()
+        self.emit("")
+        self.emit("static int ds_program_initialized;")
+        self.emit("")
+        # The literal pool is emitted last: the initialisers generated below are
+        # what tell us which literals the program actually uses.
+        literal_slot = len(self.lines)
+        self.emit("")
+        self.emit_function_declarations()
+        for function in self.program.functions:
+            self.emit_user_function(function)
+            self.emit("")
+        self.emit_lifecycle()
+        self.lines[literal_slot:literal_slot + 1] = self.literal_lines()
+        return "\n".join(self.lines).rstrip() + "\n"
+
+    def header(self, guard: str = "DIMSCRIPT_GAME_H") -> str:
+        name = _sanitize(guard).upper()
+        lines = [
+            "/* Generated by DimScript (tools/aot.py). */",
+            f"#ifndef {name}",
+            f"#define {name}",
+            '#include "dimscript_runtime.h"',
+            "#ifdef __cplusplus",
+            'extern "C" {',
+            "#endif",
+            "void dimscript_init(void);",
+            "void dimscript_shutdown(void);",
+            *[f"void dimscript_{callback}({params});" for callback, params in self.WRAPPER_PARAMS.items()],
+            "#ifdef __cplusplus",
+            "}",
+            "#endif",
+            f"#endif /* {name} */",
+            "",
+        ]
+        return "\n".join(lines)
+
+    # -- declaration helpers ----------------------------------------------
+
+    def c_type(self, dtype: DType) -> str:
+        if dtype == INT:
+            return "int32_t"
+        if dtype == FLOAT:
+            return "float"
+        if dtype == BOOL:
+            return "int32_t"
+        if dtype == STRING:
+            return "DsString *"
+        if dtype.name == "list":
+            return "DsList *"
+        if dtype.is_struct:
+            return f"{self.struct_names.get(dtype.struct_name, _sanitize(dtype.struct_name))} *"
+        if dtype == VOID:
+            return "void"
+        return "void *"
+
+    def default_value(self, dtype: DType) -> str:
+        if dtype == FLOAT:
+            return "0.0f"
+        if dtype in (INT, BOOL):
+            return "0"
+        return "NULL"
+
+    def require_element(self, element: Optional[DType], node: object) -> DType:
+        if element is None or element == UNKNOWN:
+            raise SemanticError(
+                f"{getattr(node, 'file', self.filename)}:{getattr(node, 'line', 0)}: "
+                "тип элементов списка не выведен: добавьте элемент через push(...) или задайте "
+                "список литералом [..]")
+        return element
+
+    def element_kind(self, element: DType) -> str:
+        if element == FLOAT or element == NIL:
+            return "DS_ELEM_FLOAT"
+        if element == INT:
+            return "DS_ELEM_INT"
+        if element == BOOL:
+            return "DS_ELEM_BOOL"
+        if element == STRING:
+            return "DS_ELEM_STRING"
+        if element.name == "list":
+            return "DS_ELEM_LIST"
+        if element.is_struct or element == UNKNOWN:
+            return "DS_ELEM_OBJECT"
+        return "DS_ELEM_OBJECT"
+
+    def element_size(self, element: DType) -> str:
+        if element.is_struct:
+            return f"sizeof({self.struct_names[element.struct_name]})"
+        return "0"
+
+    def element_dtor(self, element: DType) -> str:
+        if not element.is_struct:
+            return "NULL"
+        struct = self.structs_by_name[element.struct_name]
+        return f"ds_dtor_{self.struct_names[struct.name]}" if self.struct_has_handles(struct) else "NULL"
+
+    def where(self, node: object) -> str:
+        filename = getattr(node, "file", None) or self.filename
+        return f'"{filename}:{getattr(node, "line", 0)}"'
+
+    # -- literals ---------------------------------------------------------
+
+    def literal(self, text: str) -> str:
+        index = self.literals.get(text)
+        if index is None:
+            index = len(self.literal_order)
+            self.literals[text] = index
+            self.literal_order.append(text)
+        return f"ds_literals[{index}]"
+
+    def literal_lines(self) -> List[str]:
+        lines = [f"/* {len(self.literal_order)} script literal(s), interned once at load time. */",
+                 "static const DsLiteralSource ds_literal_sources[] = {"]
+        for text in self.literal_order:
+            length = len(text.encode("utf-8"))
+            lines.append(f"    {{{_c_string(text)}, {length}}},")
+        if not self.literal_order:
+            lines.append("    {NULL, 0},")
+        lines.append("};")
+        lines.append("static DsString **ds_literals;")
+        return lines
+
+    # -- structs ----------------------------------------------------------
+
+    def struct_has_handles(self, struct) -> bool:
+        return any(_type_from_name(field.type_name, self.model.structs).is_handle
+                   for field in struct.fields)
+
+    def emit_structs(self) -> None:
+        for struct in self.program.structs:
+            self.emit(f"typedef struct {self.struct_names[struct.name]} {{")
+            self.indent_level += 1
+            for field_decl in struct.fields:
+                dtype = _type_from_name(field_decl.type_name, self.model.structs)
+                self.emit(f"{self.c_type(dtype)} {_sanitize(field_decl.name)};")
+            self.indent_level -= 1
+            self.emit(f"}} {self.struct_names[struct.name]};")
+        self.emit("")
+
+    def emit_struct_dtors(self) -> None:
+        """One destructor per struct: releasing an object releases exactly the
+        fields that own a reference, nothing else.  This is the whole "tracing"
+        story of the runtime — it is a handful of generated lines."""
+
+        for struct in self.program.structs:
+            handle_fields = [field for field in struct.fields
+                             if _type_from_name(field.type_name, self.model.structs).is_handle]
+            name = self.struct_names[struct.name]
+            if not handle_fields:
+                self.emit(f"/* {name}: only plain values, no destructor needed. */")
+                continue
+            self.emit(f"static void ds_dtor_{name}(void *value) {{")
+            self.indent_level += 1
+            self.emit(f"{name} *self = ({name} *)value;")
+            for field_decl in handle_fields:
+                self.emit(f"ds_release_slot((void **)&self->{_sanitize(field_decl.name)});")
+            self.indent_level -= 1
+            self.emit("}")
+        self.emit("")
+
+    def emit_globals(self) -> None:
+        for declaration in self.program.globals:
+            dtype = self.model.global_types[declaration.name]
+            self.emit(f"static {self.c_type(dtype)} {self.global_c_names[declaration.name]} = "
+                      f"{self.default_value(dtype)};")
+
+    def emit_function_declarations(self) -> None:
+        for function in self.program.functions:
+            params = self.model.function_params[function.name]
+            parameter_text = ", ".join(
+                f"{self.c_type(dtype)} {_sanitize(parameter.name)}"
+                for parameter, dtype in zip(function.params, params)) or "void"
+            self.emit(f"static {self.c_type(self.model.function_returns[function.name])} "
+                      f"ds_fn_{_sanitize(function.name)}({parameter_text});")
+        self.emit("")
+
+    # -- lifecycle --------------------------------------------------------
+
+    def emit_lifecycle(self) -> None:
+        self.emit("void dimscript_init(void) {")
+        self.indent_level += 1
+        self.emit("if (ds_program_initialized) return;")
+        self.emit("ds_literals = ds_intern_literals(ds_literal_sources, "
+                  f"{len(self.literal_order) or 1});")
+        for declaration in self.program.globals:
+            self.emit_assignment(self.global_c_names[declaration.name], declaration.value)
+        self.emit("ds_program_initialized = 1;")
+        self.indent_level -= 1
+        self.emit("}")
+        self.emit("")
+        self.emit("void dimscript_shutdown(void) {")
+        self.indent_level += 1
+        self.emit("if (!ds_program_initialized) return;")
+        for declaration in self.program.globals:
+            dtype = self.model.global_types[declaration.name]
+            if dtype.is_handle:
+                self.emit(f"ds_release_slot((void **)&{self.global_c_names[declaration.name]});")
+        self.emit("ds_program_initialized = 0;")
+        self.indent_level -= 1
+        self.emit("}")
+        self.emit("")
+        for callback, declaration in self.WRAPPER_PARAMS.items():
+            function = self.functions.get(callback)
+            self.emit(f"void dimscript_{callback}({declaration}) {{")
+            self.indent_level += 1
+            if function is None:
+                for parameter in _parameter_names(declaration):
+                    self.emit(f"(void){parameter};")
+            else:
+                self.emit("if (!ds_program_initialized) return;")
+                arguments = ", ".join(_sanitize(parameter.name) for parameter in function.params)
+                self.emit(f"ds_fn_{_sanitize(callback)}({arguments});")
+            self.indent_level -= 1
+            self.emit("}")
+        self.emit("")
+
+    # -- functions --------------------------------------------------------
+
+    def owned_locals(self, function: FunctionDecl) -> List[str]:
+        """Names that hold a reference at the end of `function`."""
+
+        names: Dict[str, None] = {}
+        for parameter, dtype in zip(function.params, self.model.function_params[function.name]):
+            if dtype.is_handle:
+                names[_sanitize(parameter.name)] = None
+        for name, dtype in self.model.function_locals.get(function.name, {}).items():
+            if dtype.is_handle:
+                names[_sanitize(name)] = None
+        return list(names)
+
+    def emit_releases(self, function: FunctionDecl) -> None:
+        for name in self.owned_locals(function):
+            self.emit(f"ds_release_slot((void **)&{name});")
+
+    def emit_user_function(self, function: FunctionDecl) -> None:
+        self.current_function = function
+        params = self.model.function_params[function.name]
+        return_type = self.model.function_returns[function.name]
+        parameter_text = ", ".join(
+            f"{self.c_type(dtype)} {_sanitize(parameter.name)}"
+            for parameter, dtype in zip(function.params, params)) or "void"
+        self.emit(f"static {self.c_type(return_type)} ds_fn_{_sanitize(function.name)}({parameter_text}) {{")
+        self.indent_level += 1
+        for parameter in function.params:
+            self.emit(f"(void){_sanitize(parameter.name)};")
+        parameter_names = {_sanitize(parameter.name) for parameter in function.params}
+        local_types = self.model.function_locals.get(function.name, {})
+        for name, dtype in local_types.items():
+            if name in parameter_names:
+                continue
+            self.emit(f"{self.c_type(dtype)} {_sanitize(name)} = {self.default_value(dtype)};")
+        for statement in function.body:
+            if isinstance(statement, For) and statement.variable not in local_types:
+                self.emit(f"int32_t {_sanitize(statement.variable)} = 0;")
+        for statement in function.body:
+            self.emit_statement(statement)
+        # Falling off the end still releases every owned local: a script has no
+        # way to leak a reference by forgetting a return.
+        self.emit_releases(function)
+        self.emit(self.return_statement(return_type, None))
+        self.indent_level -= 1
+        self.emit("}")
+        self.current_function = None
+
+    def default_return(self, dtype: DType) -> str:
+        if dtype == VOID:
+            return ""
+        return self.default_value(dtype)
+
+    def return_statement(self, dtype: DType, value: Optional[str]) -> str:
+        if dtype == VOID:
+            return "return;"
+        return f"return {value if value is not None else self.default_value(dtype)};"
+
+    # -- statements -------------------------------------------------------
+
+    def emit_statement(self, statement: Stmt) -> None:
+        if isinstance(statement, Assign):
+            self.emit_assignment_target(statement.target, statement.value)
+            return
+        if isinstance(statement, ExprStmt):
+            self.emit(f"{self.value(statement.expression)[0]};")
+            return
+        if isinstance(statement, Delete):
+            self.emit_delete(statement.expression)
+            return
+        if isinstance(statement, If):
+            self.emit(f"if ({self.truthy(statement.condition)}) {{")
+            self.indent_level += 1
+            for child in statement.then_body:
+                self.emit_statement(child)
+            self.indent_level -= 1
+            if statement.else_body:
+                nested = statement.else_body[0] if len(statement.else_body) == 1 else None
+                if isinstance(nested, If):
+                    self.emit(f"}} else if ({self.truthy(nested.condition)}) {{")
+                    self.indent_level += 1
+                    for child in nested.then_body:
+                        self.emit_statement(child)
+                    self.indent_level -= 1
+                    self._emit_else_chain(nested)
+                else:
+                    self.emit("} else {")
+                    self.indent_level += 1
+                    for child in statement.else_body:
+                        self.emit_statement(child)
+                    self.indent_level -= 1
+            self.emit("}")
+            return
+        if isinstance(statement, While):
+            self.emit(f"while ({self.truthy(statement.condition)}) {{")
+            self.indent_level += 1
+            for child in statement.body:
+                self.emit_statement(child)
+            self.indent_level -= 1
+            self.emit("}")
+            return
+        if isinstance(statement, For):
+            variable = _sanitize(statement.variable)
+            start = self.value(statement.start)[0]
+            stop = self.value(statement.stop)[0]
+            step = self.value(statement.step)[0] if statement.step is not None else "1"
+            self.emit(f"for ({variable} = (int32_t)({start}); {variable} <= (int32_t)({stop}); "
+                      f"{variable} += (int32_t)({step})) {{")
+            self.indent_level += 1
+            for child in statement.body:
+                self.emit_statement(child)
+            self.indent_level -= 1
+            self.emit("}")
+            return
+        if isinstance(statement, Break):
+            self.emit("break;")
+            return
+        if isinstance(statement, Continue):
+            self.emit("continue;")
+            return
+        if isinstance(statement, Return):
+            function = self.current_function
+            assert function is not None
+            return_type = self.model.function_returns[function.name]
+            if statement.expression is None:
+                self.emit_releases(function)
+                self.emit(self.return_statement(return_type, None))
+                return
+            code, fresh = self.value(statement.expression)
+            if return_type.is_handle:
+                owned = code if fresh else self.keep(statement.expression, code)
+                self.emit(f"{self.c_type(return_type)} ds_result = {owned};")
+                self.emit_releases(function)
+                self.emit("return ds_result;")
+            else:
+                self.emit_releases(function)
+                self.emit(f"return {code};")
+            return
+        raise TypeError(f"unsupported statement {statement!r}")
+
+    def _emit_else_chain(self, statement: If) -> None:
+        if not statement.else_body:
+            return
+        nested = statement.else_body[0] if len(statement.else_body) == 1 else None
+        if isinstance(nested, If):
+            self.emit(f"}} else if ({self.truthy(nested.condition)}) {{")
+            self.indent_level += 1
+            for child in nested.then_body:
+                self.emit_statement(child)
+            self.indent_level -= 1
+            self._emit_else_chain(nested)
+        else:
+            self.emit("} else {")
+            self.indent_level += 1
+            for child in statement.else_body:
+                self.emit_statement(child)
+            self.indent_level -= 1
+
+    def emit_delete(self, expression: Expr) -> None:
+        slot = self.slot(expression)
+        self.emit(f"ds_release_slot((void **)&{slot});")
+
+    def emit_assignment_target(self, target: Expr, value: Expr) -> None:
+        if isinstance(target, Index):
+            list_type = self.expression_type(target.object)
+            element = self.require_element(list_type.element, target)
+            list_code = self.value(target.object)[0]
+            index = self.value(target.index)[0]
+            owned = self.owned(value)
+            setter = {
+                "DS_ELEM_FLOAT": "ds_list_set_float",
+                "DS_ELEM_INT": "ds_list_set_int",
+                "DS_ELEM_BOOL": "ds_list_set_bool",
+                "DS_ELEM_STRING": "ds_list_set_string",
+                "DS_ELEM_LIST": "ds_list_set_list",
+                "DS_ELEM_OBJECT": "ds_list_set_object",
+            }[self.element_kind(element)]
+            cast = "" if element in (FLOAT, INT, BOOL) else f"({self.c_type(element)})"
+            self.emit(f"{setter}({list_code}, (int64_t)({index}), {cast}{owned});")
+            return
+        if isinstance(target, Name):
+            name = self.assignable_name(target)
+            self.emit_assignment(name, value)
+            return
+        if isinstance(target, Member):
+            dtype = self.expression_type(target)
+            slot = self.member(target)
+            if dtype.is_handle:
+                code, fresh = self.value(value)
+                owned = code if fresh else self.keep(value, code)
+                mover = "ds_move" if fresh else "ds_assign"
+                self.emit(f"{mover}((void **)&{slot}, (void *){owned});")
+            else:
+                self.emit(f"{slot} = {self.value(value)[0]};")
+            return
+        raise TypeError(f"unsupported assignment target {target!r}")
+
+    def emit_assignment(self, target: str, value: Expr) -> None:
+        dtype = self.model.expression_types.get(id(value), UNKNOWN)
+        if dtype.is_handle:
+            code, fresh = self.value(value)
+            if fresh:
+                self.emit(f"ds_move((void **)&{target}, (void *){code});")
+            else:
+                self.emit(f"ds_assign((void **)&{target}, (void *){code});")
+            return
+        self.emit(f"{target} = {self.value(value)[0]};")
+
+    def assignable_name(self, expression: Name) -> str:
+        return self.name(expression)
+
+    def slot(self, expression: Expr) -> str:
+        if isinstance(expression, Name):
+            return self.name(expression)
+        if isinstance(expression, Member):
+            return self.member(expression)
+        raise TypeError(f"not a slot: {expression!r}")
+
+    def truthy(self, expression: Expr) -> str:
+        dtype = self.expression_type(expression)
+        code = self.value(expression)[0]
+        if dtype == BOOL:
+            stripped = _strip_outer_parentheses(code)
+            return stripped if stripped is not None else code
+        if dtype == STRING:
+            return f"(ds_string_length({code}) != 0)"
+        if dtype.is_handle:
+            return f"({code} != NULL)"
+        return f"({code}) != 0"
+
+    # -- values (code + ownership) ----------------------------------------
+
+    def keep(self, expression: Expr, code: str) -> str:
+        dtype = self.expression_type(expression)
+        return f"({self.c_type(dtype)})ds_keep((void *)({code}))"
+
+    def owned(self, expression: Expr) -> str:
+        """The C code for `expression` with a reference the caller may keep."""
+
+        code, fresh = self.value(expression)
+        dtype = self.expression_type(expression)
+        if fresh:
+            return code
+        if dtype.is_handle:
+            return self.keep(expression, code)
+        return code
+
+    def value(self, expression: Expr) -> Tuple[str, bool]:
+        """Return ``(C code, owns_a_reference)`` for an expression."""
+
+        if isinstance(expression, Literal):
+            if expression.literal_type == "string":
+                return self.literal(str(expression.value)), False
+            if expression.literal_type == "int":
+                return str(int(expression.value)), False
+            if expression.literal_type == "float":
+                return _c_float(float(expression.value)), False
+            if expression.literal_type == "bool":
+                return ("1" if expression.value else "0"), False
+            if expression.literal_type == "nil":
+                return "NULL", False
+        if isinstance(expression, Name):
+            return self.name(expression), False
+        if isinstance(expression, Member):
+            dtype = self.expression_type(expression)
+            if dtype.name.startswith("builtin:"):
+                return self.builtin_property(expression), False
+            return self.member(expression), False
+        if isinstance(expression, New):
+            dtype = _type_from_name(expression.type_name, self.model.structs)
+            name = self.struct_names[expression.type_name]
+            struct = next(s for s in self.program.structs if s.name == expression.type_name)
+            dtor = f"ds_dtor_{name}" if self.struct_has_handles(struct) else "NULL"
+            return f"({self.c_type(dtype)})ds_alloc(sizeof({name}), {dtor})", True
+        if isinstance(expression, Unary):
+            operator = "!" if expression.operator == "not" else expression.operator
+            return f"({operator}{self.value(expression.operand)[0]})", False
+        if isinstance(expression, Binary):
+            return self.binary(expression)
+        if isinstance(expression, Index):
+            return self.index_read(expression)
+        if isinstance(expression, ListLiteral):
+            return self.list_literal(expression), True
+        if isinstance(expression, Call):
+            return self.call(expression)
+        raise TypeError(f"unsupported expression {expression!r}")
+
+    def binary(self, expression: Binary) -> Tuple[str, bool]:
+        operator = expression.operator
+        if operator == "..":
+            left = self.owned_string(expression.left)
+            right = self.owned_string(expression.right)
+            return f"ds_concat({left}, {right})", True
+        left_type = self.expression_type(expression.left)
+        right_type = self.expression_type(expression.right)
+        if operator in ("==", "!=", "~=", ">", "<", ">=", "<="):
+            if left_type == STRING or right_type == STRING:
+                comparison = {"~=": "!="}.get(operator, operator)
+                left = self.owned_string(expression.left)
+                right = self.owned_string(expression.right)
+                return f"(ds_string_compare({left}, {right}) {comparison} 0)", False
+        c_operator = {"and": "&&", "or": "||", "~=": "!="}.get(operator, operator)
+        if c_operator == "/":
+            # `/` always yields a float, and dividing by zero is a script error,
+            # so a constant non-zero divisor is the only case without a check.
+            left = self.number(expression.left, left_type)
+            right = self.number(expression.right, right_type)
+            return f"ds_div({left}, {right}, {self.where(expression)})", False
+        if c_operator == "%":
+            if left_type in (INT, BOOL) and right_type in (INT, BOOL):
+                left = self.value(expression.left)[0]
+                right = self.value(expression.right)[0]
+                return (f"ds_imod((int64_t)({left}), (int64_t)({right}), {self.where(expression)})",
+                        False)
+            left = self.number(expression.left, left_type)
+            right = self.number(expression.right, right_type)
+            return f"ds_mod({left}, {right}, {self.where(expression)})", False
+        left = self.value(expression.left)[0]
+        right = self.value(expression.right)[0]
+        return f"({left} {c_operator} {right})", False
+
+    def number(self, expression: Expr, dtype: DType) -> str:
+        code = self.value(expression)[0]
+        return f"(double)({code})"
+
+    def owned_string(self, expression: Expr) -> str:
+        dtype = self.expression_type(expression)
+        code, fresh = self.value(expression)
+        if dtype == STRING:
+            return code if fresh else self.keep(expression, code)
+        if dtype == INT:
+            return f"ds_int_to_string((int64_t)({code}))"
+        if dtype == FLOAT:
+            return f"ds_float_to_string((double)({code}))"
+        if dtype == BOOL:
+            return f"ds_bool_to_string(({code}) != 0)"
+        return code
+
+    def index_read(self, expression: Index) -> Tuple[str, bool]:
+        object_type = self.expression_type(expression.object)
+        code = self.value(expression.object)[0]
+        index = self.value(expression.index)[0]
+        if object_type == STRING:
+            return f"ds_string_char_at({code}, (int64_t)({index}), {self.where(expression)})", True
+        element = self.require_element(object_type.element, expression)
+        getter = {
+            "DS_ELEM_FLOAT": "ds_list_get_float",
+            "DS_ELEM_INT": "ds_list_get_int",
+            "DS_ELEM_BOOL": "ds_list_get_bool",
+            "DS_ELEM_STRING": "ds_list_get_string",
+            "DS_ELEM_LIST": "ds_list_get_list",
+            "DS_ELEM_OBJECT": "ds_list_get_object",
+        }[self.element_kind(element)]
+        call = f"{getter}({code}, (int64_t)({index}), {self.where(expression)})"
+        references = element in (STRING,) or element.name == "list" or element.is_struct
+        if references:
+            return f"({self.c_type(element)}){call}", True
+        return call, False
+
+    def list_literal(self, expression: ListLiteral) -> str:
+        dtype = self.expression_type(expression)
+        element = dtype.element if dtype.element is not None else UNKNOWN
+        if not expression.items:
+            element = self.require_element(element, expression)
+        kind = self.element_kind(element)
+        if not expression.items:
+            return f"ds_list_new({kind}, {self.element_size(element)}, {self.element_dtor(element)}, 0)"
+        values = []
+        for item in expression.items:
+            code, fresh = self.value(item)
+            if element.is_struct or element == STRING or element.name == "list":
+                values.append(code if fresh else self.keep(item, code))
+            else:
+                values.append(code)
+        if element in (FLOAT,):
+            casted = ", ".join(f"(double)({value})" for value in values)
+            return f"ds_list_of_floats({len(values)}, (const double[]){{{casted}}})"
+        if element == INT:
+            casted = ", ".join(f"(int64_t)({value})" for value in values)
+            return f"ds_list_of_ints({len(values)}, (const int64_t[]){{{casted}}})"
+        if element == BOOL:
+            casted = ", ".join(f"(int)({value}) != 0" for value in values)
+            return f"ds_list_of_bools({len(values)}, (const int[]){{{casted}}})"
+        if element == STRING:
+            casted = ", ".join(f"(DsString *)({value})" for value in values)
+            return f"ds_list_of_strings({len(values)}, (DsString *const[]){{{casted}}})"
+        if element.name == "list":
+            casted = ", ".join(f"(DsList *)({value})" for value in values)
+            return f"ds_list_of_lists({len(values)}, (DsList *const[]){{{casted}}})"
+        casted = ", ".join(f"(void *)({value})" for value in values)
+        return (f"ds_list_of_objects({len(values)}, (void *const[]){{{casted}}}, "
+                f"{self.element_size(element)}, {self.element_dtor(element)})")
+
+    # -- calls -------------------------------------------------------------
+
+    def call(self, expression: Call) -> Tuple[str, bool]:
+        callee = expression.callee
+        if isinstance(callee, Member) and isinstance(callee.object, Name) and callee.object.name in NAMESPACE_TYPES:
+            return self.builtin_call(callee.object.name, callee, expression), self.builtin_is_fresh(
+                callee.object.name, callee.name)
+        if isinstance(callee, Member) and isinstance(callee.object, (Name, Member, Index)):
+            owner = self.expression_type(callee.object)
+            if owner.name == "list":
+                return self.list_call(callee, expression), self.builtin_is_fresh("list", callee.name)
+        if isinstance(callee, Name) and callee.name in self.functions:
+            arguments = [self.owned(argument) if self.model.function_params[callee.name][index].is_handle
+                         else self.value(argument)[0]
+                         for index, argument in enumerate(expression.args)]
+            call_code = f"ds_fn_{_sanitize(callee.name)}({', '.join(arguments)})"
+            return call_code, self.model.function_returns[callee.name].is_handle
+        if isinstance(callee, Name) and callee.name in {"print", "log"}:
+            parts = [self.owned_string(argument) for argument in expression.args]
+            if len(parts) == 1:
+                return f"ds_log({parts[0]})", False
+            return f"ds_log(ds_text_join({len(parts)}, {', '.join(parts)}))", False
+        if isinstance(callee, Name) and callee.name == "str":
+            return self.owned_string(expression.args[0]), True
+        if isinstance(callee, Name) and callee.name == "num":
+            return f"ds_number_of_text({self.owned_string(expression.args[0])})", False
+        if isinstance(callee, Name) and callee.name == "len":
+            argument = expression.args[0]
+            dtype = self.expression_type(argument)
+            code = self.value(argument)[0]
+            if dtype == STRING:
+                return f"ds_string_length({code})", False
+            return f"ds_list_count({code})", False
+        raise TypeError(f"unsupported call {expression!r}")
+
+    def builtin_is_fresh(self, namespace: str, name: str) -> bool:
+        """True when a builtin hands back a reference the caller owns."""
+
+        if namespace == "render":
+            return False
+        if namespace == "math" or namespace == "engine" or namespace == "input" or namespace == "image":
+            return False
+        if namespace == "list":
+            return name == "join"
+        return False
+
+    def builtin_property(self, expression: Member) -> str:
+        object_type = self.expression_type(expression.object)
+        namespace = object_type.name.split(":", 1)[1]
+        getter = BUILTIN_PROPERTIES.get(namespace, {}).get(expression.name)
+        if getter:
+            return getter
+        raise SemanticError(f"{self.filename}: {getattr(expression, 'line', 0)}: "
+                            f"{namespace}.{expression.name} нельзя читать как поле")
+
+    def builtin_call(self, namespace: str, callee: Member, expression: Call) -> str:
+        builtin = BUILTINS[namespace][callee.name]
+        arguments: List[str] = []
+        if namespace == "render" and callee.name == "color" and len(expression.args) == 4:
+            builtin = BUILTINS["render"]["color_alpha"]
+        for index, argument in enumerate(expression.args):
+            if index in builtin.strings:
+                arguments.append(self.owned_string(argument))
+            elif builtin.numbers == "float":
+                arguments.append(f"(float)({self.value(argument)[0]})")
+            else:
+                arguments.append(f"(double)({self.value(argument)[0]})")
+        if builtin.where:
+            arguments.append(self.where(expression))
+        return builtin.c.format(*arguments)
+
+    def list_call(self, callee: Member, expression: Call) -> str:
+        list_type = self.expression_type(callee.object)
+        element = self.require_element(list_type.element, callee)
+        kind = self.element_kind(element)
+        code = self.value(callee.object)[0]
+        suffix = {
+            "DS_ELEM_FLOAT": "float",
+            "DS_ELEM_INT": "int",
+            "DS_ELEM_BOOL": "bool",
+            "DS_ELEM_STRING": "string",
+            "DS_ELEM_LIST": "list",
+            "DS_ELEM_OBJECT": "object",
+        }[kind]
+        name = callee.name
+        if name == "push":
+            value = self.owned(expression.args[0]) if element.is_handle else self.element_value(
+                expression.args[0], element)
+            return f"ds_list_push_{suffix}({code}, {value})"
+        if name == "insert":
+            index = self.value(expression.args[0])[0]
+            value = self.owned(expression.args[1]) if element.is_handle else self.element_value(
+                expression.args[1], element)
+            return f"ds_list_insert_{suffix}({code}, (int64_t)({index}), {value})"
+        if name in ("delete", "remove_at"):
+            index = self.value(expression.args[0])[0]
+            return f"ds_list_remove_at({code}, (int64_t)({index}), {self.where(callee)})"
+        if name == "clear":
+            return f"ds_list_clear({code})"
+        if name == "index_of":
+            argument = expression.args[0]
+            if element == STRING:
+                value = self.owned_string(argument)
+                return f"ds_list_index_of_string({code}, {value})"
+            if element.is_struct or element.name == "list":
+                value = self.value(argument)[0]
+                return f"ds_list_index_of_object({code}, (const void *)({value}))"
+            value = self.value(argument)[0]
+            return f"ds_list_index_of_{suffix}({code}, {self.element_value(argument, element)})"
+        if name == "join":
+            separator = self.owned_string(expression.args[0])
+            return f"ds_list_join({code}, {separator})"
+        raise TypeError(f"unsupported list method {callee.name}")
+
+    def element_value(self, expression: Expr, element: DType) -> str:
+        code = self.value(expression)[0]
+        if element == FLOAT:
+            return f"(double)({code})"
+        if element == INT:
+            return f"(int64_t)({code})"
+        if element == BOOL:
+            return f"(({code}) != 0)"
+        return code
+
+    # -- names and members -------------------------------------------------
+
+    def name(self, expression: Name) -> str:
+        if self.current_function is not None:
+            local_types = self.model.function_locals.get(self.current_function.name, {})
+            if expression.name in local_types:
+                return _sanitize(expression.name)
+        if expression.name in self.global_c_names:
+            return self.global_c_names[expression.name]
+        return _sanitize(expression.name)
+
+    def member(self, expression: Member) -> str:
+        dtype = self.expression_type(expression)
+        if dtype.name.startswith("builtin:"):
+            raise SemanticError(f"{self.filename}: {getattr(expression, 'line', 0)}: "
+                                f"{dtype.name.split(':', 1)[1]} — это метод, его нужно вызвать")
+        object_type = self.expression_type(expression.object)
+        if object_type.name == "list":
+            # `list.count`
+            return f"ds_list_count({self.value(expression.object)[0]})"
+        code = self.value(expression.object)[0]
+        pointer = self.c_type(object_type)
+        return f"(({pointer})ds_require((void *)({code}), {self.where(expression)}))->{_sanitize(expression.name)}"
+
+    def expression_type(self, expression: Expr) -> DType:
+        return self.model.expression_types.get(id(expression), UNKNOWN)
 
 
 def compile_program(program: Program, filename: str = "<string>") -> Tuple[str, SemanticModel]:
@@ -1141,8 +1987,19 @@ def compile_program(program: Program, filename: str = "<string>") -> Tuple[str, 
     return compiler.compile(), compiler.model
 
 
-def compile_header(source: str, filename: str = "<string>") -> str:
+def compile_header(program: Optional[Program] = None, filename: str = "<string>") -> str:
+    program = program or Program(line=1, column=1)
+    return CCompiler(program, filename=filename).header()
+
+
+def compile_source(source: str, filename: str = "<string>") -> Tuple[str, SemanticModel]:
     from .parser import parse
 
-    program = parse(source, filename=filename)
-    return CCompiler(program, filename=filename).header()
+    return compile_program(parse(source, filename=filename), filename=filename)
+
+
+def compile_project(project, name: Optional[str] = None) -> Tuple[str, SemanticModel]:
+    """Compile a loaded game folder (see dimscript.project.load_project)."""
+
+    filenames = ", ".join(script.name for script in getattr(project, "scripts", []))
+    return compile_program(project.program, filename=name or filenames or "<game>")
