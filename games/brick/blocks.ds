@@ -42,16 +42,6 @@ launch_ball() {
     game.ball.stuck = true
 }
 
-remaining(blocks: list): int {
-    alive = 0
-    for index = 0, blocks.count - 1 do
-        if blocks[index].alive then {
-            alive = alive + 1
-        }
-    }
-    return alive
-}
-
 step_ball(g: BrickGame, dt: float) {
     if g.ball.stuck then {
         return

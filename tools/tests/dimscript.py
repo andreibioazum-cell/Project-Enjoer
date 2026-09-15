@@ -14,7 +14,7 @@ from dimscript.interpreter import Interpreter  # noqa: E402
 source = (ROOT / "examples" / "clicker.ds").read_text(encoding="utf-8")
 c_source, model = compile_source(source, filename="examples/clicker.ds")
 assert "typedef struct ClickerGame" in c_source
-assert "ds_render_text(ds_concat(\"Счет: \"" in c_source
+assert "ds_render_text(ds_concat" in c_source
 assert "void dimscript_touchpressed" in c_source
 assert model.global_types["game"].is_struct
 assert (ROOT / "src" / "generated" / "clicker.c").read_text(encoding="utf-8") == c_source

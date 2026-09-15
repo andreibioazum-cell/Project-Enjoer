@@ -1,23 +1,17 @@
 /*
- * DimScript runtime: reference counted heap, strings, lists, images, the
- * triangle batch and the engine/input state.
+ * DimScript runtime — STRICT COMPILER MODE, MANUAL MEMORY, NO REFCOUNT.
+ * Speed like C, AOT to machine code.
  *
- * Reference counting model
- * ------------------------
- * Every heap object starts with a small header:
- *
- *     DsHeader { refs, kind, dtor }
- *
- * `refs == 0` marks an immortal object (an interned script literal): retain and
- * release are no-ops, so a string constant used in a draw call costs nothing.
- * `dtor` is the only thing that has to know the payload layout and is emitted
- * by the compiler for every struct that owns references, so releasing a struct
- * releases its list/string/struct fields and nothing else.  There is no
- * tracing, no mark phase, no write barrier and no shadow stack: the generated C
- * decides statically where a reference is created (ds_keep), moved (ds_move) or
- * dropped (ds_release_slot), which is why a frame allocates nothing and scans
- * nothing.
+ * Model:
+ *   - ds_alloc = malloc header + payload, zeroed, store dtor
+ *   - ds_release = call dtor + free
+ *   - ds_keep = identity (no cost)
+ *   - ds_assign / ds_move = raw *slot = value
+ *   - ds_release_slot = free + NULL
+ *   - strings/lists are borrowed, never auto-released
+ *   - literals are immortal, allocated once
  */
+
 #define _POSIX_C_SOURCE 200809L
 #include "dimscript_runtime.h"
 
@@ -32,328 +26,220 @@
 #include "engine.h"
 #include "enjoer_draw.h"
 
-#ifdef DS_REF_COUNTERS
-static DsRefStats stats;
-#define DS_COUNT(field) (++stats.field)
-#else
-#define DS_COUNT(field) ((void)0)
-#endif
-
 typedef struct DsHeader {
-    uint32_t refs; /* 0 = immortal (interned literal) */
-    uint32_t kind;
     DsDtor dtor;
 } DsHeader;
 
 struct DsString {
-    DsHeader header;
     uint32_t length;
     char bytes[];
 };
 
 #define DS_MAX_LIST_CAPACITY ((int64_t)1 << 24)
 
-static void ds_free_header(DsHeader *header) {
-    if (header->dtor) header->dtor(header + 1);
-    free(header);
-    DS_COUNT(frees);
+static DsHeader *header_of(void *value) {
+    return value ? (DsHeader*)value - 1 : NULL;
 }
 
 void *ds_alloc(size_t size, DsDtor dtor) {
-    DsHeader *header = (DsHeader *)calloc(1, sizeof(DsHeader) + size);
-    if (!header) {
+    DsHeader *h = (DsHeader*)calloc(1, sizeof(DsHeader) + size);
+    if (!h) {
         ds_fail("DimScript: out of memory");
         return NULL;
     }
-    header->refs = 1;
-    header->dtor = dtor;
-    DS_COUNT(allocations);
-#ifdef DS_REF_COUNTERS
-    if (stats.live + 1 > stats.peak) stats.peak = stats.live + 1;
-    ++stats.live;
-#endif
-    return header + 1;
+    h->dtor = dtor;
+    return h + 1;
 }
 
-/* Every public entry point takes the payload pointer, which sits right after the
- * header: going back one header is the only correct way to reach it. */
-static DsHeader *header_of(void *value) {
-    return value ? (DsHeader *)value - 1 : NULL;
-}
-
-void *ds_keep(void *value) {
-    DsHeader *header = header_of(value);
-    if (!header || header->refs == 0) return value;
-    ++header->refs;
-    DS_COUNT(retains);
-    return value;
-}
-
-void ds_release(void *value) {
-    DsHeader *header = header_of(value);
-    if (!header || header->refs == 0) return;
-    DS_COUNT(releases);
-    if (--header->refs == 0) {
-#ifdef DS_REF_COUNTERS
-        if (stats.live) --stats.live;
-#endif
-        ds_free_header(header);
-    }
+void ds_free(void *value) {
+    if (!value) return;
+    free(header_of(value));
 }
 
 void ds_assign(void **slot, void *value) {
-    void *previous = *slot;
-    if (previous == value) return;
-    ds_keep(value);
     *slot = value;
-    ds_release(previous);
 }
 
 void ds_move(void **slot, void *value) {
-    void *previous = *slot;
-    if (previous == value) return;
     *slot = value;
-    ds_release(previous);
 }
 
 void ds_release_slot(void **slot) {
-    void *previous = *slot;
+    if (!slot) return;
+    void *v = *slot;
     *slot = NULL;
-    ds_release(previous);
+    if (!v) return;
+    DsHeader *h = header_of(v);
+    if (h->dtor) h->dtor(v);
+    free(h);
 }
 
 void *ds_require(void *value, const char *where) {
     if (!value) {
-        char message[256];
-        snprintf(message, sizeof(message), "%s: обращение к полю удалённого или пустого объекта",
-                 where ? where : "DimScript");
-        ds_fail(message);
+        char msg[256];
+        snprintf(msg, sizeof(msg), "%s: nil deref", where ? where : "DimScript");
+        ds_fail(msg);
     }
     return value;
 }
 
-const DsRefStats *ds_ref_stats(void) {
-#ifdef DS_REF_COUNTERS
-    return &stats;
-#else
-    static const DsRefStats empty;
-    return &empty;
-#endif
-}
-
-uint64_t ds_live_objects(void) {
-#ifdef DS_REF_COUNTERS
-    return stats.live;
-#else
-    return 0;
-#endif
-}
-
-/* --- errors --------------------------------------------------------------- */
-
+/* --- errors --- */
 void ds_fail(const char *message) {
     app_fail("%s", message ? message : "DimScript error");
 }
-
 void ds_fail_where(const char *where, const char *message) {
-    char buffer[256];
-    snprintf(buffer, sizeof(buffer), "%s: %s", where ? where : "DimScript", message);
-    ds_fail(buffer);
+    char buf[256];
+    snprintf(buf, sizeof(buf), "%s: %s", where ? where : "DimScript", message);
+    ds_fail(buf);
 }
-
 void ds_fail_list_index(const char *where, int64_t index, int64_t count) {
-    app_fail("%s: индекс %lld вне списка из %lld элементов", where ? where : "DimScript",
+    app_fail("%s: index %lld out of %lld", where ? where : "DimScript",
              (long long)index, (long long)count);
 }
-
-double ds_div(double left, double right, const char *where) {
-    if (right == 0.0) ds_fail_where(where, "деление на ноль");
-    return left / right;
+double ds_div(double l, double r, const char *where) {
+    if (r == 0.0) ds_fail_where(where, "div by zero");
+    return l / r;
+}
+double ds_mod(double l, double r, const char *where) {
+    if (r == 0.0) ds_fail_where(where, "mod by zero");
+    double res = fmod(l, r);
+    if (res != 0.0 && ((res < 0.0) != (r < 0.0))) res += r;
+    return res;
+}
+int64_t ds_imod(int64_t l, int64_t r, const char *where) {
+    if (r == 0) ds_fail_where(where, "mod by zero");
+    int64_t res = l % r;
+    if (res != 0 && ((res < 0) != (r < 0))) res += r;
+    return res;
 }
 
-double ds_mod(double left, double right, const char *where) {
-    if (right == 0.0) ds_fail_where(where, "остаток по нулю");
-    double result = fmod(left, right);
-    if (result != 0.0 && ((result < 0.0) != (right < 0.0))) result += right;
-    return result;
-}
-
-int64_t ds_imod(int64_t left, int64_t right, const char *where) {
-    if (right == 0) ds_fail_where(where, "остаток по нулю");
-    int64_t result = left % right;
-    if (result != 0 && ((result < 0) != (right < 0))) result += right;
-    return result;
-}
-
-/* --- strings -------------------------------------------------------------- */
-
-static DsString *string_alloc(size_t length) {
-    DsString *string = (DsString *)ds_alloc(sizeof(DsString) + length + 1, NULL);
-    string->length = (uint32_t)length;
-    string->bytes[length] = '\0';
-    return string;
+/* --- strings --- */
+static DsString *string_alloc(size_t len) {
+    DsString *s = (DsString*)ds_alloc(sizeof(DsString) + len + 1, NULL);
+    s->length = (uint32_t)len;
+    s->bytes[len] = '\0';
+    return s;
 }
 
 DsString *ds_string_new(const char *bytes, size_t length) {
-    DsString *string = string_alloc(length);
-    if (length && bytes) memcpy(string->bytes, bytes, length);
-    return string;
+    DsString *s = string_alloc(length);
+    if (length && bytes) memcpy(s->bytes, bytes, length);
+    return s;
 }
 
-static DsString **interned;
-static int interned_count;
+static DsString **interned = NULL;
+static int interned_count = 0;
 
 DsString **ds_intern_literals(const DsLiteralSource *sources, int count) {
     if (interned) return interned;
     if (count <= 0) return NULL;
-    interned = (DsString **)calloc((size_t)count, sizeof(DsString *));
+    interned = (DsString**)calloc((size_t)count, sizeof(DsString*));
     if (!interned) return NULL;
-    for (int index = 0; index < count; ++index) {
-        DsString *string = NULL;
-        for (int previous = 0; previous < index; ++previous) {
-            /* Identical literals share one object: a script that prints the same
-             * label in twenty places owns one immortal string, not twenty. */
-            if (interned[previous] && interned[previous]->length == sources[index].length &&
-                !memcmp(interned[previous]->bytes, sources[index].bytes,
-                        sources[index].length)) {
-                string = interned[previous];
+    for (int i = 0; i < count; ++i) {
+        DsString *s = NULL;
+        for (int j = 0; j < i; ++j) {
+            if (interned[j] && interned[j]->length == sources[i].length &&
+                !memcmp(interned[j]->bytes, sources[i].bytes, sources[i].length)) {
+                s = interned[j];
                 break;
             }
         }
-        if (!string) {
-            string = string_alloc(sources[index].length);
-            memcpy(string->bytes, sources[index].bytes, sources[index].length);
-            string->header.refs = 0; /* immortal */
+        if (!s) {
+            s = string_alloc(sources[i].length);
+            memcpy(s->bytes, sources[i].bytes, sources[i].length);
         }
-        interned[index] = string;
+        interned[i] = s;
     }
     interned_count = count;
     return interned;
 }
 
 static void free_interned(void) {
-    for (int index = 0; index < interned_count; ++index) {
-        DsString *string = interned[index];
-        int duplicate = 0;
-        for (int previous = 0; previous < index; ++previous)
-            if (interned[previous] == string) duplicate = 1;
-        if (!duplicate && string) {
-            /* The payload sits right after its header, so the header is what
-             * free() gets.  An immortal was never counted as alive when it was
-             * released, but shutting the runtime down does have to discount it. */
-            free((DsHeader *)string - 1);
-            DS_COUNT(frees);
-#ifdef DS_REF_COUNTERS
-            if (stats.live) --stats.live;
-#endif
-        }
+    if (!interned) return;
+    for (int i = 0; i < interned_count; ++i) {
+        DsString *s = interned[i];
+        int dup = 0;
+        for (int j = 0; j < i; ++j) if (interned[j] == s) { dup = 1; break; }
+        if (!dup && s) free(header_of(s));
     }
     free(interned);
     interned = NULL;
     interned_count = 0;
 }
 
-const char *ds_cstr(const DsString *value) {
-    return value ? value->bytes : "";
+const char *ds_cstr(const DsString *v) { return v ? v->bytes : ""; }
+int64_t ds_string_length(const DsString *v) { return v ? (int64_t)v->length : 0; }
+int32_t ds_string_compare(const DsString *l, const DsString *r) {
+    int res = strcmp(ds_cstr(l), ds_cstr(r));
+    return res < 0 ? -1 : res > 0 ? 1 : 0;
 }
-
-int64_t ds_string_length(const DsString *value) {
-    return value ? (int64_t)value->length : 0;
-}
-
-int32_t ds_string_compare(const DsString *left, const DsString *right) {
-    const char *a = ds_cstr(left);
-    const char *b = ds_cstr(right);
-    const int result = strcmp(a, b);
-    return result < 0 ? -1 : result > 0 ? 1 : 0;
-}
-
-DsString *ds_string_char_at(const DsString *value, int64_t index, const char *where) {
-    const int64_t length = value ? (int64_t)value->length : 0;
-    if (index < 0) index += length;
-    if (index < 0 || index >= length) {
-        ds_fail_list_index(where, index, length);
+DsString *ds_string_char_at(const DsString *v, int64_t idx, const char *where) {
+    int64_t len = v ? (int64_t)v->length : 0;
+    if (idx < 0) idx += len;
+    if (idx < 0 || idx >= len) {
+        ds_fail_list_index(where, idx, len);
         return NULL;
     }
-    /* Script strings are UTF-8, so a "character" is one byte; that is what the
-     * reference implementation did as well. */
-    return ds_string_new(value->bytes + index, 1);
+    return ds_string_new(v->bytes + idx, 1);
 }
-
 DsString *ds_int_to_string(int64_t value) {
-    char buffer[32];
-    const int length = snprintf(buffer, sizeof(buffer), "%lld", (long long)value);
-    return ds_string_new(buffer, (size_t)(length > 0 ? length : 0));
+    char buf[32];
+    int len = snprintf(buf, sizeof(buf), "%lld", (long long)value);
+    return ds_string_new(buf, len > 0 ? (size_t)len : 0);
 }
-
 DsString *ds_float_to_string(double value) {
-    char buffer[48];
-    int length = snprintf(buffer, sizeof(buffer), "%.6g", value);
-    if (length <= 0) length = 0;
-    /* Keep `2` readable as `2.0`: a script that concatenates a float should see
-     * a float, not an integer that happens to be printed the same way. */
-    if (!strchr(buffer, '.') && !strchr(buffer, 'e') && !strchr(buffer, 'n') &&
-        !strchr(buffer, 'i') && length < (int)sizeof(buffer) - 2) {
-        buffer[length++] = '.';
-        buffer[length++] = '0';
-        buffer[length] = '\0';
+    char buf[48];
+    int len = snprintf(buf, sizeof(buf), "%.6g", value);
+    if (len <= 0) len = 0;
+    if (!strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'n') &&
+        !strchr(buf, 'i') && len < (int)sizeof(buf)-2) {
+        buf[len++] = '.';
+        buf[len++] = '0';
+        buf[len] = '\0';
     }
-    return ds_string_new(buffer, (size_t)length);
+    return ds_string_new(buf, (size_t)len);
 }
-
-DsString *ds_bool_to_string(int value) {
-    return value ? ds_string_new("true", 4) : ds_string_new("false", 5);
+DsString *ds_bool_to_string(int v) {
+    return v ? ds_string_new("true",4) : ds_string_new("false",5);
 }
-
 DsString *ds_concat(DsString *left, DsString *right) {
-    const size_t left_length = left ? left->length : 0;
-    const size_t right_length = right ? right->length : 0;
-    DsString *result = string_alloc(left_length + right_length);
-    if (left_length) memcpy(result->bytes, left->bytes, left_length);
-    if (right_length) memcpy(result->bytes + left_length, right->bytes, right_length);
-    ds_release(left);
-    ds_release(right);
-    return result;
+    size_t ll = left ? left->length : 0;
+    size_t rl = right ? right->length : 0;
+    DsString *res = string_alloc(ll + rl);
+    if (ll) memcpy(res->bytes, left->bytes, ll);
+    if (rl) memcpy(res->bytes + ll, right->bytes, rl);
+    return res; /* borrows inputs, no release */
 }
-
 DsString *ds_text_join(int count, ...) {
     va_list args;
     size_t total = 0;
-    DsString **parts = count > 0 ? (DsString **)calloc((size_t)count, sizeof(DsString *)) : NULL;
+    DsString **parts = count > 0 ? (DsString**)calloc((size_t)count, sizeof(DsString*)) : NULL;
     va_start(args, count);
-    for (int index = 0; index < count; ++index) {
-        parts[index] = va_arg(args, DsString *);
-        total += parts[index] ? parts[index]->length : 0;
+    for (int i = 0; i < count; ++i) {
+        parts[i] = va_arg(args, DsString*);
+        total += parts[i] ? parts[i]->length : 0;
     }
     va_end(args);
-    DsString *result = string_alloc(total);
+    DsString *res = string_alloc(total);
     size_t used = 0;
-    for (int index = 0; index < count; ++index) {
-        if (parts[index] && parts[index]->length) {
-            memcpy(result->bytes + used, parts[index]->bytes, parts[index]->length);
-            used += parts[index]->length;
+    for (int i = 0; i < count; ++i) {
+        if (parts[i] && parts[i]->length) {
+            memcpy(res->bytes + used, parts[i]->bytes, parts[i]->length);
+            used += parts[i]->length;
         }
-        ds_release(parts[index]);
     }
     free(parts);
-    return result;
+    return res;
 }
-
 void ds_log(DsString *text) {
     app_log("%s", ds_cstr(text));
-    ds_release(text);
 }
-
 double ds_number_of_text(DsString *text) {
-    const double value = text ? strtod(text->bytes, NULL) : 0.0;
-    ds_release(text);
-    return value;
+    return text ? strtod(text->bytes, NULL) : 0.0;
 }
 
-/* --- lists ---------------------------------------------------------------- */
-
+/* --- lists --- */
 struct DsList {
-    DsHeader header;
     int kind;
     size_t elem_size;
     DsDtor elem_dtor;
@@ -365,49 +251,38 @@ struct DsList {
 static int element_is_reference(int kind) {
     return kind == DS_ELEM_STRING || kind == DS_ELEM_LIST || kind == DS_ELEM_OBJECT;
 }
-
 static size_t element_size_for(int kind) {
-    switch (kind) {
-    case DS_ELEM_FLOAT: return sizeof(double);
-    case DS_ELEM_INT: return sizeof(int64_t);
-    case DS_ELEM_BOOL: return sizeof(int);
-    default: return sizeof(void *);
+    switch(kind) {
+        case DS_ELEM_FLOAT: return sizeof(double);
+        case DS_ELEM_INT: return sizeof(int64_t);
+        case DS_ELEM_BOOL: return sizeof(int);
+        default: return sizeof(void*);
     }
 }
-
-/* Reference elements live at a pointer-aligned stride that is not their natural
- * size, so they are only ever reached through this helper.  Scalars keep
- * elem_size == sizeof(scalar) (see ds_list_new) and may additionally be indexed
- * through a typed pointer. */
-static void *element_at(const DsList *list, int64_t index) {
-    return (char *)list->items + (size_t)index * list->elem_size;
+static void *element_at(const DsList *list, int64_t idx) {
+    return (char*)list->items + (size_t)idx * list->elem_size;
 }
 
 DsList *ds_list_new(int kind, size_t elem_size, DsDtor elem_dtor, int64_t capacity) {
-    DsList *list = (DsList *)ds_alloc(sizeof(DsList), ds_list_destroy);
+    DsList *list = (DsList*)ds_alloc(sizeof(DsList), ds_list_destroy);
     list->kind = kind;
     list->elem_size = element_size_for(kind);
     if (element_is_reference(kind) && elem_size) {
-        /* Elements are pointers, and the object itself lives on the heap, so the
-         * stride only has to be pointer aligned — never the size of the struct,
-         * which would misalign every second element. */
-        const size_t pointer = sizeof(void *);
-        list->elem_size = ((elem_size + pointer - 1) / pointer) * pointer;
+        size_t p = sizeof(void*);
+        list->elem_size = ((elem_size + p - 1) / p) * p;
     }
     list->elem_dtor = elem_dtor;
     if (capacity > 0) ds_list_reserve(list, capacity);
     return list;
 }
-
 void ds_list_destroy(void *value) {
-    DsList *list = (DsList *)value;
+    DsList *list = (DsList*)value;
     if (!list) return;
-    if (element_is_reference(list->kind)) {
-        for (int64_t index = 0; index < list->count; ++index) {
-            /* One element owns exactly one reference; releasing it runs the
-             * element destructor (for structs) through the normal path. */
-            void *element = *(void **)element_at(list, index);
-            if (element) ds_release(element);
+    /* manual: free items, but not elements unless dtor says */
+    if (list->elem_dtor) {
+        for (int64_t i = 0; i < list->count; ++i) {
+            void *e = *(void**)element_at(list, i);
+            if (e) list->elem_dtor(e);
         }
     }
     free(list->items);
@@ -415,598 +290,318 @@ void ds_list_destroy(void *value) {
     list->count = 0;
     list->capacity = 0;
 }
-
 int64_t ds_list_count(const DsList *list) { return list ? list->count : 0; }
-
-void ds_list_reserve(DsList *list, int64_t capacity) {
-    if (!list || capacity <= list->capacity) return;
-    if (capacity > DS_MAX_LIST_CAPACITY) ds_fail("DimScript: список слишком большой");
+void ds_list_reserve(DsList *list, int64_t cap) {
+    if (!list || cap <= list->capacity) return;
+    if (cap > DS_MAX_LIST_CAPACITY) ds_fail("list too big");
     int64_t grown = list->capacity ? list->capacity : 4;
-    while (grown < capacity) grown *= 2;
+    while (grown < cap) grown *= 2;
     void *items = realloc(list->items, (size_t)grown * list->elem_size);
-    if (!items) ds_fail("DimScript: out of memory while growing a list");
+    if (!items) ds_fail("out of memory growing list");
     list->items = items;
     list->capacity = grown;
 }
-
-static void list_grow(DsList *list, int64_t needed) {
-    if (needed > list->capacity) ds_list_reserve(list, needed);
+static void list_grow(DsList *list, int64_t need) {
+    if (need > list->capacity) ds_list_reserve(list, need);
 }
-
-static void *list_slot(DsList *list, int64_t index, const char *where) {
-    if (index < 0) index += list->count;
-    if (index < 0 || index >= list->count) {
-        ds_fail_list_index(where, index, list->count);
+static void *list_slot(DsList *list, int64_t idx, const char *where) {
+    if (idx < 0) idx += list->count;
+    if (idx < 0 || idx >= list->count) {
+        ds_fail_list_index(where, idx, list->count);
         return NULL;
     }
-    return (char *)list->items + (size_t)index * list->elem_size;
+    return (char*)list->items + (size_t)idx * list->elem_size;
 }
-
 static void *list_append_slot(DsList *list) {
     list_grow(list, list->count + 1);
-    return (char *)list->items + (size_t)(list->count++) * list->elem_size;
+    return (char*)list->items + (size_t)(list->count++) * list->elem_size;
 }
-
-static void *object_slot(const DsList *list, int64_t index, const char *where) {
-    return list_slot((DsList *)list, index, where);
+static void *object_slot(const DsList *list, int64_t idx, const char *where) {
+    return list_slot((DsList*)list, idx, where);
 }
+void ds_list_push_float(DsList *l, double v) { *(double*)list_append_slot(l) = v; }
+void ds_list_push_int(DsList *l, int64_t v) { *(int64_t*)list_append_slot(l) = v; }
+void ds_list_push_bool(DsList *l, int v) { *(int*)list_append_slot(l) = v ? 1 : 0; }
+void ds_list_push_string(DsList *l, DsString *v) { *(void**)list_append_slot(l) = v; }
+void ds_list_push_list(DsList *l, DsList *v) { *(void**)list_append_slot(l) = v; }
+void ds_list_push_object(DsList *l, void *v) { *(void**)list_append_slot(l) = v; }
 
-void ds_list_push_float(DsList *list, double value) {
-    *(double *)list_append_slot(list) = value;
-}
+double ds_list_get_float(const DsList *l, int64_t i, const char *w) { return *(double*)object_slot(l,i,w); }
+int64_t ds_list_get_int(const DsList *l, int64_t i, const char *w) { return *(int64_t*)object_slot(l,i,w); }
+int ds_list_get_bool(const DsList *l, int64_t i, const char *w) { return *(int*)object_slot(l,i,w); }
+DsString *ds_list_get_string(const DsList *l, int64_t i, const char *w) { return *(DsString**)object_slot(l,i,w); }
+DsList *ds_list_get_list(const DsList *l, int64_t i, const char *w) { return *(DsList**)object_slot(l,i,w); }
+void *ds_list_get_object(const DsList *l, int64_t i, const char *w) { return *(void**)object_slot(l,i,w); }
 
-void ds_list_push_int(DsList *list, int64_t value) {
-    *(int64_t *)list_append_slot(list) = value;
-}
+void ds_list_set_float(DsList *l, int64_t i, double v) { double *s = (double*)list_slot(l,i,NULL); if(s) *s=v; }
+void ds_list_set_int(DsList *l, int64_t i, int64_t v) { int64_t *s = (int64_t*)list_slot(l,i,NULL); if(s) *s=v; }
+void ds_list_set_bool(DsList *l, int64_t i, int v) { int *s = (int*)list_slot(l,i,NULL); if(s) *s=v?1:0; }
+void ds_list_set_string(DsList *l, int64_t i, DsString *v) { void **s = (void**)list_slot(l,i,NULL); if(s) *s=v; }
+void ds_list_set_list(DsList *l, int64_t i, DsList *v) { void **s = (void**)list_slot(l,i,NULL); if(s) *s=v; }
+void ds_list_set_object(DsList *l, int64_t i, void *v) { void **s = (void**)list_slot(l,i,NULL); if(s) *s=v; }
 
-void ds_list_push_bool(DsList *list, int value) {
-    *(int *)list_append_slot(list) = value ? 1 : 0;
-}
-
-void ds_list_push_string(DsList *list, DsString *value) {
-    *(void **)list_append_slot(list) = value;
-}
-
-void ds_list_push_list(DsList *list, DsList *value) {
-    *(void **)list_append_slot(list) = value;
-}
-
-void ds_list_push_object(DsList *list, void *value) {
-    *(void **)list_append_slot(list) = value;
-}
-
-double ds_list_get_float(const DsList *list, int64_t index, const char *where) {
-    return *(double *)object_slot(list, index, where);
-}
-
-int64_t ds_list_get_int(const DsList *list, int64_t index, const char *where) {
-    return *(int64_t *)object_slot(list, index, where);
-}
-
-int ds_list_get_bool(const DsList *list, int64_t index, const char *where) {
-    return *(int *)object_slot(list, index, where);
-}
-
-DsString *ds_list_get_string(const DsList *list, int64_t index, const char *where) {
-    return (DsString *)ds_keep(*(void **)object_slot(list, index, where));
-}
-
-DsList *ds_list_get_list(const DsList *list, int64_t index, const char *where) {
-    return (DsList *)ds_keep(*(void **)object_slot(list, index, where));
-}
-
-void *ds_list_get_object(const DsList *list, int64_t index, const char *where) {
-    return ds_keep(*(void **)object_slot(list, index, where));
-}
-
-static void list_store_reference(DsList *list, int64_t index, void *value, const char *where) {
-    void **slot = (void **)list_slot(list, index, where);
-    if (!slot) return;
-    void *previous = *slot;
-    *slot = value;
-    ds_release(previous);
-}
-
-void ds_list_set_float(DsList *list, int64_t index, double value) {
-    double *slot = (double *)list_slot(list, index, NULL);
-    if (slot) *slot = value;
-}
-
-void ds_list_set_int(DsList *list, int64_t index, int64_t value) {
-    int64_t *slot = (int64_t *)list_slot(list, index, NULL);
-    if (slot) *slot = value;
-}
-
-void ds_list_set_bool(DsList *list, int64_t index, int value) {
-    int *slot = (int *)list_slot(list, index, NULL);
-    if (slot) *slot = value ? 1 : 0;
-}
-
-void ds_list_set_string(DsList *list, int64_t index, DsString *value) {
-    list_store_reference(list, index, value, NULL);
-}
-
-void ds_list_set_list(DsList *list, int64_t index, DsList *value) {
-    list_store_reference(list, index, value, NULL);
-}
-
-void ds_list_set_object(DsList *list, int64_t index, void *value) {
-    list_store_reference(list, index, value, NULL);
-}
-
-void ds_list_remove_at(DsList *list, int64_t index, const char *where) {
-    if (index < 0) index += list->count;
-    if (index < 0 || index >= list->count) {
-        ds_fail_list_index(where, index, list->count);
-        return;
+void ds_list_remove_at(DsList *l, int64_t idx, const char *where) {
+    if (idx < 0) idx += l->count;
+    if (idx < 0 || idx >= l->count) { ds_fail_list_index(where, idx, l->count); return; }
+    char *base = (char*)l->items;
+    char *slot = base + (size_t)idx * l->elem_size;
+    /* manual: if dtor, call it for removed element */
+    if (l->elem_dtor) {
+        void *e = *(void**)slot;
+        if (e) l->elem_dtor(e);
     }
-    char *base = (char *)list->items;
-    char *slot = base + (size_t)index * list->elem_size;
-    if (element_is_reference(list->kind)) ds_release(*(void **)slot);
-    memmove(slot, slot + list->elem_size, (size_t)(list->count - index - 1) * list->elem_size);
-    --list->count;
+    memmove(slot, slot + l->elem_size, (size_t)(l->count - idx -1) * l->elem_size);
+    --l->count;
 }
-
-void ds_list_clear(DsList *list) {
-    if (!list) return;
-    if (element_is_reference(list->kind))
-        for (int64_t index = 0; index < list->count; ++index)
-            ds_release(*(void **)element_at(list, index));
-    list->count = 0;
-}
-
-int64_t ds_list_index_of_float(const DsList *list, double value) {
-    const double *items = (const double *)list->items;
-    for (int64_t index = 0; index < list->count; ++index)
-        if (items[index] == value) return index;
-    return -1;
-}
-
-int64_t ds_list_index_of_int(const DsList *list, int64_t value) {
-    const int64_t *items = (const int64_t *)list->items;
-    for (int64_t index = 0; index < list->count; ++index)
-        if (items[index] == value) return index;
-    return -1;
-}
-
-int64_t ds_list_index_of_object(const DsList *list, const void *value) {
-    for (int64_t index = 0; index < list->count; ++index)
-        if (*(void *const *)element_at(list, index) == value) return index;
-    return -1;
-}
-
-int64_t ds_list_index_of_bool(const DsList *list, int value) {
-    const int *items = (const int *)list->items;
-    for (int64_t index = 0; index < list->count; ++index)
-        if (items[index] == (value ? 1 : 0)) return index;
-    return -1;
-}
-
-int64_t ds_list_index_of_string(const DsList *list, DsString *value) {
-    int64_t found = -1;
-    for (int64_t index = 0; index < list->count; ++index)
-        if (!ds_string_compare(*(DsString *const *)element_at(list, index), value)) {
-            found = index;
-            break;
+void ds_list_clear(DsList *l) {
+    if (!l) return;
+    if (l->elem_dtor) {
+        for (int64_t i=0;i<l->count;++i) {
+            void *e = *(void**)element_at(l,i);
+            if (e) l->elem_dtor(e);
         }
-    ds_release(value);
-    return found;
+    }
+    l->count = 0;
 }
-
-/* Shared body of the six insert wrappers: shift the tail, write the slot. */
-static void *list_insert_slot(DsList *list, int64_t index) {
-    if (index < 0) index += list->count;
-    if (index < 0) index = 0;
-    if (index > list->count) index = list->count;
-    list_grow(list, list->count + 1);
-    char *base = (char *)list->items;
-    char *slot = base + (size_t)index * list->elem_size;
-    if (index < list->count)
-        memmove(slot + list->elem_size, slot, (size_t)(list->count - index) * list->elem_size);
-    ++list->count;
+int64_t ds_list_index_of_float(const DsList *l, double v) {
+    const double *items = (const double*)l->items;
+    for (int64_t i=0;i<l->count;++i) if (items[i]==v) return i;
+    return -1;
+}
+int64_t ds_list_index_of_int(const DsList *l, int64_t v) {
+    const int64_t *items = (const int64_t*)l->items;
+    for (int64_t i=0;i<l->count;++i) if (items[i]==v) return i;
+    return -1;
+}
+int64_t ds_list_index_of_object(const DsList *l, const void *v) {
+    for (int64_t i=0;i<l->count;++i) if (*(void*const*)element_at(l,i)==v) return i;
+    return -1;
+}
+int64_t ds_list_index_of_bool(const DsList *l, int v) {
+    const int *items = (const int*)l->items;
+    for (int64_t i=0;i<l->count;++i) if (items[i]==(v?1:0)) return i;
+    return -1;
+}
+int64_t ds_list_index_of_string(const DsList *l, DsString *v) {
+    for (int64_t i=0;i<l->count;++i) if (!ds_string_compare(*(DsString*const*)element_at(l,i), v)) return i;
+    return -1;
+}
+static void *list_insert_slot(DsList *l, int64_t idx) {
+    if (idx < 0) idx += l->count;
+    if (idx < 0) idx = 0;
+    if (idx > l->count) idx = l->count;
+    list_grow(l, l->count+1);
+    char *base = (char*)l->items;
+    char *slot = base + (size_t)idx * l->elem_size;
+    if (idx < l->count) memmove(slot + l->elem_size, slot, (size_t)(l->count - idx)*l->elem_size);
+    ++l->count;
     return slot;
 }
+void ds_list_insert_float(DsList *l, int64_t i, double v) { *(double*)list_insert_slot(l,i)=v; }
+void ds_list_insert_int(DsList *l, int64_t i, int64_t v) { *(int64_t*)list_insert_slot(l,i)=v; }
+void ds_list_insert_bool(DsList *l, int64_t i, int v) { *(int*)list_insert_slot(l,i)=v?1:0; }
+void ds_list_insert_string(DsList *l, int64_t i, DsString *v) { *(void**)list_insert_slot(l,i)=v; }
+void ds_list_insert_list(DsList *l, int64_t i, DsList *v) { *(void**)list_insert_slot(l,i)=v; }
+void ds_list_insert_object(DsList *l, int64_t i, void *v) { *(void**)list_insert_slot(l,i)=v; }
 
-void ds_list_insert_float(DsList *list, int64_t index, double value) {
-    *(double *)list_insert_slot(list, index) = value;
-}
-
-void ds_list_insert_int(DsList *list, int64_t index, int64_t value) {
-    *(int64_t *)list_insert_slot(list, index) = value;
-}
-
-void ds_list_insert_bool(DsList *list, int64_t index, int value) {
-    *(int *)list_insert_slot(list, index) = value ? 1 : 0;
-}
-
-void ds_list_insert_string(DsList *list, int64_t index, DsString *value) {
-    *(void **)list_insert_slot(list, index) = value;
-}
-
-void ds_list_insert_list(DsList *list, int64_t index, DsList *value) {
-    *(void **)list_insert_slot(list, index) = value;
-}
-
-void ds_list_insert_object(DsList *list, int64_t index, void *value) {
-    *(void **)list_insert_slot(list, index) = value;
-}
-
-DsString *ds_list_join(const DsList *list, DsString *separator) {
-    const char *separator_text = ds_cstr(separator);
-    const size_t separator_length = separator ? separator->length : 0;
+DsString *ds_list_join(const DsList *list, DsString *sep) {
+    const char *sep_text = ds_cstr(sep);
+    size_t sep_len = sep ? sep->length : 0;
     size_t total = 0;
     char scratch[64];
-    for (int64_t index = 0; index < list->count; ++index) {
-        if (index) total += separator_length;
-        switch (list->kind) {
-        case DS_ELEM_FLOAT: total += (size_t)snprintf(scratch, sizeof(scratch), "%.6g", ((double *)list->items)[index]); break;
-        case DS_ELEM_INT: total += (size_t)snprintf(scratch, sizeof(scratch), "%lld", (long long)((int64_t *)list->items)[index]); break;
-        case DS_ELEM_BOOL: total += ((int *)list->items)[index] ? 4u : 5u; break;
-        case DS_ELEM_STRING: {
-            const DsString *item = *(DsString *const *)element_at(list, index);
-            total += item ? item->length : 0;
-            break;
-        }
-        default: break;
+    for (int64_t i=0;i<list->count;++i) {
+        if (i) total += sep_len;
+        switch(list->kind) {
+            case DS_ELEM_FLOAT: total += (size_t)snprintf(scratch,sizeof(scratch),"%.6g", ((double*)list->items)[i]); break;
+            case DS_ELEM_INT: total += (size_t)snprintf(scratch,sizeof(scratch),"%lld",(long long)((int64_t*)list->items)[i]); break;
+            case DS_ELEM_BOOL: total += ((int*)list->items)[i] ? 4u : 5u; break;
+            case DS_ELEM_STRING: { const DsString *it = *(DsString*const*)element_at(list,i); total += it ? it->length : 0; break; }
+            default: break;
         }
     }
-    DsString *result = string_alloc(total);
+    DsString *res = string_alloc(total);
     size_t used = 0;
-    for (int64_t index = 0; index < list->count; ++index) {
-        if (index && separator_length) {
-            memcpy(result->bytes + used, separator_text, separator_length);
-            used += separator_length;
-        }
-        switch (list->kind) {
-        case DS_ELEM_FLOAT: {
-            int length = snprintf(scratch, sizeof(scratch), "%.6g", ((double *)list->items)[index]);
-            if (length > 0) { memcpy(result->bytes + used, scratch, (size_t)length); used += (size_t)length; }
-            break;
-        }
-        case DS_ELEM_INT: {
-            int length = snprintf(scratch, sizeof(scratch), "%lld", (long long)((int64_t *)list->items)[index]);
-            if (length > 0) { memcpy(result->bytes + used, scratch, (size_t)length); used += (size_t)length; }
-            break;
-        }
-        case DS_ELEM_BOOL: {
-            const char *text = ((int *)list->items)[index] ? "true" : "false";
-            const size_t length = strlen(text);
-            memcpy(result->bytes + used, text, length);
-            used += length;
-            break;
-        }
-        case DS_ELEM_STRING: {
-            const DsString *item = *(DsString *const *)element_at(list, index);
-            if (item && item->length) {
-                memcpy(result->bytes + used, item->bytes, item->length);
-                used += item->length;
-            }
-            break;
-        }
-        default: break;
+    for (int64_t i=0;i<list->count;++i) {
+        if (i && sep_len) { memcpy(res->bytes+used, sep_text, sep_len); used+=sep_len; }
+        switch(list->kind) {
+            case DS_ELEM_FLOAT: { int len=snprintf(scratch,sizeof(scratch),"%.6g", ((double*)list->items)[i]); if(len>0){ memcpy(res->bytes+used,scratch,(size_t)len); used+=(size_t)len; } break; }
+            case DS_ELEM_INT: { int len=snprintf(scratch,sizeof(scratch),"%lld",(long long)((int64_t*)list->items)[i]); if(len>0){ memcpy(res->bytes+used,scratch,(size_t)len); used+=(size_t)len; } break; }
+            case DS_ELEM_BOOL: { const char *t=((int*)list->items)[i]?"true":"false"; size_t l=strlen(t); memcpy(res->bytes+used,t,l); used+=l; break; }
+            case DS_ELEM_STRING: { const DsString *it=*(DsString*const*)element_at(list,i); if(it&&it->length){ memcpy(res->bytes+used,it->bytes,it->length); used+=it->length; } break; }
+            default: break;
         }
     }
-    ds_release(separator);
-    return result;
+    return res;
 }
 
-DsList *ds_list_of_floats(int64_t count, const double *values) {
-    DsList *list = ds_list_new(DS_ELEM_FLOAT, 0, NULL, count);
-    for (int64_t index = 0; index < count; ++index) ds_list_push_float(list, values[index]);
-    return list;
+DsList *ds_list_of_floats(int64_t c, const double *v) {
+    DsList *l=ds_list_new(DS_ELEM_FLOAT,0,NULL,c);
+    for(int64_t i=0;i<c;++i) ds_list_push_float(l,v[i]);
+    return l;
+}
+DsList *ds_list_of_ints(int64_t c, const int64_t *v) {
+    DsList *l=ds_list_new(DS_ELEM_INT,0,NULL,c);
+    for(int64_t i=0;i<c;++i) ds_list_push_int(l,v[i]);
+    return l;
+}
+DsList *ds_list_of_bools(int64_t c, const int *v) {
+    DsList *l=ds_list_new(DS_ELEM_BOOL,0,NULL,c);
+    for(int64_t i=0;i<c;++i) ds_list_push_bool(l,v[i]);
+    return l;
+}
+DsList *ds_list_of_strings(int64_t c, DsString *const *v) {
+    DsList *l=ds_list_new(DS_ELEM_STRING,0,NULL,c);
+    for(int64_t i=0;i<c;++i) ds_list_push_string(l,v[i]);
+    return l;
+}
+DsList *ds_list_of_lists(int64_t c, DsList *const *v) {
+    DsList *l=ds_list_new(DS_ELEM_LIST,0,NULL,c);
+    for(int64_t i=0;i<c;++i) ds_list_push_list(l,v[i]);
+    return l;
+}
+DsList *ds_list_of_objects(int64_t c, void *const *v, size_t es, DsDtor dtor) {
+    DsList *l=ds_list_new(DS_ELEM_OBJECT,es,dtor,c);
+    for(int64_t i=0;i<c;++i) ds_list_push_object(l,v[i]);
+    return l;
 }
 
-DsList *ds_list_of_ints(int64_t count, const int64_t *values) {
-    DsList *list = ds_list_new(DS_ELEM_INT, 0, NULL, count);
-    for (int64_t index = 0; index < count; ++index) ds_list_push_int(list, values[index]);
-    return list;
-}
-
-DsList *ds_list_of_bools(int64_t count, const int *values) {
-    DsList *list = ds_list_new(DS_ELEM_BOOL, 0, NULL, count);
-    for (int64_t index = 0; index < count; ++index) ds_list_push_bool(list, values[index]);
-    return list;
-}
-
-DsList *ds_list_of_strings(int64_t count, DsString *const *values) {
-    DsList *list = ds_list_new(DS_ELEM_STRING, 0, NULL, count);
-    for (int64_t index = 0; index < count; ++index) ds_list_push_string(list, values[index]);
-    return list;
-}
-
-DsList *ds_list_of_lists(int64_t count, DsList *const *values) {
-    DsList *list = ds_list_new(DS_ELEM_LIST, 0, NULL, count);
-    for (int64_t index = 0; index < count; ++index) ds_list_push_list(list, values[index]);
-    return list;
-}
-
-DsList *ds_list_of_objects(int64_t count, void *const *values, size_t elem_size, DsDtor elem_dtor) {
-    DsList *list = ds_list_new(DS_ELEM_OBJECT, elem_size, elem_dtor, count);
-    for (int64_t index = 0; index < count; ++index) ds_list_push_object(list, values[index]);
-    return list;
-}
-
-
-/* --- images (script facing) ---------------------------------------------- */
-
+/* --- images --- */
 int32_t ds_image_load(DsString *name) {
     const char *file = ds_cstr(name);
-    if (!file[0]) {
-        ds_release(name);
-        return -1;
-    }
-    int32_t handle = ds_image_find(file);
-    if (handle >= 0) {
-        ds_release(name);
-        return handle;
-    }
-    size_t length = 0;
-    char *bytes = ds_files_read(file, &length);
-    if (!bytes) {
-        app_log_error("DimScript: нет файла изображения %s", file);
-        ds_release(name);
-        return -1;
-    }
-    int32_t width = 0, height = 0;
-    const char *error = NULL;
-    uint8_t *rgba = ds_png_decode((const uint8_t *)bytes, length, &width, &height, &error);
+    if (!file[0]) return -1;
+    int32_t h = ds_image_find(file);
+    if (h >= 0) return h;
+    size_t len=0;
+    char *bytes = ds_files_read(file,&len);
+    if (!bytes) { app_log_error("no image %s", file); return -1; }
+    int32_t w=0, ht=0;
+    const char *err=NULL;
+    uint8_t *rgba = ds_png_decode((const uint8_t*)bytes,len,&w,&ht,&err);
     free(bytes);
-    if (!rgba) {
-        app_log_error("DimScript: %s: %s", file, error ? error : "ошибка PNG");
-        ds_release(name);
-        return -1;
-    }
-    handle = ds_image_add(file, rgba, width, height);
-    if (handle < 0) {
-        app_log_error("DimScript: %s не помещается: предел %d изображений", file, DS_MAX_IMAGES);
-        free(rgba);
-    }
-    ds_release(name);
-    return handle;
+    if (!rgba) { app_log_error("%s: %s", file, err?err:"png error"); return -1; }
+    h = ds_image_add(file, rgba, w, ht);
+    if (h<0) { app_log_error("%s too many images", file); free(rgba); }
+    return h;
 }
 
-/* --- render batch --------------------------------------------------------- */
-
-static float current_color[3] = {1.0f, 1.0f, 1.0f};
+/* --- render --- */
+static float current_color[3] = {1.0f,1.0f,1.0f};
 static uint64_t text_calls;
 static uint64_t image_calls;
 
-void ds_render_color(float red, float green, float blue) {
-    current_color[0] = red;
-    current_color[1] = green;
-    current_color[2] = blue;
+void ds_render_color(float r,float g,float b){ current_color[0]=r; current_color[1]=g; current_color[2]=b; }
+void ds_render_color_alpha(float r,float g,float b,float a){ current_color[0]=r*a; current_color[1]=g*a; current_color[2]=b*a; }
+const float *ds_render_current_color(void){ return current_color; }
+void ds_render_clear(float r,float g,float b){
+    EnjoerFrame *f=enjoer_frame();
+    f->clear_color[0]=r; f->clear_color[1]=g; f->clear_color[2]=b; f->has_clear=1;
 }
-
-void ds_render_color_alpha(float red, float green, float blue, float alpha) {
-    /* The batch has no blending yet, so alpha scales towards black the same way
-     * the reference behaviour did; kept deliberately simple. */
-    current_color[0] = red * alpha;
-    current_color[1] = green * alpha;
-    current_color[2] = blue * alpha;
-}
-
-const float *ds_render_current_color(void) { return current_color; }
-
-void ds_render_clear(float red, float green, float blue) {
-    EnjoerFrame *frame = enjoer_frame();
-    frame->clear_color[0] = red;
-    frame->clear_color[1] = green;
-    frame->clear_color[2] = blue;
-    frame->has_clear = 1;
-}
-
-void ds_render_rect(float x, float y, float width, float height) {
-    enjoer_draw_rect(x, y, width, height, current_color[0], current_color[1], current_color[2]);
-}
-
-void ds_render_frame(float x, float y, float width, float height, float thickness) {
-    enjoer_draw_frame_rect(x, y, width, height, thickness, current_color[0], current_color[1],
-                           current_color[2]);
-}
-
-void ds_render_circle(float x, float y, float radius) {
-    enjoer_draw_circle(x, y, radius, 0, current_color[0], current_color[1], current_color[2]);
-}
-
-void ds_render_ring(float x, float y, float radius, float thickness) {
-    enjoer_draw_ring(x, y, radius, thickness, 0, current_color[0], current_color[1], current_color[2]);
-}
-
-void ds_render_line(float x0, float y0, float x1, float y1, float thickness) {
-    enjoer_draw_line(x0, y0, x1, y1, thickness, current_color[0], current_color[1], current_color[2]);
-}
-
-void ds_render_triangle(float x0, float y0, float x1, float y1, float x2, float y2) {
-    enjoer_draw_triangle(x0, y0, x1, y1, x2, y2, current_color[0], current_color[1], current_color[2]);
-}
-
-void ds_render_text(DsString *text, float x, float y, float scale) {
-    /* No font backend: the call is recorded with its colour and position, which
-     * is exactly what a future glyph pass needs. */
-    EnjoerFrame *frame = enjoer_frame();
-    if (frame->text_count < ENJOER_DRAW_MAX_TEXT && text) {
-        EnjoerTextCommand *command = &frame->texts[frame->text_count++];
-        snprintf(command->text, sizeof(command->text), "%s", ds_cstr(text));
-        command->x = x;
-        command->y = y;
-        command->scale = scale;
-        command->r = current_color[0];
-        command->g = current_color[1];
-        command->b = current_color[2];
+void ds_render_rect(float x,float y,float w,float h){ enjoer_draw_rect(x,y,w,h,current_color[0],current_color[1],current_color[2]); }
+void ds_render_frame(float x,float y,float w,float h,float t){ enjoer_draw_frame_rect(x,y,w,h,t,current_color[0],current_color[1],current_color[2]); }
+void ds_render_circle(float x,float y,float r){ enjoer_draw_circle(x,y,r,0,current_color[0],current_color[1],current_color[2]); }
+void ds_render_ring(float x,float y,float r,float t){ enjoer_draw_ring(x,y,r,t,0,current_color[0],current_color[1],current_color[2]); }
+void ds_render_line(float x0,float y0,float x1,float y1,float th){ enjoer_draw_line(x0,y0,x1,y1,th,current_color[0],current_color[1],current_color[2]); }
+void ds_render_triangle(float x0,float y0,float x1,float y1,float x2,float y2){ enjoer_draw_triangle(x0,y0,x1,y1,x2,y2,current_color[0],current_color[1],current_color[2]); }
+void ds_render_text(DsString *text,float x,float y,float scale){
+    EnjoerFrame *f=enjoer_frame();
+    if (f->text_count < ENJOER_DRAW_MAX_TEXT && text) {
+        EnjoerTextCommand *c=&f->texts[f->text_count++];
+        snprintf(c->text,sizeof(c->text),"%s", ds_cstr(text));
+        c->x=x; c->y=y; c->scale=scale; c->r=current_color[0]; c->g=current_color[1]; c->b=current_color[2];
     }
-    ++text_calls;
-    ++frame->text_total;
-    ds_release(text);
+    ++text_calls; ++f->text_total;
 }
-
-void ds_render_image(int32_t handle, float x, float y, float width, float height) {
-    if (!ds_image_valid(handle)) return;
-    ds_render_image_region(handle, x, y, width, height, 0.0f, 0.0f, 1.0f, 1.0f);
+void ds_render_image(int32_t h,float x,float y,float w,float ht){
+    if (!ds_image_valid(h)) return;
+    ds_render_image_region(h,x,y,w,ht,0,0,1,1);
 }
-
-void ds_render_image_region(int32_t handle, float x, float y, float width, float height,
-                            float u0, float v0, float u1, float v1) {
-    if (!ds_image_valid(handle)) return;
-    enjoer_draw_image_quad(x, y, width, height, u0, v0, u1, v1, handle, current_color[0],
-                           current_color[1], current_color[2]);
+void ds_render_image_region(int32_t h,float x,float y,float w,float ht,float u0,float v0,float u1,float v1){
+    if (!ds_image_valid(h)) return;
+    enjoer_draw_image_quad(x,y,w,ht,u0,v0,u1,v1,h,current_color[0],current_color[1],current_color[2]);
     ++image_calls;
 }
+uint64_t ds_render_text_count(void){ return text_calls; }
+uint64_t ds_render_image_count(void){ return image_calls; }
 
-uint64_t ds_render_text_count(void) { return text_calls; }
-uint64_t ds_render_image_count(void) { return image_calls; }
+/* --- math --- */
+double ds_math_floor(double v){ return floor(v); }
+double ds_math_ceil(double v){ return ceil(v); }
+double ds_math_round(double v){ return round(v); }
+double ds_math_abs(double v){ return fabs(v); }
+double ds_math_sign(double v){ return v<0.0?-1.0:v>0.0?1.0:0.0; }
+double ds_math_sqrt(double v){ return v<0.0?0.0:sqrt(v); }
+double ds_math_sin(double v){ return sin(v); }
+double ds_math_cos(double v){ return cos(v); }
+double ds_math_tan(double v){ return tan(v); }
+double ds_math_pow(double b,double e){ return pow(b,e); }
+double ds_math_min(double l,double r){ return l<r?l:r; }
+double ds_math_max(double l,double r){ return l>r?l:r; }
+double ds_math_lerp(double f,double t,double a){ return f+(t-f)*a; }
+double ds_math_pi(void){ return 3.14159265358979323846; }
+double ds_math_e(void){ return 2.71828182845904523536; }
 
-/* --- math ----------------------------------------------------------------- */
-
-double ds_math_floor(double value) { return floor(value); }
-double ds_math_ceil(double value) { return ceil(value); }
-double ds_math_round(double value) { return round(value); }
-double ds_math_abs(double value) { return fabs(value); }
-double ds_math_sign(double value) { return value < 0.0 ? -1.0 : value > 0.0 ? 1.0 : 0.0; }
-double ds_math_sqrt(double value) { return value < 0.0 ? 0.0 : sqrt(value); }
-double ds_math_sin(double value) { return sin(value); }
-double ds_math_cos(double value) { return cos(value); }
-double ds_math_tan(double value) { return tan(value); }
-double ds_math_pow(double base, double exponent) { return pow(base, exponent); }
-double ds_math_min(double left, double right) { return left < right ? left : right; }
-double ds_math_max(double left, double right) { return left > right ? left : right; }
-double ds_math_lerp(double from, double to, double amount) { return from + (to - from) * amount; }
-double ds_math_pi(void) { return 3.14159265358979323846; }
-double ds_math_e(void) { return 2.71828182845904523536; }
-
-/* --- engine + input ------------------------------------------------------- */
-
+/* --- engine + input --- */
 static DsEngineState engine_state;
 static int quit_requested;
 static uint64_t random_state = 0x2545F4914F6CDD1Dull;
 
-void ds_engine_quit(void) { quit_requested = 1; }
-int ds_engine_quit_requested(void) { return quit_requested; }
-
-void ds_engine_reset(int width, int height) {
-    quit_requested = 0;
-    engine_state.width = width > 0 ? width : 1;
-    engine_state.height = height > 0 ? height : 1;
-    engine_state.time = 0.0;
-    engine_state.delta_time = 0.0;
-    engine_state.fps = 0.0;
-    engine_state.touch_count = 0;
-    engine_state.key_count = 0;
-    engine_state.frame = 0;
-    random_state = 0x2545F4914F6CDD1Dull;
-    for (int index = 0; index < DS_MAX_TOUCHES; ++index) {
-        DsTouchState *touch = &engine_state.touches[index];
-        touch->used = 0;
-        touch->down = 0;
-        touch->id = -1;
-        touch->x = 0.0f;
-        touch->y = 0.0f;
-    }
-    for (int index = 0; index < DS_MAX_KEYS; ++index) engine_state.key_down[index] = 0;
+void ds_engine_quit(void){ quit_requested=1; }
+int ds_engine_quit_requested(void){ return quit_requested; }
+void ds_engine_reset(int w,int h){
+    quit_requested=0;
+    engine_state.width=w>0?w:1;
+    engine_state.height=h>0?h:1;
+    engine_state.time=0.0;
+    engine_state.delta_time=0.0;
+    engine_state.fps=0.0;
+    engine_state.touch_count=0;
+    engine_state.key_count=0;
+    engine_state.frame=0;
+    random_state=0x2545F4914F6CDD1Dull;
+    for(int i=0;i<DS_MAX_TOUCHES;++i){ DsTouchState *t=&engine_state.touches[i]; t->used=0; t->down=0; t->id=-1; t->x=0; t->y=0; }
+    for(int i=0;i<DS_MAX_KEYS;++i) engine_state.key_down[i]=0;
 }
-
-double ds_engine_width(void) { return (double)engine_state.width; }
-double ds_engine_height(void) { return (double)engine_state.height; }
-double ds_engine_time(void) { return engine_state.time; }
-double ds_engine_delta(void) { return engine_state.delta_time; }
-double ds_engine_fps(void) { return engine_state.fps; }
-uint64_t ds_engine_frame(void) { return engine_state.frame; }
-const DsEngineState *ds_engine_state(void) { return &engine_state; }
-
-double ds_engine_random(void) {
-    /* xorshift64*: deterministic, so a replay of the same frames in a test
-     * produces the same pixels. */
+double ds_engine_width(void){ return (double)engine_state.width; }
+double ds_engine_height(void){ return (double)engine_state.height; }
+double ds_engine_time(void){ return engine_state.time; }
+double ds_engine_delta(void){ return engine_state.delta_time; }
+double ds_engine_fps(void){ return engine_state.fps; }
+uint64_t ds_engine_frame(void){ return engine_state.frame; }
+const DsEngineState *ds_engine_state(void){ return &engine_state; }
+double ds_engine_random(void){
     random_state ^= random_state >> 12;
     random_state ^= random_state << 25;
     random_state ^= random_state >> 27;
-    const uint64_t value = random_state * 2685821657736338717ull;
-    return (double)(value >> 11) / 9007199254740992.0;
+    uint64_t v = random_state * 2685821657736338717ull;
+    return (double)(v >> 11) / 9007199254740992.0;
 }
-
-void ds_engine_new_frame(double time, double delta_time, double fps) {
-    engine_state.time = time;
-    engine_state.delta_time = delta_time;
-    engine_state.fps = fps;
-    ++engine_state.frame;
+void ds_engine_new_frame(double t,double dt,double fps){ engine_state.time=t; engine_state.delta_time=dt; engine_state.fps=fps; ++engine_state.frame; }
+int ds_engine_touch_count(void){ return engine_state.touch_count; }
+double ds_engine_touch_x(int i){ const DsTouchState *t=(i>=0&&i<DS_MAX_TOUCHES)?&engine_state.touches[i]:NULL; return t?(double)t->x:0.0; }
+double ds_engine_touch_y(int i){ const DsTouchState *t=(i>=0&&i<DS_MAX_TOUCHES)?&engine_state.touches[i]:NULL; return t?(double)t->y:0.0; }
+int ds_engine_touch_down(int i){ const DsTouchState *t=(i>=0&&i<DS_MAX_TOUCHES)?&engine_state.touches[i]:NULL; return t?t->down:0; }
+void ds_engine_touch(int id,float x,float y,int down){
+    int slot=-1;
+    for(int i=0;i<DS_MAX_TOUCHES;++i) if(engine_state.touches[i].used && engine_state.touches[i].id==id){ slot=i; break; }
+    if(slot<0 && down) for(int i=0;i<DS_MAX_TOUCHES;++i) if(!engine_state.touches[i].used){ slot=i; break; }
+    if(slot<0) return;
+    DsTouchState *t=&engine_state.touches[slot];
+    t->used=1; t->id=id; t->x=x; t->y=y; t->down=down?1:0;
+    engine_state.touch_count=0;
+    for(int i=0;i<DS_MAX_TOUCHES;++i) if(engine_state.touches[i].used && engine_state.touches[i].down) ++engine_state.touch_count;
 }
-
-int ds_engine_touch_count(void) { return engine_state.touch_count; }
-
-double ds_engine_touch_x(int index) {
-    const DsTouchState *touch = (index >= 0 && index < DS_MAX_TOUCHES) ? &engine_state.touches[index] : NULL;
-    return touch ? (double)touch->x : 0.0;
+void ds_engine_key(const char *name,int down){
+    if(!name||!name[0]) return;
+    int slot=-1;
+    for(int i=0;i<engine_state.key_count;++i) if(!strcmp(engine_state.key_names[i],name)) slot=i;
+    if(slot<0){ if(engine_state.key_count>=DS_MAX_KEYS) return; slot=engine_state.key_count++; snprintf(engine_state.key_names[slot],sizeof(engine_state.key_names[slot]),"%s",name); }
+    engine_state.key_down[slot]=down?1:0;
 }
-
-double ds_engine_touch_y(int index) {
-    const DsTouchState *touch = (index >= 0 && index < DS_MAX_TOUCHES) ? &engine_state.touches[index] : NULL;
-    return touch ? (double)touch->y : 0.0;
+int ds_engine_key_down(DsString *name){
+    const char *txt=ds_cstr(name);
+    int d=0;
+    for(int i=0;i<engine_state.key_count;++i) if(!strcmp(engine_state.key_names[i],txt)) d=engine_state.key_down[i];
+    return d;
 }
-
-int ds_engine_touch_down(int index) {
-    const DsTouchState *touch = (index >= 0 && index < DS_MAX_TOUCHES) ? &engine_state.touches[index] : NULL;
-    return touch ? touch->down : 0;
-}
-
-void ds_engine_touch(int id, float x, float y, int down) {
-    int slot = -1;
-    for (int index = 0; index < DS_MAX_TOUCHES; ++index) {
-        if (engine_state.touches[index].used && engine_state.touches[index].id == id) {
-            slot = index;
-            break;
-        }
-    }
-    if (slot < 0 && down) {
-        for (int index = 0; index < DS_MAX_TOUCHES; ++index) {
-            if (!engine_state.touches[index].used) {
-                slot = index;
-                break;
-            }
-        }
-    }
-    if (slot < 0) return;
-    DsTouchState *touch = &engine_state.touches[slot];
-    touch->used = 1;
-    touch->id = id;
-    touch->x = x;
-    touch->y = y;
-    touch->down = down ? 1 : 0;
-    engine_state.touch_count = 0;
-    for (int index = 0; index < DS_MAX_TOUCHES; ++index)
-        if (engine_state.touches[index].used && engine_state.touches[index].down)
-            ++engine_state.touch_count;
-}
-
-void ds_engine_key(const char *name, int down) {
-    if (!name || !name[0]) return;
-    int slot = -1;
-    for (int index = 0; index < engine_state.key_count; ++index)
-        if (!strcmp(engine_state.key_names[index], name)) slot = index;
-    if (slot < 0) {
-        if (engine_state.key_count >= DS_MAX_KEYS) return;
-        slot = engine_state.key_count++;
-        snprintf(engine_state.key_names[slot], sizeof(engine_state.key_names[slot]), "%s", name);
-    }
-    engine_state.key_down[slot] = down ? 1 : 0;
-}
-
-int ds_engine_key_down(DsString *name) {
-    const char *text = ds_cstr(name);
-    int down = 0;
-    for (int index = 0; index < engine_state.key_count; ++index)
-        if (!strcmp(engine_state.key_names[index], text)) down = engine_state.key_down[index];
-    ds_release(name);
-    return down;
-}
-
-/* --- lifecycle ------------------------------------------------------------ */
-
-void ds_runtime_init(void) {
-    text_calls = 0;
-    image_calls = 0;
-    current_color[0] = current_color[1] = current_color[2] = 1.0f;
-    ds_image_reset();
-}
-
-void ds_runtime_shutdown(void) {
-    free_interned();
-    ds_image_reset();
-}
+void ds_runtime_init(void){ text_calls=0; image_calls=0; current_color[0]=current_color[1]=current_color[2]=1.0f; ds_image_reset(); }
+void ds_runtime_shutdown(void){ free_interned(); ds_image_reset(); }

@@ -1,30 +1,25 @@
 """DimScript front end: semantic checks and native C99 code generation.
 
-A game is *compiled*, never interpreted.  ``tools/aot.py`` loads a game folder,
-merges every ``.ds`` file into one program and hands it to :class:`CCompiler`,
-whose output is plain C99 against :file:`src/dimscript_runtime.h`.  clang (the
-Android NDK is clang) then produces the machine code that ships inside the APK,
-so no bytecode, no dispatch loop and no runtime type checks exist anywhere in
-the hot path.
+STRICT COMPILER MODE — NO VM, NO REFCOUNT, MANUAL MEMORY, SPEED LIKE C.
 
-Ownership
----------
-There is no garbage collector.  Every value that lives on the heap — a string, a
-list, a struct object — is reference counted, and the compiler decides
-statically where a reference is created, moved or dropped, because the checker
-knows the type of every expression:
+A game is *compiled* ahead of time, never interpreted.  ``tools/aot.py`` loads a
+game folder, merges every ``.ds`` file into one program and hands it to
+:class:`CCompiler`, whose output is plain C99 against
+:file:`src/dimscript_runtime.h`.  clang (Android NDK is clang) at -O3 then
+produces machine code that ships inside the APK — no bytecode, no dispatch
+loop, no runtime type checks, no GC in hot path.
 
-* ``new X`` and a freshly built string/list are *owned rvalues*; assigning one
-  emits ``ds_move`` (release the old value, store, never retain);
-* reading a variable, a field or a list element is a *borrow*; assigning a
-  borrow emits ``ds_assign``/``ds_keep`` (retain, then release the old one);
-* function parameters are owned by the callee and released when it returns, so
-  a call site keeps a borrowed argument and passes an owned rvalue through;
-* ``delete x`` emits ``ds_release_slot``.
-
-Because of that a frame performs no tracing, no scanning and no allocation for
-scripts that only draw, and ``ds_ref_stats()`` (built with ``-DDS_REF_COUNTERS``)
-proves in the tests that every retain has its release.
+Memory model — manual, like in C:
+* ``new X``, ``[]``, string literals, ``..`` are raw malloc via ``ds_alloc``.
+  Caller owns the pointer.
+* Assignment ``a = b`` is raw ``a = b`` — no keep/release, no overhead.
+  Sharing is allowed like in C, user must not double-free.
+* ``delete x`` emits ``ds_release_slot(&x)`` which is ``free + NULL``.
+* Lists/strings getters return BORROWED pointers (no keep), setters borrow.
+* ``ds_concat``, ``ds_text_join``, ``ds_*_to_string`` allocate fresh owned string.
+* Struct dtors free owned fields via ``ds_release`` (which is free + dtor).
+* No ``ds_keep``, ``ds_move``, ``ds_assign`` in generated code — speed like C.
+* AOT to machine code: ``tools/aot.py`` -> ``game.c`` -> ``clang -O3`` -> ``.so``.
 """
 
 from __future__ import annotations
@@ -117,13 +112,12 @@ NAMESPACE_TYPES = {"render": RENDER, "math": MATH, "engine": ENGINE, "input": IN
 
 @dataclass(frozen=True)
 class Builtin:
-    """One ``namespace.name`` call.
+    """One ``namespace.name`` call — STRICT COMPILER, MANUAL MEMORY.
 
-    ``c`` is a C template; ``{n}`` is the n-th argument, already converted.
-    ``strings`` lists the argument indexes that are ``DsString *`` — those are
-    passed with their reference (the runtime function consumes it; a borrowed
-    argument is wrapped in ds_keep).  ``where`` appends the script location,
-    which is what an out-of-range index or a division by zero reports.
+    ``c`` is a C template; ``{n}`` is n-th arg, already converted.
+    ``strings`` are DsString* args — now BORROWED, not consumed (no ds_keep).
+    ``where`` appends script location for errors.
+    Speed like C, no refcount.
     """
 
     args: int
@@ -578,6 +572,13 @@ class ListInference:
                 if key:
                     changed |= self._merge(key, self._type(value, function, locals_, global_types))
                     changed |= self._element_of(value, key, function, locals_, global_types)
+            # Propagate list element types through function calls, e.g. draw_blocks(game.blocks)
+            if isinstance(callee, Name) and callee.name in self.functions:
+                parameters = list(self.functions[callee.name].params)
+                for parameter, argument in zip(parameters, expression.args):
+                    argument_element = self._lookup_element(argument, function, locals_)
+                    if argument_element != UNKNOWN:
+                        changed |= self._merge((callee.name, parameter.name), argument_element)
             for argument in expression.args:
                 changed |= self._visit_expression(argument, function, locals_, global_types)
             return changed
@@ -1361,22 +1362,21 @@ class CCompiler:
         self.emit("")
 
     def emit_struct_dtors(self) -> None:
-        """One destructor per struct: releasing an object releases exactly the
-        fields that own a reference, nothing else.  This is the whole "tracing"
-        story of the runtime — it is a handful of generated lines."""
+        """Manual memory: dtor frees owned handle fields via ds_release (free+dtor). No refcount."""
 
         for struct in self.program.structs:
             handle_fields = [field for field in struct.fields
                              if _type_from_name(field.type_name, self.model.structs).is_handle]
             name = self.struct_names[struct.name]
             if not handle_fields:
-                self.emit(f"/* {name}: only plain values, no destructor needed. */")
+                self.emit(f"/* {name}: only plain values, no dtor. */")
                 continue
             self.emit(f"static void ds_dtor_{name}(void *value) {{")
             self.indent_level += 1
             self.emit(f"{name} *self = ({name} *)value;")
             for field_decl in handle_fields:
-                self.emit(f"ds_release_slot((void **)&self->{_sanitize(field_decl.name)});")
+                # manual free
+                self.emit(f"if (self->{_sanitize(field_decl.name)}) ds_release((void*)self->{_sanitize(field_decl.name)});")
             self.indent_level -= 1
             self.emit("}")
         self.emit("")
@@ -1414,10 +1414,12 @@ class CCompiler:
         self.emit("void dimscript_shutdown(void) {")
         self.indent_level += 1
         self.emit("if (!ds_program_initialized) return;")
+        # manual: free globals if needed
         for declaration in self.program.globals:
             dtype = self.model.global_types[declaration.name]
             if dtype.is_handle:
-                self.emit(f"ds_release_slot((void **)&{self.global_c_names[declaration.name]});")
+                self.emit(f"if ({self.global_c_names[declaration.name]}) ds_release((void*){self.global_c_names[declaration.name]});")
+                self.emit(f"{self.global_c_names[declaration.name]} = {self.default_value(dtype)};")
         self.emit("ds_program_initialized = 0;")
         self.indent_level -= 1
         self.emit("}")
@@ -1431,8 +1433,17 @@ class CCompiler:
                     self.emit(f"(void){parameter};")
             else:
                 self.emit("if (!ds_program_initialized) return;")
-                arguments = ", ".join(_sanitize(parameter.name) for parameter in function.params)
-                self.emit(f"ds_fn_{_sanitize(callback)}({arguments});")
+                # MANUAL MEMORY: convert const char* -> DsString* when needed, speed like C
+                args = []
+                for param, dtype in zip(function.params, self.model.function_params[function.name]):
+                    cname = _sanitize(param.name)
+                    if dtype == STRING:
+                        # wrapper has const char* name, convert to DsString*
+                        self.emit(f"DsString * {cname}_s = ds_string_new({cname}, {cname} ? strlen({cname}) : 0);")
+                        args.append(f"{cname}_s")
+                    else:
+                        args.append(cname)
+                self.emit(f"ds_fn_{_sanitize(callback)}({', '.join(args)});")
             self.indent_level -= 1
             self.emit("}")
         self.emit("")
@@ -1440,20 +1451,12 @@ class CCompiler:
     # -- functions --------------------------------------------------------
 
     def owned_locals(self, function: FunctionDecl) -> List[str]:
-        """Names that hold a reference at the end of `function`."""
-
-        names: Dict[str, None] = {}
-        for parameter, dtype in zip(function.params, self.model.function_params[function.name]):
-            if dtype.is_handle:
-                names[_sanitize(parameter.name)] = None
-        for name, dtype in self.model.function_locals.get(function.name, {}).items():
-            if dtype.is_handle:
-                names[_sanitize(name)] = None
-        return list(names)
+        """STRICT COMPILER: no auto releases, manual memory like C."""
+        return []
 
     def emit_releases(self, function: FunctionDecl) -> None:
-        for name in self.owned_locals(function):
-            self.emit(f"ds_release_slot((void **)&{name});")
+        # No refcount, no auto free — manual like C, speed like C
+        return
 
     def emit_user_function(self, function: FunctionDecl) -> None:
         self.current_function = function
@@ -1477,9 +1480,7 @@ class CCompiler:
                 self.emit(f"int32_t {_sanitize(statement.variable)} = 0;")
         for statement in function.body:
             self.emit_statement(statement)
-        # Falling off the end still releases every owned local: a script has no
-        # way to leak a reference by forgetting a return.
-        self.emit_releases(function)
+        # No auto releases — manual memory, speed like C
         self.emit(self.return_statement(return_type, None))
         self.indent_level -= 1
         self.emit("}")
@@ -1562,18 +1563,11 @@ class CCompiler:
             assert function is not None
             return_type = self.model.function_returns[function.name]
             if statement.expression is None:
-                self.emit_releases(function)
                 self.emit(self.return_statement(return_type, None))
                 return
             code, fresh = self.value(statement.expression)
-            if return_type.is_handle:
-                owned = code if fresh else self.keep(statement.expression, code)
-                self.emit(f"{self.c_type(return_type)} ds_result = {owned};")
-                self.emit_releases(function)
-                self.emit("return ds_result;")
-            else:
-                self.emit_releases(function)
-                self.emit(f"return {code};")
+            # manual: direct return, no keep/release
+            self.emit(f"return {code};")
             return
         raise TypeError(f"unsupported statement {statement!r}")
 
@@ -1597,15 +1591,18 @@ class CCompiler:
 
     def emit_delete(self, expression: Expr) -> None:
         slot = self.slot(expression)
+        # manual memory like C: free + NULL
         self.emit(f"ds_release_slot((void **)&{slot});")
 
     def emit_assignment_target(self, target: Expr, value: Expr) -> None:
+        # STRICT COMPILER, MANUAL MEMORY, SPEED LIKE C — no ds_keep/move/assign
         if isinstance(target, Index):
             list_type = self.expression_type(target.object)
             element = self.require_element(list_type.element, target)
             list_code = self.value(target.object)[0]
             index = self.value(target.index)[0]
-            owned = self.owned(value)
+            # direct value, no ownership tracking
+            val_code = self.value(value)[0]
             setter = {
                 "DS_ELEM_FLOAT": "ds_list_set_float",
                 "DS_ELEM_INT": "ds_list_set_int",
@@ -1615,34 +1612,21 @@ class CCompiler:
                 "DS_ELEM_OBJECT": "ds_list_set_object",
             }[self.element_kind(element)]
             cast = "" if element in (FLOAT, INT, BOOL) else f"({self.c_type(element)})"
-            self.emit(f"{setter}({list_code}, (int64_t)({index}), {cast}{owned});")
+            self.emit(f"{setter}({list_code}, (int64_t)({index}), {cast}{val_code});")
             return
         if isinstance(target, Name):
             name = self.assignable_name(target)
             self.emit_assignment(name, value)
             return
         if isinstance(target, Member):
-            dtype = self.expression_type(target)
             slot = self.member(target)
-            if dtype.is_handle:
-                code, fresh = self.value(value)
-                owned = code if fresh else self.keep(value, code)
-                mover = "ds_move" if fresh else "ds_assign"
-                self.emit(f"{mover}((void **)&{slot}, (void *){owned});")
-            else:
-                self.emit(f"{slot} = {self.value(value)[0]};")
+            # direct assignment like C
+            self.emit(f"{slot} = {self.value(value)[0]};")
             return
         raise TypeError(f"unsupported assignment target {target!r}")
 
     def emit_assignment(self, target: str, value: Expr) -> None:
-        dtype = self.model.expression_types.get(id(value), UNKNOWN)
-        if dtype.is_handle:
-            code, fresh = self.value(value)
-            if fresh:
-                self.emit(f"ds_move((void **)&{target}, (void *){code});")
-            else:
-                self.emit(f"ds_assign((void **)&{target}, (void *){code});")
-            return
+        # MANUAL MEMORY: raw assignment, speed like C, no refcount
         self.emit(f"{target} = {self.value(value)[0]};")
 
     def assignable_name(self, expression: Name) -> str:
@@ -1670,18 +1654,12 @@ class CCompiler:
     # -- values (code + ownership) ----------------------------------------
 
     def keep(self, expression: Expr, code: str) -> str:
-        dtype = self.expression_type(expression)
-        return f"({self.c_type(dtype)})ds_keep((void *)({code}))"
+        # NO REFCOUNT: identity, speed like C
+        return code
 
     def owned(self, expression: Expr) -> str:
-        """The C code for `expression` with a reference the caller may keep."""
-
+        # MANUAL: direct code, no keep
         code, fresh = self.value(expression)
-        dtype = self.expression_type(expression)
-        if fresh:
-            return code
-        if dtype.is_handle:
-            return self.keep(expression, code)
         return code
 
     def value(self, expression: Expr) -> Tuple[str, bool]:
@@ -1763,10 +1741,11 @@ class CCompiler:
         return f"(double)({code})"
 
     def owned_string(self, expression: Expr) -> str:
+        # MANUAL: no keep, direct
         dtype = self.expression_type(expression)
         code, fresh = self.value(expression)
         if dtype == STRING:
-            return code if fresh else self.keep(expression, code)
+            return code
         if dtype == INT:
             return f"ds_int_to_string((int64_t)({code}))"
         if dtype == FLOAT:
@@ -1776,6 +1755,7 @@ class CCompiler:
         return code
 
     def index_read(self, expression: Index) -> Tuple[str, bool]:
+        # MANUAL: getters return BORROWED, no keep, speed like C
         object_type = self.expression_type(expression.object)
         code = self.value(expression.object)[0]
         index = self.value(expression.index)[0]
@@ -1793,10 +1773,12 @@ class CCompiler:
         call = f"{getter}({code}, (int64_t)({index}), {self.where(expression)})"
         references = element in (STRING,) or element.name == "list" or element.is_struct
         if references:
-            return f"({self.c_type(element)}){call}", True
+            # borrowed, not owned
+            return f"({self.c_type(element)}){call}", False
         return call, False
 
     def list_literal(self, expression: ListLiteral) -> str:
+        # MANUAL: no keep, direct values, speed like C
         dtype = self.expression_type(expression)
         element = dtype.element if dtype.element is not None else UNKNOWN
         if not expression.items:
@@ -1807,10 +1789,7 @@ class CCompiler:
         values = []
         for item in expression.items:
             code, fresh = self.value(item)
-            if element.is_struct or element == STRING or element.name == "list":
-                values.append(code if fresh else self.keep(item, code))
-            else:
-                values.append(code)
+            values.append(code)
         if element in (FLOAT,):
             casted = ", ".join(f"(double)({value})" for value in values)
             return f"ds_list_of_floats({len(values)}, (const double[]){{{casted}}})"
@@ -1842,10 +1821,10 @@ class CCompiler:
             if owner.name == "list":
                 return self.list_call(callee, expression), self.builtin_is_fresh("list", callee.name)
         if isinstance(callee, Name) and callee.name in self.functions:
-            arguments = [self.owned(argument) if self.model.function_params[callee.name][index].is_handle
-                         else self.value(argument)[0]
-                         for index, argument in enumerate(expression.args)]
+            # MANUAL: direct args, no keep, speed like C
+            arguments = [self.value(argument)[0] for argument in expression.args]
             call_code = f"ds_fn_{_sanitize(callee.name)}({', '.join(arguments)})"
+            # fresh if returns handle (allocates)
             return call_code, self.model.function_returns[callee.name].is_handle
         if isinstance(callee, Name) and callee.name in {"print", "log"}:
             parts = [self.owned_string(argument) for argument in expression.args]
@@ -1916,12 +1895,13 @@ class CCompiler:
         }[kind]
         name = callee.name
         if name == "push":
-            value = self.owned(expression.args[0]) if element.is_handle else self.element_value(
+            # MANUAL: direct, no keep
+            value = self.value(expression.args[0])[0] if element.is_handle else self.element_value(
                 expression.args[0], element)
             return f"ds_list_push_{suffix}({code}, {value})"
         if name == "insert":
             index = self.value(expression.args[0])[0]
-            value = self.owned(expression.args[1]) if element.is_handle else self.element_value(
+            value = self.value(expression.args[1])[0] if element.is_handle else self.element_value(
                 expression.args[1], element)
             return f"ds_list_insert_{suffix}({code}, (int64_t)({index}), {value})"
         if name in ("delete", "remove_at"):

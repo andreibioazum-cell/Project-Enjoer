@@ -28,9 +28,8 @@ enjoer_pick_toolchain() {
     export CC CXX ENJOER_CFLAGS ENJOER_CXXFLAGS
 }
 
-# Every C translation unit of the engine, in dependency order.  Keeping the
-# list here means the preview, the tests and the packaging tool all build the
-# same engine and can never drift apart.
+# Every C translation unit of the engine, in dependency order.  STRICT COMPILER MODE
+# No VM, no refcount, manual memory, speed like C, AOT to machine code.
 enjoer_c_sources() {
     cat <<'SOURCES'
 src/core/log.c
@@ -39,10 +38,8 @@ src/enjoer_draw.c
 src/dimscript_runtime.c
 src/ds_manifest.c
 src/ds_files.c
-src/ds_vm.c
-src/ds_vm_heap.c
-src/ds_vm_lang.c
-src/ds_vm_exec.c
+src/ds_image.c
+src/ds_png.c
 src/generated/clicker.c
 src/cube_game.c
 SOURCES

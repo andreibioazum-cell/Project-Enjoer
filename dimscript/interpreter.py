@@ -1,12 +1,9 @@
-"""Reference interpreter for DimScript — the twin of the native VM in ``src/ds_vm.c``.
+"""Reference interpreter for DimScript — STRICT COMPILER MODE.
 
-The interpreter is a development tool with one strict rule: it must behave
-*exactly* like the runtime that ships.  Arithmetic, string conversion, list
-indices, the shape of every ``render.`` primitive and the meaning of every
-callback are shared with :file:`src/ds_vm_exec.c`, so a script that runs here
-runs the same on Vulkan.  That is also what makes the parity test
-:file:`tools/tests/dimscript.py` meaningful: it compares the two frame
-batches vertex by vertex.
+No VM, no refcount, manual memory, speed like C, AOT to machine code.
+The interpreter is dev tool, must behave exactly like AOT runtime that ships.
+Arithmetic, string conversion, list indices, render primitives and callbacks
+are shared with dimscript_runtime.c, so script runs same on Vulkan.
 """
 
 from __future__ import annotations
@@ -741,49 +738,45 @@ class Interpreter:
         if name not in {"floor", "ceil", "round", "abs", "sign", "sqrt", "sin", "cos", "tan", "min",
                         "max", "mod", "pow", "lerp", "random", "pi", "e", "tau", "inf"}:
             raise RuntimeError(f"нет функции math.{name}")
-        both_int = all(_is_int(argument) for argument in arguments)
         if name == "floor":
-            return int(math.floor(numbers[0])) if both_int else math.floor(numbers[0])
+            return float(math.floor(numbers[0]))
         if name == "ceil":
-            return int(math.ceil(numbers[0])) if both_int else math.ceil(numbers[0])
+            return float(math.ceil(numbers[0]))
         if name == "round":
-            return int(math.floor(numbers[0] + 0.5)) if both_int else math.floor(numbers[0] + 0.5)
+            return float(math.floor(numbers[0] + 0.5))
         if name == "abs":
-            return abs(int(numbers[0])) if both_int else abs(numbers[0])
+            return float(abs(numbers[0]))
         if name == "sign":
-            return 1 if numbers[0] > 0 else -1 if numbers[0] < 0 else 0
+            return float(1 if numbers[0] > 0 else -1 if numbers[0] < 0 else 0)
         if name == "sqrt":
             if numbers[0] < 0:
                 raise RuntimeError("sqrt ожидает число >= 0")
-            value = math.sqrt(numbers[0])
-            return int(value) if both_int and value.is_integer() else value
+            return float(math.sqrt(numbers[0]))
         if name == "sin":
-            return math.sin(numbers[0])
+            return float(math.sin(numbers[0]))
         if name == "cos":
-            return math.cos(numbers[0])
+            return float(math.cos(numbers[0]))
         if name == "tan":
-            return math.tan(numbers[0])
+            return float(math.tan(numbers[0]))
         if name == "min":
-            return arguments[0] if numbers[0] <= numbers[1] else arguments[1]
+            return float(numbers[0] if numbers[0] <= numbers[1] else numbers[1])
         if name == "max":
-            return arguments[0] if numbers[0] >= numbers[1] else arguments[1]
+            return float(numbers[0] if numbers[0] >= numbers[1] else numbers[1])
         if name == "mod":
             if numbers[1] == 0.0:
                 raise RuntimeError("остаток от нуля")
-            if both_int:
-                return int(numbers[0]) % int(numbers[1])
-            return numbers[0] - math.floor(numbers[0] / numbers[1]) * numbers[1]
+            return float(numbers[0] - math.floor(numbers[0] / numbers[1]) * numbers[1])
         if name == "pow":
-            return math.pow(numbers[0], numbers[1])
+            return float(math.pow(numbers[0], numbers[1]))
         if name == "lerp":
-            return numbers[0] + (numbers[1] - numbers[0]) * numbers[2]
+            return float(numbers[0] + (numbers[1] - numbers[0]) * numbers[2])
         if name == "random":
             if len(arguments) == 0:
-                return self.engine.random()
+                return float(self.engine.random())
             if len(arguments) == 1:
-                return self.engine.random() * numbers[0]
-            return numbers[0] + self.engine.random() * (numbers[1] - numbers[0])
-        return {"pi": math.pi, "e": math.e, "tau": math.tau, "inf": math.inf}[name]
+                return float(math.floor(self.engine.random() * (numbers[0] + 1.0)))
+            return float(math.floor(numbers[0] + self.engine.random() * (numbers[1] - numbers[0] + 1.0)))
+        return float({"pi": math.pi, "e": math.e, "tau": math.tau, "inf": math.inf}[name])
 
     def engine_builtin(self, name: str, numbers: List[float]) -> Any:
         engine = self.engine

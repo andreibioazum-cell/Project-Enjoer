@@ -6,7 +6,6 @@
 #include "engine.h"
 #include "vulkan_cube.h"
 #include "enjoer_draw.h"
-#include "ds_vm.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>

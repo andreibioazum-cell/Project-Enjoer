@@ -123,10 +123,10 @@ int ds_files_list_ds(char names[][DS_FILES_NAME], int capacity) {
         snprintf(key, sizeof(key), "%s", names[index]);
         int cursor = index - 1;
         while (cursor >= 0 && strcmp(names[cursor], key) > 0) {
-            snprintf(names[cursor + 1], DS_FILES_NAME, "%s", names[cursor]);
+            memmove(names[cursor + 1], names[cursor], DS_FILES_NAME);
             --cursor;
         }
-        snprintf(names[cursor + 1], DS_FILES_NAME, "%s", key);
+        memmove(names[cursor + 1], key, DS_FILES_NAME);
     }
     return count;
 }
