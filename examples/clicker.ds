@@ -1,0 +1,46 @@
+-- DimScript example: a tiny clicker game.
+-- Text is sent to the render API. The current Vulkan runtime has no font
+-- backend yet, so render.text is recorded but intentionally draws nothing.
+
+struct ClickerGame {
+    score: int
+    text_scale: float -- scale used for the click animation
+}
+
+game = new ClickerGame
+
+load() {
+    game.score = 0
+    game.text_scale = 1.0 -- base scale
+}
+
+touchpressed(id, touch_x, touch_y) {
+    game.score = game.score + 1
+    game.text_scale = 1.6
+}
+
+update(dt: float) {
+    -- Smoothly return the scale to 1.0 every second.
+    if game.text_scale > 1.0 then
+        game.text_scale = game.text_scale - (4.0 * dt)
+        if game.text_scale < 1.0 then
+            game.text_scale = 1.0
+        }
+    }
+}
+
+draw() {
+    render.color(1.0, 1.0, 1.0)
+
+    -- Strict style: ordinary text still has an explicit scale of 1.0.
+    render.text("Главное меню", 20.0, 20.0, 1.0)
+
+    -- The score uses the animated scale.
+    render.text("Счет: " .. game.score, 50.0, 150.0, game.text_scale)
+
+    render.text("Тапни по экрану, чтобы заработать", 50.0, 300.0, 0.8)
+}
+
+quit() {
+    delete game
+}
