@@ -565,8 +565,10 @@ private:
         VkPipelineRasterizationStateCreateInfo raster = vk_struct<VkPipelineRasterizationStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO);
         raster.polygonMode = VK_POLYGON_MODE_FILL;
         raster.cullMode = VK_CULL_MODE_NONE;
-        /* Y is flipped in the projection, so counter-clockwise data becomes
-         * clockwise on screen. */
+        /* The batch arrives wound clockwise in its y-down screen space, and
+         * the projection is a pure rotation (see enjoer_surface_ortho), which
+         * preserves winding — so front faces stay clockwise in the framebuffer.
+         * Culling is off anyway: painter's order decides what covers what. */
         raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
         raster.lineWidth = 1.0f;
 
