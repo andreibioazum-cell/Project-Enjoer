@@ -86,6 +86,49 @@ int32_t ds_image_add(const char *name, uint8_t *rgba, int32_t width,
     return handle;
 }
 
+/* The layer size is recomputed only when the set of images changes: it is read
+ * once per texture coordinate while a frame is built, and walking the registry
+ * for every vertex of every sprite is not worth it. */
+static int32_t layer_width = 1;
+static int32_t layer_height = 1;
+static uint64_t layer_generation;
+
+static void refresh_layer_extent(void) {
+    if (layer_generation == image_generation) return;
+    int32_t width = 1, height = 1;
+    for (int32_t index = 0; index < image_count; ++index) {
+        if (!images[index].rgba) continue;
+        if (images[index].width > width) width = images[index].width;
+        if (images[index].height > height) height = images[index].height;
+    }
+    layer_width = width;
+    layer_height = height;
+    layer_generation = image_generation;
+}
+
+int32_t ds_image_layer_width(void) {
+    refresh_layer_extent();
+    return layer_width;
+}
+
+int32_t ds_image_layer_height(void) {
+    refresh_layer_extent();
+    return layer_height;
+}
+
+void ds_image_layer_uv(int32_t handle, float *u, float *v) {
+    if (!u || !v) return;
+    refresh_layer_extent();
+    const DsImage *image = ds_image_valid(handle) ? &images[handle] : NULL;
+    if (!image || image->width < 1 || image->height < 1) {
+        *u = 0.0f;
+        *v = 0.0f;
+        return;
+    }
+    *u = *u * ((float)image->width / (float)layer_width);
+    *v = *v * ((float)image->height / (float)layer_height);
+}
+
 int ds_png_magic_ok(const uint8_t *bytes, size_t size) {
     static const uint8_t signature[8] = {137, 80, 78, 71, 13, 10, 26, 10};
     if (!bytes || size < sizeof(signature)) return 0;

@@ -1041,6 +1041,12 @@ static void ttf_draw_text(DsTtfFace *face, const EnjoerTextCommand *command) {
             float v0 = ((float)glyph->ay + 0.5f) * inv_atlas;
             float u1 = ((float)(glyph->ax + glyph->w) - 0.5f) * inv_atlas;
             float v1 = ((float)(glyph->ay + glyph->h) - 0.5f) * inv_atlas;
+            /* The atlas is one image among the game's: its layer can be larger
+             * than the atlas itself when a sprite is bigger, and the quad has to
+             * be stated in the layer's coordinates like every other textured
+             * quad (see ds_image_layer_uv). */
+            ds_image_layer_uv(face->layer, &u0, &v0);
+            ds_image_layer_uv(face->layer, &u1, &v1);
             if (gx1 > gx0 && gy1 > gy0)
                 enjoer_draw_image_quad(gx0, gy0, gx1 - gx0, gy1 - gy0, u0, v0, u1, v1,
                                        face->layer, command->r, command->g, command->b);
