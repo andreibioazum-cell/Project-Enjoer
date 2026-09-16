@@ -375,7 +375,7 @@ static __attribute__((unused)) float g_LVL_W = 0.0f;
 
 static int ds_program_initialized;
 
-/* 191 script literal(s), interned once at load time. */
+/* 192 script literal(s), interned once at load time. */
 static const DsLiteralSource ds_literal_sources[] = {
     {"font.ttf", 8},
     {"-", 1},
@@ -432,6 +432,9 @@ static const DsLiteralSource ds_literal_sources[] = {
     {"First purchase", 14},
     {"Купить первого персонажа", 46},
     {"Buy your first character", 24},
+    {"English", 7},
+    {"Русский", 14},
+    {"Russian", 7},
     {"WARNING", 7},
     {"ВНИМАНИЕ", 16},
     {"This game contains bright flashes", 33},
@@ -547,8 +550,6 @@ static const DsLiteralSource ds_literal_sources[] = {
     {": ", 2},
     {"Cubic Battle 4", 14},
     {"???", 3},
-    {"English", 7},
-    {"Русский", 14},
     {":", 1},
     {"Открыть", 14},
     {"Unlock", 6},
@@ -625,6 +626,8 @@ static DsString * ds_fn_tr_achievement_first_win(void) __attribute__((unused));
 static DsString * ds_fn_tr_achievement_first_win_desc(void) __attribute__((unused));
 static DsString * ds_fn_tr_achievement_first_buy(void) __attribute__((unused));
 static DsString * ds_fn_tr_achievement_first_buy_desc(void) __attribute__((unused));
+static DsString * ds_fn_tr_language_en(void) __attribute__((unused));
+static DsString * ds_fn_tr_language_ru(void) __attribute__((unused));
 static DsString * ds_fn_tr_warn_title_en(void) __attribute__((unused));
 static DsString * ds_fn_tr_warn_title_ru(void) __attribute__((unused));
 static DsString * ds_fn_tr_warn_en1(void) __attribute__((unused));
@@ -1077,7 +1080,7 @@ static __attribute__((unused)) void ds_fn_draw(void) {
         ds_fn_draw_battlepass();
     }
     if (g_t_fade > 0.0f) {
-        ds_fn_paint_a(g_BLACK, g_t_fade);
+        ds_fn_paint_a(g_BLACK, (g_t_fade * 0.7f));
         ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     }
     ds_fn_draw_achievement_toast();
@@ -1153,7 +1156,7 @@ static __attribute__((unused)) void ds_fn_touchreleased(int32_t id, float touch_
 }
 
 static __attribute__((unused)) float ds_fn_ui(void) {
-    return ds_math_max((double)(0.6f), (double)(ds_math_min((double)(4.0f), (double)(ds_div((double)(ds_math_min((double)(ds_engine_width()), (double)(ds_engine_height()))), (double)(360.0f), "game/config.ds:20")))));
+    return ds_math_max((double)(0.6f), (double)(ds_math_min((double)(3.0f), (double)(ds_div((double)(ds_math_min((double)(ds_engine_width()), (double)(ds_engine_height()))), (double)(360.0f), "game/config.ds:20")))));
     return 0.0f;
 }
 
@@ -1566,128 +1569,128 @@ static __attribute__((unused)) DsString * ds_fn_tr_achievement_first_buy_desc(vo
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_warn_title_en(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_language_en(void) {
     return ds_string_dup(ds_literals[55]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_warn_title_ru(void) {
-    return ds_string_dup(ds_literals[56]);
-    return NULL;
-}
-
-static __attribute__((unused)) DsString * ds_fn_tr_warn_en1(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_language_ru(void) {
+    if (g_language == 1) {
+        return ds_string_dup(ds_literals[56]);
+    }
     return ds_string_dup(ds_literals[57]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_warn_en2(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_warn_title_en(void) {
     return ds_string_dup(ds_literals[58]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_warn_en3(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_warn_title_ru(void) {
     return ds_string_dup(ds_literals[59]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_warn_en4(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_warn_en1(void) {
     return ds_string_dup(ds_literals[60]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_warn_ru1(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_warn_en2(void) {
     return ds_string_dup(ds_literals[61]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_warn_ru2(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_warn_en3(void) {
     return ds_string_dup(ds_literals[62]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_warn_ru3(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_warn_en4(void) {
     return ds_string_dup(ds_literals[63]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_warn_ru4(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_warn_ru1(void) {
     return ds_string_dup(ds_literals[64]);
+    return NULL;
+}
+
+static __attribute__((unused)) DsString * ds_fn_tr_warn_ru2(void) {
+    return ds_string_dup(ds_literals[65]);
+    return NULL;
+}
+
+static __attribute__((unused)) DsString * ds_fn_tr_warn_ru3(void) {
+    return ds_string_dup(ds_literals[66]);
+    return NULL;
+}
+
+static __attribute__((unused)) DsString * ds_fn_tr_warn_ru4(void) {
+    return ds_string_dup(ds_literals[67]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_hp(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[65]);
+        return ds_string_dup(ds_literals[68]);
     }
-    return ds_string_dup(ds_literals[66]);
+    return ds_string_dup(ds_literals[69]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_strength(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[67]);
+        return ds_string_dup(ds_literals[70]);
     }
-    return ds_string_dup(ds_literals[68]);
+    return ds_string_dup(ds_literals[71]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_shop(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[69]);
+        return ds_string_dup(ds_literals[72]);
     }
-    return ds_string_dup(ds_literals[70]);
+    return ds_string_dup(ds_literals[73]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_candies(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[71]);
+        return ds_string_dup(ds_literals[74]);
     }
-    return ds_string_dup(ds_literals[72]);
+    return ds_string_dup(ds_literals[75]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_class_ordinary(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[73]);
+        return ds_string_dup(ds_literals[76]);
     }
-    return ds_string_dup(ds_literals[74]);
+    return ds_string_dup(ds_literals[77]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_class_azum(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[75]);
+        return ds_string_dup(ds_literals[78]);
     }
-    return ds_string_dup(ds_literals[76]);
+    return ds_string_dup(ds_literals[79]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_class_ordinary_desc(void) {
-    return ds_string_dup(ds_literals[77]);
-    return NULL;
-}
-
-static __attribute__((unused)) DsString * ds_fn_tr_class_azum_desc(void) {
-    return ds_string_dup(ds_literals[78]);
-    return NULL;
-}
-
-static __attribute__((unused)) DsString * ds_fn_tr_class_santa(void) {
-    if (g_language == 1) {
-        return ds_string_dup(ds_literals[79]);
-    }
     return ds_string_dup(ds_literals[80]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_class_santa_desc(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_class_azum_desc(void) {
     return ds_string_dup(ds_literals[81]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_class_ebuc(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_class_santa(void) {
     if (g_language == 1) {
         return ds_string_dup(ds_literals[82]);
     }
@@ -1695,12 +1698,12 @@ static __attribute__((unused)) DsString * ds_fn_tr_class_ebuc(void) {
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_class_ebuc_desc(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_class_santa_desc(void) {
     return ds_string_dup(ds_literals[84]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_super(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_class_ebuc(void) {
     if (g_language == 1) {
         return ds_string_dup(ds_literals[85]);
     }
@@ -1708,51 +1711,64 @@ static __attribute__((unused)) DsString * ds_fn_tr_super(void) {
     return NULL;
 }
 
+static __attribute__((unused)) DsString * ds_fn_tr_class_ebuc_desc(void) {
+    return ds_string_dup(ds_literals[87]);
+    return NULL;
+}
+
+static __attribute__((unused)) DsString * ds_fn_tr_super(void) {
+    if (g_language == 1) {
+        return ds_string_dup(ds_literals[88]);
+    }
+    return ds_string_dup(ds_literals[89]);
+    return NULL;
+}
+
 static __attribute__((unused)) DsString * ds_fn_tr_super_ebuc(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[87]);
+        return ds_string_dup(ds_literals[90]);
     }
-    return ds_string_dup(ds_literals[88]);
+    return ds_string_dup(ds_literals[91]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_class_selected(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[89]);
+        return ds_string_dup(ds_literals[92]);
     }
-    return ds_string_dup(ds_literals[90]);
+    return ds_string_dup(ds_literals[93]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_class_pick(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[91]);
+        return ds_string_dup(ds_literals[94]);
     }
-    return ds_string_dup(ds_literals[92]);
+    return ds_string_dup(ds_literals[95]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_levels(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[93]);
+        return ds_string_dup(ds_literals[96]);
     }
-    return ds_string_dup(ds_literals[94]);
+    return ds_string_dup(ds_literals[97]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_level(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[95]);
+        return ds_string_dup(ds_literals[98]);
     }
-    return ds_string_dup(ds_literals[96]);
+    return ds_string_dup(ds_literals[99]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_levels_for_class(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[97]);
+        return ds_string_dup(ds_literals[100]);
     }
-    return ds_string_dup(ds_literals[98]);
+    return ds_string_dup(ds_literals[101]);
     return NULL;
 }
 
@@ -1761,106 +1777,106 @@ static __attribute__((unused)) DsString * ds_fn_tr_class_level_effect(float cls,
     (void)n;
     if ((cls == 1) && (n == 1)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[99]);
+            return ds_string_dup(ds_literals[102]);
         }
-        return ds_string_dup(ds_literals[100]);
+        return ds_string_dup(ds_literals[103]);
     }
     if ((cls == 1) && (n == 2)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[101]);
+            return ds_string_dup(ds_literals[104]);
         }
-        return ds_string_dup(ds_literals[102]);
+        return ds_string_dup(ds_literals[105]);
     }
     if ((cls == 1) && (n == 3)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[103]);
+            return ds_string_dup(ds_literals[106]);
         }
-        return ds_string_dup(ds_literals[104]);
+        return ds_string_dup(ds_literals[107]);
     }
     if ((cls == 2) && (n == 1)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[105]);
+            return ds_string_dup(ds_literals[108]);
         }
-        return ds_string_dup(ds_literals[106]);
+        return ds_string_dup(ds_literals[109]);
     }
     if ((cls == 2) && (n == 2)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[107]);
+            return ds_string_dup(ds_literals[110]);
         }
-        return ds_string_dup(ds_literals[108]);
+        return ds_string_dup(ds_literals[111]);
     }
     if ((cls == 2) && (n == 3)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[109]);
+            return ds_string_dup(ds_literals[112]);
         }
-        return ds_string_dup(ds_literals[110]);
+        return ds_string_dup(ds_literals[113]);
     }
     if ((cls == 3) && (n == 1)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[111]);
+            return ds_string_dup(ds_literals[114]);
         }
-        return ds_string_dup(ds_literals[112]);
+        return ds_string_dup(ds_literals[115]);
     }
     if ((cls == 3) && (n == 2)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[113]);
+            return ds_string_dup(ds_literals[116]);
         }
-        return ds_string_dup(ds_literals[114]);
+        return ds_string_dup(ds_literals[117]);
     }
     if ((cls == 3) && (n == 3)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[115]);
+            return ds_string_dup(ds_literals[118]);
         }
-        return ds_string_dup(ds_literals[116]);
+        return ds_string_dup(ds_literals[119]);
     }
     if ((cls == 0) && (n == 1)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[117]);
+            return ds_string_dup(ds_literals[120]);
         }
-        return ds_string_dup(ds_literals[118]);
+        return ds_string_dup(ds_literals[121]);
     }
     if ((cls == 0) && (n == 2)) {
         if (g_language == 1) {
-            return ds_string_dup(ds_literals[119]);
+            return ds_string_dup(ds_literals[122]);
         }
-        return ds_string_dup(ds_literals[120]);
+        return ds_string_dup(ds_literals[123]);
     }
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[121]);
+        return ds_string_dup(ds_literals[124]);
     }
-    return ds_string_dup(ds_literals[122]);
+    return ds_string_dup(ds_literals[125]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_cups_unit(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[123]);
+        return ds_string_dup(ds_literals[126]);
     }
-    return ds_string_dup(ds_literals[124]);
+    return ds_string_dup(ds_literals[127]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_level_need_cups(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[125]);
+        return ds_string_dup(ds_literals[128]);
     }
-    return ds_string_dup(ds_literals[126]);
+    return ds_string_dup(ds_literals[129]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_levels_soon(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[127]);
+        return ds_string_dup(ds_literals[130]);
     }
-    return ds_string_dup(ds_literals[128]);
+    return ds_string_dup(ds_literals[131]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_cups(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[129]);
+        return ds_string_dup(ds_literals[132]);
     }
-    return ds_string_dup(ds_literals[130]);
+    return ds_string_dup(ds_literals[133]);
     return NULL;
 }
 
@@ -1869,8 +1885,8 @@ static __attribute__((unused)) DsString * ds_fn_tr_buy_for(float cost, DsString 
     (void)currency;
     if (g_language == 1) {
         DsString *__ds_t0 = ds_fn_int_str(cost);
-        DsString *__ds_t1 = ds_concat(ds_literals[131], __ds_t0);
-        DsString *__ds_t2 = ds_concat(__ds_t1, ds_literals[132]);
+        DsString *__ds_t1 = ds_concat(ds_literals[134], __ds_t0);
+        DsString *__ds_t2 = ds_concat(__ds_t1, ds_literals[135]);
         DsString *__ds_t4 = ds_concat(__ds_t2, currency);
         DsString *__ds_c3 = ds_string_dup(__ds_t4);
         ds_release((void*)__ds_t4);
@@ -1880,8 +1896,8 @@ static __attribute__((unused)) DsString * ds_fn_tr_buy_for(float cost, DsString 
         return __ds_c3;
     }
     DsString *__ds_t5 = ds_fn_int_str(cost);
-    DsString *__ds_t6 = ds_concat(ds_literals[133], __ds_t5);
-    DsString *__ds_t7 = ds_concat(__ds_t6, ds_literals[132]);
+    DsString *__ds_t6 = ds_concat(ds_literals[136], __ds_t5);
+    DsString *__ds_t7 = ds_concat(__ds_t6, ds_literals[135]);
     DsString *__ds_t9 = ds_concat(__ds_t7, currency);
     DsString *__ds_c8 = ds_string_dup(__ds_t9);
     ds_release((void*)__ds_t9);
@@ -1894,53 +1910,37 @@ static __attribute__((unused)) DsString * ds_fn_tr_buy_for(float cost, DsString 
 
 static __attribute__((unused)) DsString * ds_fn_tr_class_need_cups(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[134]);
+        return ds_string_dup(ds_literals[137]);
     }
-    return ds_string_dup(ds_literals[135]);
+    return ds_string_dup(ds_literals[138]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_battlepass_title(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[136]);
+        return ds_string_dup(ds_literals[139]);
     }
-    return ds_string_dup(ds_literals[137]);
+    return ds_string_dup(ds_literals[140]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_bp_level(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[95]);
+        return ds_string_dup(ds_literals[98]);
     }
-    return ds_string_dup(ds_literals[96]);
+    return ds_string_dup(ds_literals[99]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_bp_bought(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[138]);
+        return ds_string_dup(ds_literals[141]);
     }
-    return ds_string_dup(ds_literals[139]);
+    return ds_string_dup(ds_literals[142]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_bp_buy(void) {
-    if (g_language == 1) {
-        return ds_string_dup(ds_literals[140]);
-    }
-    return ds_string_dup(ds_literals[141]);
-    return NULL;
-}
-
-static __attribute__((unused)) DsString * ds_fn_tr_bp_locked(void) {
-    if (g_language == 1) {
-        return ds_string_dup(ds_literals[142]);
-    }
-    return ds_string_dup(ds_literals[44]);
-    return NULL;
-}
-
-static __attribute__((unused)) DsString * ds_fn_tr_bp_need_prev(void) {
     if (g_language == 1) {
         return ds_string_dup(ds_literals[143]);
     }
@@ -1948,47 +1948,47 @@ static __attribute__((unused)) DsString * ds_fn_tr_bp_need_prev(void) {
     return NULL;
 }
 
+static __attribute__((unused)) DsString * ds_fn_tr_bp_locked(void) {
+    if (g_language == 1) {
+        return ds_string_dup(ds_literals[145]);
+    }
+    return ds_string_dup(ds_literals[44]);
+    return NULL;
+}
+
+static __attribute__((unused)) DsString * ds_fn_tr_bp_need_prev(void) {
+    if (g_language == 1) {
+        return ds_string_dup(ds_literals[146]);
+    }
+    return ds_string_dup(ds_literals[147]);
+    return NULL;
+}
+
 static __attribute__((unused)) DsString * ds_fn_tr_bp_need_cups(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[125]);
+        return ds_string_dup(ds_literals[128]);
     }
-    return ds_string_dup(ds_literals[126]);
+    return ds_string_dup(ds_literals[129]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_bp_reward_1(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[145]);
+        return ds_string_dup(ds_literals[148]);
     }
-    return ds_string_dup(ds_literals[146]);
+    return ds_string_dup(ds_literals[149]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_bp_reward_2(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[147]);
-    }
-    return ds_string_dup(ds_literals[148]);
-    return NULL;
-}
-
-static __attribute__((unused)) DsString * ds_fn_tr_skins(void) {
-    if (g_language == 1) {
-        return ds_string_dup(ds_literals[149]);
-    }
-    return ds_string_dup(ds_literals[150]);
-    return NULL;
-}
-
-static __attribute__((unused)) DsString * ds_fn_tr_skin_normal(void) {
-    if (g_language == 1) {
-        return ds_string_dup(ds_literals[73]);
+        return ds_string_dup(ds_literals[150]);
     }
     return ds_string_dup(ds_literals[151]);
     return NULL;
 }
 
-static __attribute__((unused)) DsString * ds_fn_tr_skin_zombie(void) {
+static __attribute__((unused)) DsString * ds_fn_tr_skins(void) {
     if (g_language == 1) {
         return ds_string_dup(ds_literals[152]);
     }
@@ -1996,11 +1996,27 @@ static __attribute__((unused)) DsString * ds_fn_tr_skin_zombie(void) {
     return NULL;
 }
 
+static __attribute__((unused)) DsString * ds_fn_tr_skin_normal(void) {
+    if (g_language == 1) {
+        return ds_string_dup(ds_literals[76]);
+    }
+    return ds_string_dup(ds_literals[154]);
+    return NULL;
+}
+
+static __attribute__((unused)) DsString * ds_fn_tr_skin_zombie(void) {
+    if (g_language == 1) {
+        return ds_string_dup(ds_literals[155]);
+    }
+    return ds_string_dup(ds_literals[156]);
+    return NULL;
+}
+
 static __attribute__((unused)) DsString * ds_fn_tr_skin_zombie_locked(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[154]);
+        return ds_string_dup(ds_literals[157]);
     }
-    return ds_string_dup(ds_literals[155]);
+    return ds_string_dup(ds_literals[158]);
     return NULL;
 }
 
@@ -2008,8 +2024,8 @@ static __attribute__((unused)) DsString * ds_fn_tr_cups_reward(float amount) {
     (void)amount;
     if (g_language == 1) {
         DsString *__ds_t0 = ds_fn_int_str(amount);
-        DsString *__ds_t1 = ds_concat(ds_literals[156], __ds_t0);
-        DsString *__ds_t3 = ds_concat(__ds_t1, ds_literals[157]);
+        DsString *__ds_t1 = ds_concat(ds_literals[159], __ds_t0);
+        DsString *__ds_t3 = ds_concat(__ds_t1, ds_literals[160]);
         DsString *__ds_c2 = ds_string_dup(__ds_t3);
         ds_release((void*)__ds_t3);
         ds_release((void*)__ds_t1);
@@ -2017,8 +2033,8 @@ static __attribute__((unused)) DsString * ds_fn_tr_cups_reward(float amount) {
         return __ds_c2;
     }
     DsString *__ds_t4 = ds_fn_int_str(amount);
-    DsString *__ds_t5 = ds_concat(ds_literals[156], __ds_t4);
-    DsString *__ds_t7 = ds_concat(__ds_t5, ds_literals[158]);
+    DsString *__ds_t5 = ds_concat(ds_literals[159], __ds_t4);
+    DsString *__ds_t7 = ds_concat(__ds_t5, ds_literals[161]);
     DsString *__ds_c6 = ds_string_dup(__ds_t7);
     ds_release((void*)__ds_t7);
     ds_release((void*)__ds_t5);
@@ -2073,10 +2089,12 @@ static __attribute__((unused)) void ds_fn_roundrect(float x, float y, float w, f
 static __attribute__((unused)) float ds_fn_text_est(DsString * s, float scale) {
     (void)s;
     (void)scale;
+    int32_t l __attribute__((unused)) = 0;
+    l = ds_string_length(s);
     if (g_language == 1) {
-        return (((ds_string_length(s) * 0.36f) * 16.0f) * scale);
+        return (((l * 0.45f) * 16.0f) * scale);
     }
-    return (((ds_string_length(s) * 0.52f) * 16.0f) * scale);
+    return (((l * 0.6f) * 16.0f) * scale);
     return 0.0f;
 }
 
@@ -2108,7 +2126,7 @@ static __attribute__((unused)) void ds_fn_ctext(DsString * s, float y, float sca
     (void)y;
     (void)scale;
     (void)c;
-    ds_fn_draw_text(s, ds_div((double)((ds_engine_width() - ds_fn_text_est(s, scale))), (double)(2.0f), "game/ui.ds:62"), y, scale, c);
+    ds_fn_draw_text(s, ds_div((double)((ds_engine_width() - ds_fn_text_est(s, scale))), (double)(2.0f), "game/ui.ds:66"), y, scale, c);
     return;
 }
 
@@ -2118,7 +2136,7 @@ static __attribute__((unused)) void ds_fn_ctext_a(DsString * s, float y, float s
     (void)scale;
     (void)c;
     (void)a;
-    ds_fn_draw_text_a(s, ds_div((double)((ds_engine_width() - ds_fn_text_est(s, scale))), (double)(2.0f), "game/ui.ds:66"), y, scale, c, a);
+    ds_fn_draw_text_a(s, ds_div((double)((ds_engine_width() - ds_fn_text_est(s, scale))), (double)(2.0f), "game/ui.ds:70"), y, scale, c, a);
     return;
 }
 
@@ -2131,8 +2149,10 @@ static __attribute__((unused)) void ds_fn_text_in_box(DsString * label, float x,
     (void)c;
     (void)scale;
     float est __attribute__((unused)) = 0.0f;
+    float vertical_offset __attribute__((unused)) = 0.0f;
     est = ds_fn_text_est(label, scale);
-    ds_fn_draw_text(label, (x + ds_div((double)((w - est)), (double)(2.0f), "game/ui.ds:73")), ((y + ds_div((double)(h), (double)(2.0f), "game/ui.ds:73")) - (9.04f * scale)), scale, c);
+    vertical_offset = (8.5f * scale);
+    ds_fn_draw_text(label, (x + ds_div((double)((w - est)), (double)(2.0f), "game/ui.ds:80")), ((y + ds_div((double)(h), (double)(2.0f), "game/ui.ds:80")) - vertical_offset), scale, c);
     return;
 }
 
@@ -2143,7 +2163,7 @@ static __attribute__((unused)) void ds_fn_text_in_field(DsString * label, float 
     (void)h;
     (void)c;
     (void)scale;
-    ds_fn_draw_text(label, x, ((y + ds_div((double)(h), (double)(2.0f), "game/ui.ds:77")) - (9.04f * scale)), scale, c);
+    ds_fn_draw_text(label, x, ((y + ds_div((double)(h), (double)(2.0f), "game/ui.ds:84")) - (9.04f * scale)), scale, c);
     return;
 }
 
@@ -2155,7 +2175,7 @@ static __attribute__((unused)) void ds_fn_ctext_fade(DsString * s, float y, floa
     (void)t;
     (void)fade;
     float a __attribute__((unused)) = 0.0f;
-    a = ds_fn_clamp(ds_div((double)(t), (double)(fade), "game/ui.ds:82"), 0.0f, 1.0f);
+    a = ds_fn_clamp(ds_div((double)(t), (double)(fade), "game/ui.ds:89"), 0.0f, 1.0f);
     ds_fn_ctext_a(s, y, scale, c, a);
     return;
 }
@@ -2195,7 +2215,7 @@ static __attribute__((unused)) float ds_fn_bh(void) {
 
 static __attribute__((unused)) void ds_fn_draw_back(void) {
     DsString *__ds_t0 = ds_fn_tr_back();
-    ds_fn_button(__ds_t0, ds_div((double)((ds_engine_width() - ds_fn_bw())), (double)(2.0f), "game/ui.ds:106"), (g_back_y * g_U), ds_fn_bw(), ds_fn_bh());
+    ds_fn_button(__ds_t0, ds_div((double)((ds_engine_width() - ds_fn_bw())), (double)(2.0f), "game/ui.ds:113"), (g_back_y * g_U), ds_fn_bw(), ds_fn_bh());
     ds_release((void*)__ds_t0);
     return;
 }
@@ -2204,7 +2224,7 @@ static __attribute__((unused)) float ds_fn_back_hit(float x, float y) {
     (void)x;
     (void)y;
     float bx __attribute__((unused)) = 0.0f;
-    bx = ds_div((double)((ds_engine_width() - ds_fn_bw())), (double)(2.0f), "game/ui.ds:110");
+    bx = ds_div((double)((ds_engine_width() - ds_fn_bw())), (double)(2.0f), "game/ui.ds:117");
     if ((((x >= (bx - (12.0f * g_U))) && (x <= ((bx + ds_fn_bw()) + (12.0f * g_U)))) && (y >= ((g_back_y * g_U) - (8.0f * g_U)))) && (y <= (((g_back_y * g_U) + ds_fn_bh()) + (8.0f * g_U)))) {
         return 1.0f;
     }
@@ -2225,7 +2245,7 @@ static __attribute__((unused)) void ds_fn_hud_bar(float bx, float by, float w, f
     float pad __attribute__((unused)) = 0.0f;
     float fh __attribute__((unused)) = 0.0f;
     float fill_w __attribute__((unused)) = 0.0f;
-    ds_fn_roundrect(bx, by, w, h, ds_div((double)(h), (double)(2.0f), "game/ui.ds:122"), g_BAR_BG, 0.87f);
+    ds_fn_roundrect(bx, by, w, h, ds_div((double)(h), (double)(2.0f), "game/ui.ds:129"), g_BAR_BG, 0.87f);
     shown = cur;
     if (shown < 0.0f) {
         shown = 0.0f;
@@ -2239,12 +2259,12 @@ static __attribute__((unused)) void ds_fn_hud_bar(float bx, float by, float w, f
         fh = 1.0f;
     }
     if (max > 0.0f) {
-        fill_w = ds_div((double)(((w - (2.0f * pad)) * shown)), (double)(max), "game/ui.ds:136");
+        fill_w = ds_div((double)(((w - (2.0f * pad)) * shown)), (double)(max), "game/ui.ds:143");
         if (fill_w > 0.0f) {
             if (from_right == 1.0f) {
-                ds_fn_roundrect((((bx + w) - pad) - fill_w), (by + pad), fill_w, fh, ds_div((double)(fh), (double)(2.0f), "game/ui.ds:139"), c, 1.0f);
+                ds_fn_roundrect((((bx + w) - pad) - fill_w), (by + pad), fill_w, fh, ds_div((double)(fh), (double)(2.0f), "game/ui.ds:146"), c, 1.0f);
             } else {
-                ds_fn_roundrect((bx + pad), (by + pad), fill_w, fh, ds_div((double)(fh), (double)(2.0f), "game/ui.ds:141"), c, 1.0f);
+                ds_fn_roundrect((bx + pad), (by + pad), fill_w, fh, ds_div((double)(fh), (double)(2.0f), "game/ui.ds:148"), c, 1.0f);
             }
         }
     }
@@ -2278,7 +2298,7 @@ static __attribute__((unused)) void ds_fn_sprite_tint(float handle, float x, flo
     if (h32 < 0.0f) {
         return;
     }
-    ds_render_color_alpha((float)((float)(((Palette *)ds_require((void *)(c), "game/ui.ds:165"))->r)), (float)((float)(((Palette *)ds_require((void *)(c), "game/ui.ds:165"))->g)), (float)((float)(((Palette *)ds_require((void *)(c), "game/ui.ds:165"))->b)), (float)((float)(a)));
+    ds_render_color_alpha((float)((float)(((Palette *)ds_require((void *)(c), "game/ui.ds:172"))->r)), (float)((float)(((Palette *)ds_require((void *)(c), "game/ui.ds:172"))->g)), (float)((float)(((Palette *)ds_require((void *)(c), "game/ui.ds:172"))->b)), (float)((float)(a)));
     ds_render_image((int32_t)((float)(h32)), (float)(x), (float)(y), (float)((ds_image_width((int32_t)((double)(h32))) * scale)), (float)((ds_image_height((int32_t)((double)(h32))) * scale)));
     return;
 }
@@ -3705,16 +3725,16 @@ static __attribute__((unused)) void ds_fn_move_player(void) {
     if (jm < 0.15f) {
         mx = 0.0f;
         my = 0.0f;
-        if (ds_engine_key_down(ds_literals[159]) || ds_engine_key_down(ds_literals[160])) {
+        if (ds_engine_key_down(ds_literals[162]) || ds_engine_key_down(ds_literals[163])) {
             my = (my - 1.0f);
         }
-        if (ds_engine_key_down(ds_literals[161]) || ds_engine_key_down(ds_literals[162])) {
+        if (ds_engine_key_down(ds_literals[164]) || ds_engine_key_down(ds_literals[165])) {
             my = (my + 1.0f);
         }
-        if (ds_engine_key_down(ds_literals[163]) || ds_engine_key_down(ds_literals[164])) {
+        if (ds_engine_key_down(ds_literals[166]) || ds_engine_key_down(ds_literals[167])) {
             mx = (mx - 1.0f);
         }
-        if (ds_engine_key_down(ds_literals[165]) || ds_engine_key_down(ds_literals[166])) {
+        if (ds_engine_key_down(ds_literals[168]) || ds_engine_key_down(ds_literals[169])) {
             mx = (mx + 1.0f);
         }
         km = ds_math_sqrt((double)(((mx * mx) + (my * my))));
@@ -4263,12 +4283,18 @@ static __attribute__((unused)) void ds_fn_draw_cube(float tex, float x, float y,
     (void)scale;
     (void)cls;
     float hw __attribute__((unused)) = 0.0f;
+    float shadow_a __attribute__((unused)) = 0.0f;
+    float rot_offset_x __attribute__((unused)) = 0.0f;
+    float rot_offset_y __attribute__((unused)) = 0.0f;
     hw = (((25.0f * g_cube_scale) * scale) * g_U);
-    ds_fn_sprite_tint(tex, ((x - hw) - (g_shadow_off * g_U)), ((y - hw) + (g_shadow_off * g_U)), ((g_cube_scale * scale) * g_U), g_BLACK, g_shadow_alpha);
+    shadow_a = (g_shadow_alpha * 0.6f);
+    ds_fn_sprite_tint(tex, ((x - hw) - (g_shadow_off * g_U)), ((y - hw) + (g_shadow_off * g_U)), ((g_cube_scale * scale) * g_U), g_BLACK, shadow_a);
+    rot_offset_x = ((ds_math_cos((double)(angle)) * 2.0f) * g_U);
+    rot_offset_y = ((ds_math_sin((double)(angle)) * 2.0f) * g_U);
     if ((cls == 1) && (g_azum_skin == 1)) {
-        ds_fn_sprite_tint(tex, (x - hw), (y - hw), ((g_cube_scale * scale) * g_U), g_ZOMBIE, 1.0f);
+        ds_fn_sprite_tint(tex, ((x - hw) + rot_offset_x), ((y - hw) + rot_offset_y), ((g_cube_scale * scale) * g_U), g_ZOMBIE, 1.0f);
     } else {
-        ds_fn_sprite(tex, (x - hw), (y - hw), ((g_cube_scale * scale) * g_U));
+        ds_fn_sprite(tex, ((x - hw) + rot_offset_x), ((y - hw) + rot_offset_y), ((g_cube_scale * scale) * g_U));
     }
     ds_fn_draw_facing_dot(x, y, angle, hw, g_WHITE);
     return;
@@ -4283,7 +4309,7 @@ static __attribute__((unused)) float ds_fn_player_live_tex(void) {
 }
 
 static __attribute__((unused)) float ds_fn_enemy_battle_tex(void) {
-    if ((((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:63"))->state == 1.0f) || (((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:63"))->state == 2.0f)) {
+    if ((((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:75"))->state == 1.0f) || (((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:75"))->state == 2.0f)) {
         return g_tex_ordinary_punch;
     }
     return g_tex_ordinary;
@@ -4313,7 +4339,7 @@ static __attribute__((unused)) void ds_fn_draw_candies(void) {
     hw = ((32.0f * g_candy_scale) * g_U);
     i = 0;
     while (i < g_candy_count) {
-        ds_fn_sprite(g_tex_candy, (ds_list_get_float(g_candy_x, (int64_t)(i), "game/battledraw.ds:83") - hw), (ds_list_get_float(g_candy_y, (int64_t)(i), "game/battledraw.ds:83") - hw), (g_candy_scale * g_U));
+        ds_fn_sprite(g_tex_candy, (ds_list_get_float(g_candy_x, (int64_t)(i), "game/battledraw.ds:95") - hw), (ds_list_get_float(g_candy_y, (int64_t)(i), "game/battledraw.ds:95") - hw), (g_candy_scale * g_U));
         i = (i + 1);
     }
     return;
@@ -4322,12 +4348,12 @@ static __attribute__((unused)) void ds_fn_draw_candies(void) {
 static __attribute__((unused)) void ds_fn_draw_gift(void) {
     float s __attribute__((unused)) = 0.0f;
     float hw __attribute__((unused)) = 0.0f;
-    if (((Gift *)ds_require((void *)(g_gift), "game/battledraw.ds:90"))->active == 0.0f) {
+    if (((Gift *)ds_require((void *)(g_gift), "game/battledraw.ds:102"))->active == 0.0f) {
         return;
     }
-    s = ((0.5f * g_U) * (1.0f + (0.12f * ds_math_sin((double)((((Gift *)ds_require((void *)(g_gift), "game/battledraw.ds:93"))->t * 18.0f))))));
+    s = ((0.5f * g_U) * (1.0f + (0.12f * ds_math_sin((double)((((Gift *)ds_require((void *)(g_gift), "game/battledraw.ds:105"))->t * 18.0f))))));
     hw = (32.0f * s);
-    ds_fn_sprite(g_tex_snowflake, (((Gift *)ds_require((void *)(g_gift), "game/battledraw.ds:95"))->x - hw), (((Gift *)ds_require((void *)(g_gift), "game/battledraw.ds:95"))->y - hw), s);
+    ds_fn_sprite(g_tex_snowflake, (((Gift *)ds_require((void *)(g_gift), "game/battledraw.ds:107"))->x - hw), (((Gift *)ds_require((void *)(g_gift), "game/battledraw.ds:107"))->y - hw), s);
     return;
 }
 
@@ -4343,10 +4369,10 @@ static __attribute__((unused)) void ds_fn_draw_boom_at(float x, float y, float b
     if (bt <= 0.0f) {
         return;
     }
-    p = (1.0f - ds_div((double)(bt), (double)(g_boom_time), "game/battledraw.ds:102"));
+    p = (1.0f - ds_div((double)(bt), (double)(g_boom_time), "game/battledraw.ds:114"));
     r = ((g_super_radius * g_U) * p);
-    fade_in = ds_fn_clamp(ds_div((double)(p), (double)(g_boom_fade_in), "game/battledraw.ds:104"), 0.0f, 1.0f);
-    fade_out = ds_fn_clamp(ds_div((double)(bt), (double)((g_boom_time * g_boom_fade_out)), "game/battledraw.ds:105"), 0.0f, 1.0f);
+    fade_in = ds_fn_clamp(ds_div((double)(p), (double)(g_boom_fade_in), "game/battledraw.ds:116"), 0.0f, 1.0f);
+    fade_out = ds_fn_clamp(ds_div((double)(bt), (double)((g_boom_time * g_boom_fade_out)), "game/battledraw.ds:117"), 0.0f, 1.0f);
     a = (fade_in * fade_out);
     if (a <= 0.01f) {
         return;
@@ -4381,10 +4407,10 @@ static __attribute__((unused)) void ds_fn_draw_chill(float x, float y, float hal
 }
 
 static __attribute__((unused)) void ds_fn_draw_effects(void) {
-    ds_fn_draw_chill(((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:134"))->x, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:134"))->y, (((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:134"))->size + (6.0f * g_U)), g_freeze_a);
-    ds_fn_draw_chill(((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:135"))->x, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:135"))->y, (((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:135"))->size + (6.0f * g_U)), g_poison_a);
-    ds_fn_draw_chill(((Player *)ds_require((void *)(g_player), "game/battledraw.ds:136"))->x, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:136"))->y, (((Player *)ds_require((void *)(g_player), "game/battledraw.ds:136"))->size + (6.0f * g_U)), g_pfreeze_a);
-    ds_fn_draw_chill(((Player *)ds_require((void *)(g_player), "game/battledraw.ds:137"))->x, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:137"))->y, (((Player *)ds_require((void *)(g_player), "game/battledraw.ds:137"))->size + (6.0f * g_U)), g_ppoison_a);
+    ds_fn_draw_chill(((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:146"))->x, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:146"))->y, (((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:146"))->size + (6.0f * g_U)), g_freeze_a);
+    ds_fn_draw_chill(((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:147"))->x, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:147"))->y, (((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:147"))->size + (6.0f * g_U)), g_poison_a);
+    ds_fn_draw_chill(((Player *)ds_require((void *)(g_player), "game/battledraw.ds:148"))->x, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:148"))->y, (((Player *)ds_require((void *)(g_player), "game/battledraw.ds:148"))->size + (6.0f * g_U)), g_pfreeze_a);
+    ds_fn_draw_chill(((Player *)ds_require((void *)(g_player), "game/battledraw.ds:149"))->x, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:149"))->y, (((Player *)ds_require((void *)(g_player), "game/battledraw.ds:149"))->size + (6.0f * g_U)), g_ppoison_a);
     return;
 }
 
@@ -4392,9 +4418,9 @@ static __attribute__((unused)) void ds_fn_draw_controls(void) {
     DsString * sl __attribute__((unused)) = NULL;
     float sls __attribute__((unused)) = 0.0f;
     ds_fn_paint_a(g_BLACK, 0.5f);
-    ds_render_ring((float)(((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:143"))->x), (float)(((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:143"))->y), (float)(((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:143"))->r), (float)((4.0f * g_U)));
+    ds_render_ring((float)(((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:155"))->x), (float)(((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:155"))->y), (float)(((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:155"))->r), (float)((4.0f * g_U)));
     ds_fn_paint_a(g_BLACK, 0.6f);
-    ds_render_circle((float)((((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:145"))->x + ((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:145"))->ox)), (float)((((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:145"))->y + ((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:145"))->oy)), (float)((34.0f * g_U)));
+    ds_render_circle((float)((((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:157"))->x + ((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:157"))->ox)), (float)((((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:157"))->y + ((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:157"))->oy)), (float)((34.0f * g_U)));
     ds_fn_paint(g_RED);
     ds_render_circle((float)(g_atk_x), (float)(g_atk_y), (float)((70.0f * g_U)));
     ds_fn_paint_a(g_BLACK, 0.6f);
@@ -4434,8 +4460,8 @@ static __attribute__((unused)) void ds_fn_draw_result(DsString * title) {
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     w = (430.0f * g_U);
     h = (250.0f * g_U);
-    x = ds_div((double)((ds_engine_width() - w)), (double)(2.0f), "game/battledraw.ds:179");
-    y = (ds_div((double)(ds_engine_height()), (double)(2.0f), "game/battledraw.ds:180") - ds_div((double)(h), (double)(2.0f), "game/battledraw.ds:180"));
+    x = ds_div((double)((ds_engine_width() - w)), (double)(2.0f), "game/battledraw.ds:191");
+    y = (ds_div((double)(ds_engine_height()), (double)(2.0f), "game/battledraw.ds:192") - ds_div((double)(h), (double)(2.0f), "game/battledraw.ds:192"));
     ds_fn_roundrect(x, y, w, h, (30.0f * g_U), g_PURPLE, 1.0f);
     reward = 0.0f;
     if (g_finished == 1.0f) {
@@ -4456,22 +4482,22 @@ static __attribute__((unused)) void ds_fn_draw_game(void) {
     ds_fn_draw_grass();
     ds_fn_draw_field();
     ds_fn_draw_dust();
-    ds_fn_draw_cube(ds_fn_player_live_tex(), ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:196"))->x, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:196"))->y, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:196"))->angle, g_player_scale, g_player_class);
+    ds_fn_draw_cube(ds_fn_player_live_tex(), ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:208"))->x, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:208"))->y, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:208"))->angle, g_player_scale, g_player_class);
     if ((g_aim_a > 0.0f) && (g_finished == 0)) {
-        ds_fn_draw_punch_box(((Player *)ds_require((void *)(g_player), "game/battledraw.ds:199"))->x, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:199"))->y, ds_math_cos((double)(((Player *)ds_require((void *)(g_player), "game/battledraw.ds:199"))->angle)), ds_math_sin((double)(((Player *)ds_require((void *)(g_player), "game/battledraw.ds:200"))->angle)), g_punch_reach, g_punch_width, g_aim_a);
+        ds_fn_draw_punch_box(((Player *)ds_require((void *)(g_player), "game/battledraw.ds:211"))->x, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:211"))->y, ds_math_cos((double)(((Player *)ds_require((void *)(g_player), "game/battledraw.ds:211"))->angle)), ds_math_sin((double)(((Player *)ds_require((void *)(g_player), "game/battledraw.ds:212"))->angle)), g_punch_reach, g_punch_width, g_aim_a);
     }
-    if (((((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:202"))->state == 1.0f) || (((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:202"))->state == 2.0f)) && (g_finished == 0)) {
-        ds_fn_draw_punch_box(((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:203"))->x, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:203"))->y, ds_math_cos((double)(((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:203"))->angle)), ds_math_sin((double)(((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:204"))->angle)), g_enemy_punch_reach, g_enemy_punch_width, 1.0f);
+    if (((((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:214"))->state == 1.0f) || (((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:214"))->state == 2.0f)) && (g_finished == 0)) {
+        ds_fn_draw_punch_box(((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:215"))->x, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:215"))->y, ds_math_cos((double)(((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:215"))->angle)), ds_math_sin((double)(((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:216"))->angle)), g_enemy_punch_reach, g_enemy_punch_width, 1.0f);
     }
-    ds_fn_draw_cube(ds_fn_enemy_battle_tex(), ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:206"))->x, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:206"))->y, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:206"))->angle, g_enemy_scale, (-1.0f));
+    ds_fn_draw_cube(ds_fn_enemy_battle_tex(), ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:218"))->x, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:218"))->y, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:218"))->angle, g_enemy_scale, (-1.0f));
     ds_fn_draw_candies();
     ds_fn_draw_gift();
     ds_fn_draw_boom();
     ds_fn_draw_station();
     ds_fn_draw_effects();
-    w = ds_div((double)(ds_engine_width()), (double)(4.0f), "game/battledraw.ds:214");
-    ds_fn_hud_bar((20.0f * g_U), (20.0f * g_U), w, (28.0f * g_U), ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:215"))->hp, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:215"))->max_hp, g_HP_GREEN, 0.0f);
-    ds_fn_hud_bar(((ds_engine_width() - w) - (20.0f * g_U)), (20.0f * g_U), w, (28.0f * g_U), ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:217"))->hp, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:217"))->max_hp, g_RED, 1.0f);
+    w = ds_div((double)(ds_engine_width()), (double)(4.0f), "game/battledraw.ds:226");
+    ds_fn_hud_bar((20.0f * g_U), (20.0f * g_U), w, (28.0f * g_U), ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:227"))->hp, ((Player *)ds_require((void *)(g_player), "game/battledraw.ds:227"))->max_hp, g_HP_GREEN, 0.0f);
+    ds_fn_hud_bar(((ds_engine_width() - w) - (20.0f * g_U)), (20.0f * g_U), w, (28.0f * g_U), ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:229"))->hp, ((Enemy *)ds_require((void *)(g_enemy), "game/battledraw.ds:229"))->max_hp, g_RED, 1.0f);
     ds_fn_draw_controls();
     if (g_finished == 1.0f) {
         DsString *__ds_t0 = ds_fn_tr_victory();
@@ -4541,14 +4567,14 @@ static __attribute__((unused)) void ds_fn_draw_money(void) {
     float cw __attribute__((unused)) = 0.0f;
     float dw __attribute__((unused)) = 0.0f;
     DsString *__ds_t0 = ds_fn_tr_cups();
-    DsString *__ds_t1 = ds_concat(__ds_t0, ds_literals[167]);
+    DsString *__ds_t1 = ds_concat(__ds_t0, ds_literals[170]);
     DsString *__ds_t2 = ds_fn_num_str(g_cups);
     cup_s = ds_concat(__ds_t1, __ds_t2);
     ds_release((void*)__ds_t2);
     ds_release((void*)__ds_t1);
     ds_release((void*)__ds_t0);
     DsString *__ds_t3 = ds_fn_tr_candies();
-    DsString *__ds_t4 = ds_concat(__ds_t3, ds_literals[167]);
+    DsString *__ds_t4 = ds_concat(__ds_t3, ds_literals[170]);
     DsString *__ds_t5 = ds_fn_num_str(g_candies);
     cd_s = ds_concat(__ds_t4, __ds_t5);
     ds_release((void*)__ds_t5);
@@ -4572,14 +4598,14 @@ static __attribute__((unused)) void ds_fn_draw_lobby_money(float y) {
     float gap __attribute__((unused)) = 0.0f;
     float x __attribute__((unused)) = 0.0f;
     DsString *__ds_t0 = ds_fn_tr_cups();
-    DsString *__ds_t1 = ds_concat(__ds_t0, ds_literals[167]);
+    DsString *__ds_t1 = ds_concat(__ds_t0, ds_literals[170]);
     DsString *__ds_t2 = ds_fn_num_str(g_cups);
     cup_s = ds_concat(__ds_t1, __ds_t2);
     ds_release((void*)__ds_t2);
     ds_release((void*)__ds_t1);
     ds_release((void*)__ds_t0);
     DsString *__ds_t3 = ds_fn_tr_candies();
-    DsString *__ds_t4 = ds_concat(__ds_t3, ds_literals[167]);
+    DsString *__ds_t4 = ds_concat(__ds_t3, ds_literals[170]);
     DsString *__ds_t5 = ds_fn_num_str(g_candies);
     cd_s = ds_concat(__ds_t4, __ds_t5);
     ds_release((void*)__ds_t5);
@@ -4604,7 +4630,7 @@ static __attribute__((unused)) void ds_fn_draw_lobby(void) {
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     mx = ds_div((double)((ds_engine_width() - ds_fn_bw())), (double)(2.0f), "game/menu.ds:67");
     y0 = ds_fn_menu_y0(g_LOBBY_N);
-    ds_fn_ctext(ds_literals[168], (y0 - (58.0f * g_U)), (2.2f * g_U), g_WHITE);
+    ds_fn_ctext(ds_literals[171], (y0 - (58.0f * g_U)), (2.2f * g_U), g_WHITE);
     DsString *__ds_t0 = ds_fn_tr_play();
     ds_fn_button(__ds_t0, mx, ds_fn_menu_slot(g_LOBBY_N, 0.0f), ds_fn_bw(), ds_fn_menu_bh(g_LOBBY_N));
     ds_release((void*)__ds_t0);
@@ -4621,7 +4647,7 @@ static __attribute__((unused)) void ds_fn_draw_lobby(void) {
     ds_fn_button(__ds_t4, mx, ds_fn_menu_slot(g_LOBBY_N, 4.0f), ds_fn_bw(), ds_fn_menu_bh(g_LOBBY_N));
     ds_release((void*)__ds_t4);
     ds_fn_draw_lobby_money(((ds_fn_menu_slot(g_LOBBY_N, 4.0f) + ds_fn_menu_bh(g_LOBBY_N)) + (14.0f * g_U)));
-    ds_fn_button_scaled(ds_literals[169], (20.0f * g_U), ((ds_engine_height() - ds_fn_bh()) - (20.0f * g_U)), ds_fn_bw(), ds_fn_bh(), (1.3f * g_U));
+    ds_fn_button_scaled(ds_literals[172], (20.0f * g_U), ((ds_engine_height() - ds_fn_bh()) - (20.0f * g_U)), ds_fn_bw(), ds_fn_bh(), (1.3f * g_U));
     return;
 }
 
@@ -4704,8 +4730,12 @@ static __attribute__((unused)) void ds_fn_draw_settings(void) {
     DsString *__ds_t0 = ds_fn_tr_back();
     ds_fn_button(__ds_t0, x, ds_fn_menu_slot(g_SET_N, 0.0f), ds_fn_bw(), ds_fn_menu_bh(g_SET_N));
     ds_release((void*)__ds_t0);
-    ds_fn_button(ds_literals[170], x, ds_fn_menu_slot(g_SET_N, 1.0f), ds_fn_bw(), ds_fn_menu_bh(g_SET_N));
-    ds_fn_button(ds_literals[171], x, ds_fn_menu_slot(g_SET_N, 2.0f), ds_fn_bw(), ds_fn_menu_bh(g_SET_N));
+    DsString *__ds_t1 = ds_fn_tr_language_en();
+    ds_fn_button(__ds_t1, x, ds_fn_menu_slot(g_SET_N, 1.0f), ds_fn_bw(), ds_fn_menu_bh(g_SET_N));
+    ds_release((void*)__ds_t1);
+    DsString *__ds_t2 = ds_fn_tr_language_ru();
+    ds_fn_button(__ds_t2, x, ds_fn_menu_slot(g_SET_N, 2.0f), ds_fn_bw(), ds_fn_menu_bh(g_SET_N));
+    ds_release((void*)__ds_t2);
     return;
 }
 
@@ -4722,6 +4752,7 @@ static __attribute__((unused)) void ds_fn_touch_settings(float x, float y) {
     }
     if (ds_fn_menu_hit_at(g_SET_N, 2.0f, x, y) == 1.0f) {
         g_language = 1;
+        return;
     }
     return;
 }
@@ -4937,7 +4968,7 @@ static __attribute__((unused)) void ds_fn_draw_class_card(float x, float y, floa
     ds_fn_draw_text(desc, (x + ds_div((double)((w - ds_fn_text_est(desc, desc_s))), (double)(2.0f), "game/classes.ds:163")), (y + (150.0f * g_U)), desc_s, g_WHITE);
     lv = ds_fn_class_level_for(cls);
     DsString *__ds_t0 = ds_fn_tr_level();
-    DsString *__ds_t1 = ds_concat(__ds_t0, ds_literals[132]);
+    DsString *__ds_t1 = ds_concat(__ds_t0, ds_literals[135]);
     DsString *__ds_t2 = ds_fn_num_str(lv);
     lv_text = ds_concat(__ds_t1, __ds_t2);
     ds_release((void*)__ds_t2);
@@ -5000,7 +5031,7 @@ static __attribute__((unused)) void ds_fn_draw_skins_row(float y, float h) {
     float sel1 __attribute__((unused)) = 0.0f;
     float locked __attribute__((unused)) = 0.0f;
     DsString *__ds_t0 = ds_fn_tr_skins();
-    label = ds_concat(__ds_t0, ds_literals[172]);
+    label = ds_concat(__ds_t0, ds_literals[173]);
     ds_release((void*)__ds_t0);
     ls = (0.5f * g_U);
     ds_fn_draw_text(label, ds_div((double)((ds_engine_width() - ds_fn_text_est(label, ls))), (double)(2.0f), "game/classes.ds:203"), (y - (28.0f * g_U)), ls, g_WHITE);
@@ -5107,7 +5138,7 @@ static __attribute__((unused)) void ds_fn_draw_class_stats(void) {
     ds_fn_ctext(__ds_t0, (hp_y - (72.0f * g_U)), (0.8f * g_U), g_WHITE);
     ds_release((void*)__ds_t0);
     DsString *__ds_t1 = ds_fn_tr_hp();
-    DsString *__ds_t2 = ds_concat(__ds_t1, ds_literals[167]);
+    DsString *__ds_t2 = ds_concat(__ds_t1, ds_literals[170]);
     DsString *__ds_t3 = ds_fn_num_str(hp);
     DsString *__ds_t4 = ds_concat(__ds_t2, __ds_t3);
     ds_fn_draw_stat_row(__ds_t4, bx, hp_y, bar_w, bar_h, hp, 20.0f, g_RED);
@@ -5116,7 +5147,7 @@ static __attribute__((unused)) void ds_fn_draw_class_stats(void) {
     ds_release((void*)__ds_t2);
     ds_release((void*)__ds_t1);
     DsString *__ds_t5 = ds_fn_tr_strength();
-    DsString *__ds_t6 = ds_concat(__ds_t5, ds_literals[167]);
+    DsString *__ds_t6 = ds_concat(__ds_t5, ds_literals[170]);
     DsString *__ds_t7 = ds_fn_num_str(str);
     DsString *__ds_t8 = ds_concat(__ds_t6, __ds_t7);
     ds_fn_draw_stat_row(__ds_t8, bx, st_y, bar_w, bar_h, str, 2.0f, g_BLUE);
@@ -5319,23 +5350,23 @@ static __attribute__((unused)) void ds_fn_unlock_next_level(float n) {
 
 static __attribute__((unused)) DsString * ds_fn_tr_lvl_unlock(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[173]);
+        return ds_string_dup(ds_literals[174]);
     }
-    return ds_string_dup(ds_literals[174]);
+    return ds_string_dup(ds_literals[175]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_lvl_opened(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[175]);
+        return ds_string_dup(ds_literals[176]);
     }
-    return ds_string_dup(ds_literals[176]);
+    return ds_string_dup(ds_literals[177]);
     return NULL;
 }
 
 static __attribute__((unused)) DsString * ds_fn_tr_lvl_locked(void) {
     if (g_language == 1) {
-        return ds_string_dup(ds_literals[177]);
+        return ds_string_dup(ds_literals[178]);
     }
     return ds_string_dup(ds_literals[44]);
     return NULL;
@@ -5359,7 +5390,7 @@ static __attribute__((unused)) void ds_fn_draw_levels(void) {
     ds_fn_paint(g_BG_DARK);
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     DsString *__ds_t0 = ds_fn_tr_levels_for_class();
-    DsString *__ds_t1 = ds_concat(__ds_t0, ds_literals[178]);
+    DsString *__ds_t1 = ds_concat(__ds_t0, ds_literals[179]);
     DsString *__ds_t2 = ds_fn_class_name();
     DsString *__ds_t3 = ds_concat(__ds_t1, __ds_t2);
     ds_fn_ctext(__ds_t3, (((g_back_y * g_U) + ds_fn_bh()) + (32.0f * g_U)), (1.0f * g_U), g_WHITE);
@@ -5391,7 +5422,7 @@ static __attribute__((unused)) void ds_fn_draw_levels(void) {
         ds_fn_roundrect(x, y, w, row_h, (20.0f * g_U), g_CARD_BG, 1.0f);
         desc = ds_fn_tr_class_level_effect(g_player_class, n);
         DsString *__ds_t4 = ds_fn_tr_level();
-        DsString *__ds_t5 = ds_concat(__ds_t4, ds_literals[132]);
+        DsString *__ds_t5 = ds_concat(__ds_t4, ds_literals[135]);
         DsString *__ds_t6 = ds_fn_num_str(n);
         level_title = ds_concat(__ds_t5, __ds_t6);
         ds_release((void*)__ds_t6);
@@ -5406,10 +5437,10 @@ static __attribute__((unused)) void ds_fn_draw_levels(void) {
             status = ds_fn_tr_lvl_opened();
         } else if (next == 1.0f) {
             DsString *__ds_t7 = ds_fn_tr_lvl_unlock();
-            DsString *__ds_t8 = ds_concat(__ds_t7, ds_literals[167]);
+            DsString *__ds_t8 = ds_concat(__ds_t7, ds_literals[170]);
             DsString *__ds_t9 = ds_fn_num_str(ds_fn_level_cost(n));
             DsString *__ds_t10 = ds_concat(__ds_t8, __ds_t9);
-            DsString *__ds_t11 = ds_concat(__ds_t10, ds_literals[132]);
+            DsString *__ds_t11 = ds_concat(__ds_t10, ds_literals[135]);
             DsString *__ds_t12 = ds_fn_tr_cups_unit();
             status = ds_concat(__ds_t11, __ds_t12);
             ds_release((void*)__ds_t12);
@@ -5619,7 +5650,7 @@ static __attribute__((unused)) void ds_fn_draw_battlepass(void) {
         }
         ds_fn_roundrect(x, y, w, row_h, (20.0f * g_U), bg, 1.0f);
         DsString *__ds_t1 = ds_fn_tr_bp_level();
-        DsString *__ds_t2 = ds_concat(__ds_t1, ds_literals[132]);
+        DsString *__ds_t2 = ds_concat(__ds_t1, ds_literals[135]);
         DsString *__ds_t3 = ds_fn_int_str(lv);
         level_title = ds_concat(__ds_t2, __ds_t3);
         ds_release((void*)__ds_t3);
@@ -5635,10 +5666,10 @@ static __attribute__((unused)) void ds_fn_draw_battlepass(void) {
         }
         if (next == 1.0f) {
             DsString *__ds_t5 = ds_fn_tr_bp_buy();
-            DsString *__ds_t6 = ds_concat(__ds_t5, ds_literals[178]);
+            DsString *__ds_t6 = ds_concat(__ds_t5, ds_literals[179]);
             DsString *__ds_t7 = ds_fn_int_str(g_bp_cost);
             DsString *__ds_t8 = ds_concat(__ds_t6, __ds_t7);
-            DsString *__ds_t9 = ds_concat(__ds_t8, ds_literals[132]);
+            DsString *__ds_t9 = ds_concat(__ds_t8, ds_literals[135]);
             DsString *__ds_t10 = ds_fn_tr_cups_unit();
             status = ds_concat(__ds_t9, __ds_t10);
             ds_release((void*)__ds_t10);
@@ -5884,18 +5915,18 @@ void dimscript_init(void) {
     g_msg_fade = 0.6f;
     g_alert_hold = 0.5f;
     g_finish_t = 0.0f;
-    ds_string_replace((DsString **)&g_GRASS, ds_literals[179]);
-    ds_string_replace((DsString **)&g_ORDINARY_TEX, ds_literals[180]);
-    ds_string_replace((DsString **)&g_PUNCH_TEX, ds_literals[181]);
-    ds_string_replace((DsString **)&g_AZUM_TEX, ds_literals[182]);
-    ds_string_replace((DsString **)&g_AZUM_PUNCH_TEX, ds_literals[183]);
-    ds_string_replace((DsString **)&g_SANTA_TEX, ds_literals[184]);
-    ds_string_replace((DsString **)&g_SANTA_PUNCH_TEX, ds_literals[185]);
-    ds_string_replace((DsString **)&g_EBUC_TEX, ds_literals[186]);
-    ds_string_replace((DsString **)&g_EBUC_PUNCH_TEX, ds_literals[187]);
-    ds_string_replace((DsString **)&g_DESPENSER_TEX, ds_literals[188]);
-    ds_string_replace((DsString **)&g_CANDY_TEX, ds_literals[189]);
-    ds_string_replace((DsString **)&g_SNOWFLAKE_TEX, ds_literals[190]);
+    ds_string_replace((DsString **)&g_GRASS, ds_literals[180]);
+    ds_string_replace((DsString **)&g_ORDINARY_TEX, ds_literals[181]);
+    ds_string_replace((DsString **)&g_PUNCH_TEX, ds_literals[182]);
+    ds_string_replace((DsString **)&g_AZUM_TEX, ds_literals[183]);
+    ds_string_replace((DsString **)&g_AZUM_PUNCH_TEX, ds_literals[184]);
+    ds_string_replace((DsString **)&g_SANTA_TEX, ds_literals[185]);
+    ds_string_replace((DsString **)&g_SANTA_PUNCH_TEX, ds_literals[186]);
+    ds_string_replace((DsString **)&g_EBUC_TEX, ds_literals[187]);
+    ds_string_replace((DsString **)&g_EBUC_PUNCH_TEX, ds_literals[188]);
+    ds_string_replace((DsString **)&g_DESPENSER_TEX, ds_literals[189]);
+    ds_string_replace((DsString **)&g_CANDY_TEX, ds_literals[190]);
+    ds_string_replace((DsString **)&g_SNOWFLAKE_TEX, ds_literals[191]);
     g_tex_grass = (-1);
     g_tex_ordinary = (-1);
     g_tex_ordinary_punch = (-1);
@@ -6022,7 +6053,7 @@ void dimscript_init(void) {
     g_boom_fade_in = 0.25f;
     g_boom_fade_out = 0.5f;
     g_shadow_off = 10.0f;
-    g_shadow_alpha = 0.38f;
+    g_shadow_alpha = 0.25f;
     g_ebuc_hp = 12.0f;
     g_ebuc_station_hp = 9.0f;
     g_ebuc_station_hp_bonus = 1.0f;
