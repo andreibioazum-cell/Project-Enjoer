@@ -40,11 +40,15 @@ roundrect(x: float, y: float, w: float, h: float, r: float, c: Palette, a: float
 -- ── Текст ───────────────────────────────────────────────────────────────
 -- Оценка ширины строки: em = 16*scale px; средняя ширина байта ~0.36 em
 -- для русского (2 байта на букву) и ~0.52 em для английского.
+-- Корректируем для более точного центрирования
 text_est(s: string, scale: float): float {
+    local l = len(s)
     if language == 1 then
-        return len(s) * 0.36 * 16.0 * scale
+        -- Русский текст: 2 байта на символ, коэффициент 0.45 для лучшего центрирования
+        return l * 0.45 * 16.0 * scale
     }
-    return len(s) * 0.52 * 16.0 * scale
+    -- Английский текст: коэффициент 0.6 для лучшего центрирования
+    return l * 0.6 * 16.0 * scale
 }
 
 draw_text(s: string, x: float, y: float, scale: float, c: Palette) {
@@ -68,9 +72,12 @@ ctext_a(s: string, y: float, scale: float, c: Palette, a: float) {
 
 -- Текст в центре плашки. Видимые глифы сидят примерно между 0.2 и 0.93 em
 -- от верха строки, поэтому оптический центр — 0.565*em ниже середины плашки.
+-- Корректируем вертикальное центрирование
 text_in_box(label: string, x: float, y: float, w: float, h: float, c: Palette, scale: float) {
     local est = text_est(label, scale)
-    draw_text(label, x + (w - est) / 2.0, y + h / 2.0 - 9.04 * scale, scale, c)
+    -- Более точное вертикальное центрирование для разного масштаба
+    local vertical_offset = 8.5 * scale
+    draw_text(label, x + (w - est) / 2.0, y + h / 2.0 - vertical_offset, scale, c)
 }
 
 text_in_field(label: string, x: float, y: float, h: float, c: Palette, scale: float) {

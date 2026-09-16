@@ -214,7 +214,8 @@ draw() {
         draw_battlepass()
     }
     if t_fade > 0.0 then
-        paint_a(BLACK, t_fade)
+        -- Более прозрачный переход, чтобы был виден текст и интерфейс
+        paint_a(BLACK, t_fade * 0.7)
         render.rect(0.0, 0.0, engine.width(), engine.height())
     }
     -- Уведомление о достижении — над всем, но под предупреждением.

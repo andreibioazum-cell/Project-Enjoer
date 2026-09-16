@@ -16,7 +16,7 @@
 U = 1.0
 
 ui(): float {
-    return math.max(0.6, math.min(4.0,
+    return math.max(0.6, math.min(3.0,
         math.min(engine.width(), engine.height()) / 360.0))
 }
 
