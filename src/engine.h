@@ -41,7 +41,7 @@ void app_quit(void);
 /* C game layer. The native window is opaque here; only Vulkan owns it.
  *
  * A game is either a folder of .ds files interpreted at runtime (the normal
- * case, see games/) or the ahead-of-time compiled example in src/generated.
+ * case, see game/) or the ahead-of-time compiled example in src/generated.
  * game_set_game_dir selects the folder on the host; on Android the folder is
  * always the APK's assets/game. */
 void game_set_game_dir(const char *dir);

@@ -1,5 +1,5 @@
 /* STRICT COMPILER MODE — NO VM, NO REFCOUNT, MANUAL MEMORY, SPEED LIKE C, AOT TO MACHINE CODE
- * The C half of the engine: only AOT compiled games, no interpretation.
+ * The C half of the engine: only the AOT compiled game, no interpretation.
  * DimScript -> C99 via dimscript/compiler.py -> clang -O3 -> machine code .so
  *
  * Enjoer is a 2D engine: input goes straight to the script, the script fills
@@ -12,7 +12,7 @@
 #include "dimscript_runtime.h"
 #include "ds_files.h"
 #include "ds_font.h"
-#include "generated/clicker.h" /* fallback AOT game */
+#include "generated/cubicbattle.h" /* fallback AOT game */
 
 #include <math.h>
 #include <stddef.h>
@@ -61,11 +61,11 @@ void game_init(void *native_window) {
 #ifdef __ANDROID__
         game_set_game_dir(NULL);
 #else
-        /* The linked game logic is the AOT clicker, so the fallback assets
+        /* The linked game logic is the AOT Cubic Battle, so the fallback assets
          * must be its folder; ENJOER_GAME/--game still override. */
         const char *env = getenv("ENJOER_GAME");
         if (env) game_set_game_dir(env);
-        else game_set_game_dir("games/clicker");
+        else game_set_game_dir("game");
 #endif
     }
 
@@ -82,7 +82,7 @@ void game_init(void *native_window) {
     /* STRICT COMPILER: the game logic is AOT compiled; the manifest only
      * carries the title, the clear colour and the knobs both sides share. */
     ds_manifest_default(&manifest);
-    snprintf(manifest.title, sizeof(manifest.title), "Enjoer Clicker (AOT)");
+    snprintf(manifest.title, sizeof(manifest.title), "Cubic Battle 4 (AOT)");
 
     size_t len = 0;
     char *text = ds_files_read(DS_MANIFEST_NAME, &len);

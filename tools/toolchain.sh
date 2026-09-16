@@ -51,7 +51,7 @@ src/ds_image.c
 src/ds_png.c
 src/ds_font.c
 src/ds_ttf.c
-src/generated/clicker.c
+src/generated/cubicbattle.c
 src/game.c
 SOURCES
 }

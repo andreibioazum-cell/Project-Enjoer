@@ -53,14 +53,14 @@ static int write_bytes(const char *path, const void *bytes, size_t size) {
     return written == size;
 }
 
-static int run_compiled_clicker(Buffer *frame) {
+static int run_compiled_cubicbattle(Buffer *frame) {
     screen_w = 320;
     screen_h = 240;
     frame->width = frame->stride = screen_w;
     frame->height = screen_h;
-    /* The real game folder: the AOT clicker loads its bundled font.ttf and the
-     * text pass turns the recorded texts into glyph quads end to end. */
-    game_set_game_dir("games/clicker");
+    /* The only game folder: the checked-in Cubic Battle AOT output loads the
+     * same font and sprites that the packer puts into assets/game. */
+    game_set_game_dir("game");
     game_init(NULL);
     CHECK(!app_failed());
     CHECK(!game_is_interpreted()); /* STRICT: no VM */
@@ -70,42 +70,38 @@ static int run_compiled_clicker(Buffer *frame) {
     game_draw(frame);
     unsigned long first = checksum(frame);
     CHECK(first != 0);
-    CHECK(ds_render_text_count() == 4);
-    CHECK(enjoer_frame()->text_count == 4);
+    CHECK(ds_render_text_count() > 0);
+    CHECK(enjoer_frame()->text_count > 0);
     CHECK(enjoer_frame()->texts_resolved == 1);
     CHECK(ds_font_count() == 1);
     CHECK(ds_ttf_layer(0) >= 0);
     CHECK(enjoer_frame()->vertex_count > 0); /* glyph quads landed in the batch */
+    CHECK(frame_has(enjoer_frame(), "Cubic Battle 4"));
+    CHECK(frame_has(enjoer_frame(), "WARNING"));
 
     /* Pure 2D: drawing the same state twice paints identical pixels. */
     game_draw(frame);
     CHECK(checksum(frame) == first);
 
-    /* Keys reach the script only — with no 3D camera left, they change no pixel. */
+    /* The warning is modal, so input cannot start a battle underneath it. */
     game_key("ArrowLeft", 1);
     game_key("ArrowLeft", 0);
-    game_draw(frame);
-    CHECK(checksum(frame) == first);
-
     game_touch(160, 120, 0, 7);
-    game_draw(frame);
-    CHECK(frame_has(enjoer_frame(), "Счёт: 1"));
     game_touch(200, 130, 2, 7);
     game_touch(200, 130, 1, 7);
     game_cancel_input();
-    game_resize(240, 320);
-    CHECK(screen_w == 240 && screen_h == 320);
-    CHECK(ds_engine_width() == 240.0 && ds_engine_height() == 320.0);
-    /* The same numbers are not a relayout.  Being laid out again shows up as the
-     * engine size being set, so poison it and check that a no-op resize leaves
-     * it alone — a game that is relaid out under the finger is the shake a
-     * player reports, and Android sends this command for far less than a
-     * rotation. */
+    game_draw(frame);
+    CHECK(frame_has(enjoer_frame(), "Cubic Battle 4"));
+
+    game_resize(540, 960);
+    CHECK(screen_w == 540 && screen_h == 960);
+    CHECK(ds_engine_width() == 540.0 && ds_engine_height() == 960.0);
+    /* A same-size resize must not call the script again. */
     ds_engine_reset(7, 9);
-    game_resize(240, 320);
+    game_resize(540, 960);
     CHECK(ds_engine_width() == 7.0 && ds_engine_height() == 9.0);
-    game_resize(200, 100);
-    CHECK(ds_engine_width() == 200.0 && ds_engine_height() == 100.0);
+    game_resize(400, 400);
+    CHECK(ds_engine_width() == 400.0 && ds_engine_height() == 400.0);
     game_shutdown();
     return 0;
 }
@@ -241,35 +237,36 @@ static int run_manifest(void) {
     return 0;
 }
 
-static int run_aot_brick(Buffer *frame) {
-    /* In strict compiler mode, brick game is also AOT compiled via tools/aot.py
-     * For now we just test that AOT clicker works and that brick manifest parses */
-    game_set_game_dir("games/brick");
+static int run_aot_cubicbattle(Buffer *frame) {
+    /* The only shipped game is compiled ahead of time and its manifest is the
+     * source of truth for the Android package metadata. */
+    game_set_game_dir("game");
     screen_w = 640;
     screen_h = 360;
     frame->width = frame->stride = screen_w;
     frame->height = screen_h;
 
-    /* Parse manifest only, no VM */
     size_t len = 0;
     char *txt = ds_files_read(DS_MANIFEST_NAME, &len);
-    if (txt) {
+    CHECK(txt != NULL);
+    {
         DsGameManifest m;
         ds_manifest_default(&m);
-        if (ds_manifest_parse(&m, txt, len)) {
-            CHECK(m.script_count == 3);
-            CHECK(!strcmp(m.title, "Кирпич"));
-            CHECK(!strcmp(m.package, "com.cb4.brick"));
-        }
-        free(txt);
+        CHECK(ds_manifest_parse(&m, txt, len));
+        CHECK(m.script_count == 21);
+        CHECK(!strcmp(m.title, "Cubic Battle 4"));
+        CHECK(!strcmp(m.package, "com.cb4.cubicbattle"));
+        CHECK(m.image_count == 12);
+        CHECK(m.font_count == 1);
     }
+    free(txt);
 
-    /* Run AOT clicker again but with brick dir set to ensure no crash */
     game_init(NULL);
     CHECK(!game_is_interpreted());
     dt = 1.0 / 60.0;
     for (int i = 0; i < 3; ++i) { game_update(); game_draw(frame); }
-    CHECK(enjoer_frame()->vertex_count >= 0);
+    CHECK(enjoer_frame()->vertex_count > 0);
+    CHECK(frame_has(enjoer_frame(), "Cubic Battle 4"));
     game_shutdown();
     return 0;
 }
@@ -458,7 +455,7 @@ static int run_text_pass(void) {
     int vertex = 0;
     int32_t font = -1;
 
-    game_set_game_dir("games/clicker");
+    game_set_game_dir("game");
     ds_runtime_init();
     ds_engine_reset(640, 360);
     font = load_font("font.ttf");
@@ -580,7 +577,7 @@ int main(void) {
     Buffer frame = {0};
     frame.pixels = (uint32_t*)calloc((size_t)320*240, sizeof(uint32_t));
     CHECK(frame.pixels);
-    if (run_compiled_clicker(&frame)) return 1;
+    if (run_compiled_cubicbattle(&frame)) return 1;
     if (run_surface_transform()) return 1;
     free(frame.pixels);
     frame.pixels = (uint32_t*)calloc((size_t)640*640, sizeof(uint32_t));
@@ -589,8 +586,8 @@ int main(void) {
     if (run_manifest()) return 1;
     if (run_image_registry()) return 1;
     if (run_text_pass()) return 1;
-    if (run_aot_brick(&frame)) return 1;
+    if (run_aot_cubicbattle(&frame)) return 1;
     free(frame.pixels);
-    puts("PASS C game state + C++ 2D renderer + AOT compiled games + images/fonts (strict compiler, manual memory, speed like C)");
+    puts("PASS C game state + C++ 2D renderer + AOT compiled game + images/fonts (strict compiler, manual memory, speed like C)");
     return 0;
 }

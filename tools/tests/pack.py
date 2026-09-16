@@ -226,9 +226,12 @@ def main() -> int:
         manifest = pack(game, staging, check_only=True)
         check("icon.png" in manifest.images, f"icon.png должны упаковать: {manifest.images}")
 
-        # The real games still pack.
-        brick = pack(ROOT / "games" / "brick", work / "staging-brick", check_only=True)
-        check(brick.scripts == ["main.ds", "blocks.ds", "hud.ds"], str(brick.scripts))
+        # The shipped game still packs.
+        real_game = pack(ROOT / "game", work / "staging-game", check_only=True)
+        check(real_game.title == "Cubic Battle 4", real_game.title)
+        check(real_game.package == "com.cb4.cubicbattle", real_game.package)
+        check(real_game.scripts[0] == "main.ds", str(real_game.scripts))
+        check("battle.ds" in real_game.scripts and "ui.ds" in real_game.scripts, str(real_game.scripts))
 
         # AOT end to end: compile the game, run it against the staged assets.
         program = parse((game / "main.ds").read_text(encoding="utf-8"),

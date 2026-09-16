@@ -67,7 +67,7 @@ static void print_frame(const DsGameManifest *manifest, int frames) {
 }
 
 int main(int argc, char **argv) {
-    const char *directory = argc > 1 ? argv[1] : "games/brick";
+    const char *directory = argc > 1 ? argv[1] : "game";
     const int frames = argc > 2 ? atoi(argv[2]) : 4;
     const double dt = argc > 3 ? atof(argv[3]) : 1.0 / 60.0;
 

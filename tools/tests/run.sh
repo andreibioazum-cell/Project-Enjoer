@@ -31,7 +31,7 @@ enjoer_compile_one tools/tests/engine.c
 # aot.py builds its own driver separately, so no stray main() collides here.
 $CXX "$OUT"/log.o "$OUT"/state.o "$OUT"/enjoer_draw.o "$OUT"/dimscript_runtime.o \
     "$OUT"/ds_manifest.o "$OUT"/ds_files.o "$OUT"/ds_image.o "$OUT"/ds_png.o \
-    "$OUT"/ds_font.o "$OUT"/ds_ttf.o "$OUT"/clicker.o "$OUT"/game.o "$OUT"/vulkan_2d.o \
+    "$OUT"/ds_font.o "$OUT"/ds_ttf.o "$OUT"/cubicbattle.o "$OUT"/game.o "$OUT"/vulkan_2d.o \
     "$OUT"/engine.o $SANITIZE -lm -o "$OUT/engine"
 
 # No VM build — strictly compiler

@@ -1,6 +1,6 @@
--- Enjoer game manifest: Cubic Battle 4, порт игры со старого ДимСкрипта
--- (корневые *.ds) на новый. Без онлайна: сетевого API в языке нет,
--- кнопки онлайна показывают плашку «Недоступно».
+-- Enjoer game manifest: the one shipped game, Cubic Battle 4.
+-- Без онлайна: сетевого API в языке нет, кнопки онлайна показывают плашку
+-- «Недоступно».
 
 title = "Cubic Battle 4"
 author = "andreibioazum"

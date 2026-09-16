@@ -11,9 +11,6 @@ mkdir -p "$OUT"
 if [ "${ENJOER_CLEAN:-0}" = 1 ]; then
     rm -f "$OUT"/*.o
 fi
-# One-off: objects of files renamed during the 3D cube removal must not linger
-# next to their replacements, or the link below sees every symbol twice.
-rm -f "$OUT"/cube_game.o "$OUT"/vulkan_cube.o "$OUT"/cube_test.o "$OUT"/cube.o
 
 for source in $(enjoer_c_sources); do
     enjoer_compile_one "$source"

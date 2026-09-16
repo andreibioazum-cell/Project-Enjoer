@@ -1,6 +1,6 @@
 /* Game file access for Enjoer: a folder on the host, `assets/` inside the APK on
  * Android.  The engine only ever asks for a file by name, which is what lets the
- * same .ds sources run from `games/brick` during development and from the packed
+ * same .ds sources run from `game` during development and from the packed
  * archive on a device. */
 #ifndef DS_FILES_H
 #define DS_FILES_H

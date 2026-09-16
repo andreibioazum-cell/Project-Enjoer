@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Turn a game folder into the parts an APK needs.
 
-    tools/gamepack.py games/brick --staging staging
+    tools/gamepack.py game --staging staging
 
 The tool does three things and nothing else:
 
@@ -328,7 +328,7 @@ def describe(manifest: GameManifest, staging: Path,
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="gamepack", description=__doc__.splitlines()[0])
-    parser.add_argument("game", nargs="?", default="games/brick", help="папка игры (по умолчанию games/brick)")
+    parser.add_argument("game", nargs="?", default="game", help="папка игры (по умолчанию game)")
     parser.add_argument("--staging", default="staging", help="куда положить assets/game/")
     parser.add_argument("--manifest-out", default=None,
                         help="куда писать AndroidManifest.xml (по умолчанию — внутри --staging). "
