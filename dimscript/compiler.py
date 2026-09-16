@@ -1474,8 +1474,8 @@ class CCompiler:
     def emit_globals(self) -> None:
         for declaration in self.program.globals:
             dtype = self.model.global_types[declaration.name]
-            self.emit(f"static {self.c_type(dtype)} {self.global_c_names[declaration.name]} = "
-                      f"{self.default_value(dtype)};")
+            self.emit(f"static __attribute__((unused)) {self.c_type(dtype)} "
+                      f"{self.global_c_names[declaration.name]} = {self.default_value(dtype)};")
 
     def emit_function_declarations(self) -> None:
         for function in self.program.functions:
@@ -1483,8 +1483,11 @@ class CCompiler:
             parameter_text = ", ".join(
                 f"{self.c_type(dtype)} {_sanitize(parameter.name)}"
                 for parameter, dtype in zip(function.params, params)) or "void"
+            # A game may intentionally keep helper functions that are only used
+            # by one optional screen.  Keep -Werror enabled for the native build
+            # without making those valid, generated helpers a build failure.
             self.emit(f"static {self.c_type(self.model.function_returns[function.name])} "
-                      f"ds_fn_{_sanitize(function.name)}({parameter_text});")
+                      f"ds_fn_{_sanitize(function.name)}({parameter_text}) __attribute__((unused));")
         self.emit("")
 
     # -- lifecycle --------------------------------------------------------
@@ -1558,8 +1561,20 @@ class CCompiler:
         return []
 
     def emit_releases(self, function: FunctionDecl) -> None:
-        # No refcount, no auto free — manual like C, speed like C
-        return
+        """Release owned local strings before leaving a function.
+
+        Lists and structs are identity values whose ownership is explicit in
+        the script. String locals are different: every assignment duplicates
+        into the local slot, so the generated function owns that slot and must
+        release it on every return path. This is still manual memory — there
+        is no per-frame refcount or garbage collector — but it prevents a HUD
+        string assembled every frame from leaking forever.
+        """
+        parameters = {parameter.name for parameter in function.params}
+        for name, dtype in self.model.function_locals.get(function.name, {}).items():
+            if name in parameters or dtype != STRING:
+                continue
+            self.emit(f"ds_release_slot((void **)&{_sanitize(name)});")
 
     def emit_user_function(self, function: FunctionDecl) -> None:
         self.current_function = function
@@ -1569,7 +1584,8 @@ class CCompiler:
         parameter_text = ", ".join(
             f"{self.c_type(dtype)} {_sanitize(parameter.name)}"
             for parameter, dtype in zip(function.params, params)) or "void"
-        self.emit(f"static {self.c_type(return_type)} ds_fn_{_sanitize(function.name)}({parameter_text}) {{")
+        self.emit(f"static __attribute__((unused)) {self.c_type(return_type)} "
+                  f"ds_fn_{_sanitize(function.name)}({parameter_text}) {{")
         self.indent_level += 1
         for parameter in function.params:
             self.emit(f"(void){_sanitize(parameter.name)};")
@@ -1578,13 +1594,14 @@ class CCompiler:
         for name, dtype in local_types.items():
             if name in parameter_names:
                 continue
-            self.emit(f"{self.c_type(dtype)} {_sanitize(name)} = {self.default_value(dtype)};")
+            self.emit(f"{self.c_type(dtype)} {_sanitize(name)} __attribute__((unused)) = "
+                      f"{self.default_value(dtype)};")
         for statement in function.body:
             if isinstance(statement, For) and statement.variable not in local_types:
-                self.emit(f"int32_t {_sanitize(statement.variable)} = 0;")
+                self.emit(f"int32_t {_sanitize(statement.variable)} __attribute__((unused)) = 0;")
         for statement in function.body:
             self.emit_statement(statement)
-        # No auto releases — manual memory, speed like C
+        self.emit_releases(function)
         self.emit(self.return_statement(return_type, None))
         self.indent_level -= 1
         self.emit("}")
@@ -1728,6 +1745,7 @@ class CCompiler:
             assert function is not None
             return_type = self.model.function_returns[function.name]
             if statement.expression is None:
+                self.emit_releases(function)
                 self.emit(self.return_statement(return_type, None))
                 return
             self.temp_push()
@@ -1748,10 +1766,12 @@ class CCompiler:
                     self.emit_temp_frame(frame)
                     self.emit(f"DsString *{dup} = ds_string_dup({original});")
                     self.emit_temp_release(frame)
+                    self.emit_releases(function)
                     self.emit(f"return {dup};")
                 else:
                     self.emit_temp_frame(frame)
                     self.emit_temp_release(frame)
+                    self.emit_releases(function)
                     self.emit(f"return ds_string_dup({code});")
             elif return_type == VOID:
                 # `return f()` with a void call: run it, free its temps, leave.
@@ -1759,6 +1779,7 @@ class CCompiler:
                 if frame:
                     self.emit(f"{code};")
                     self.emit_temp_release(frame)
+                self.emit_releases(function)
                 self.emit("return;")
             elif frame:
                 # The value must survive its own temps: materialize, free, hand
@@ -1767,8 +1788,10 @@ class CCompiler:
                 self.emit_temp_frame(frame)
                 self.emit(f"{self.c_type(return_type)} {scratch} = ({code});")
                 self.emit_temp_release(frame)
+                self.emit_releases(function)
                 self.emit(f"return {scratch};")
             else:
+                self.emit_releases(function)
                 self.emit(f"return {code};")
             return
         raise TypeError(f"unsupported statement {statement!r}")
@@ -1840,7 +1863,14 @@ class CCompiler:
             return
         if isinstance(target, Name):
             name = self.assignable_name(target)
-            self.emit_assignment(name, value, self.expression_type(target))
+            dtype = self.expression_type(target)
+            # The semantic model records value expressions, while an
+            # assignment target is also a slot. Recover a global's declared
+            # type here so string globals use ds_string_replace rather than
+            # leaking their previous value on every toast update.
+            if dtype == UNKNOWN and target.name in self.model.global_types:
+                dtype = self.model.global_types[target.name]
+            self.emit_assignment(name, value, dtype)
             return
         if isinstance(target, Member):
             self.temp_push()

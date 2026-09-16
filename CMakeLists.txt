@@ -15,7 +15,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # android_native_app_glue.c into this target, and a warning there is not ours to
 # fix. The host test build keeps -Werror for every line of our code.
 option(ENJOER_USE_VULKAN "Use Vulkan for the Android 2D surface" ON)
-set(ENJOER_GAME_DIR "games/clicker" CACHE PATH "Game folder packed into assets/game/ (empty = none)")
+set(ENJOER_GAME_DIR "game" CACHE PATH "Game folder packed into assets/game/ (empty = none)")
 
 # ccache turns a one-file change into a one-file compile instead of a full
 # rebuild.  The APK script (tools/apk/build.sh) also prefers the Ninja
@@ -45,7 +45,7 @@ add_library(enjoer SHARED
     src/ds_png.c
     src/ds_font.c
     src/ds_ttf.c
-    src/generated/clicker.c
+    src/generated/cubicbattle.c
     src/vulkan_2d.cpp
     ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
 

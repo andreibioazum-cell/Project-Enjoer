@@ -1,8 +1,8 @@
 #!/bin/sh
 # Fast APK build for an Enjoer game — no Gradle, no daemon, no full rebuilds.
 #
-#   tools/apk/build.sh                        # games/clicker -> build-apk/dist/*.apk
-#   tools/apk/build.sh --game games/brick --abi all --install
+#   tools/apk/build.sh                        # game -> build-apk/dist/*.apk
+#   tools/apk/build.sh --game game --abi all --install
 #
 # The pipeline is the same tools Gradle would call, minus the minutes of
 # overhead: gamepack stages assets/game, CMake+NDK builds libds_game.so,
@@ -21,7 +21,7 @@
 # $SDK/ndk/<version>), a JDK (javac, keytool) and python3.
 set -eu
 
-GAME=games/clicker
+GAME=game
 BUILD=build-apk
 DIST=""
 ABI=arm64-v8a

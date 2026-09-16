@@ -1,8 +1,8 @@
 """Command line interface for the DimScript compiler and interpreter.
 
-    dimscriptc examples/clicker.ds --check          # one script
-    dimscriptc games/brick --run --frames 3          # a whole game folder
-    dimscriptc games/brick -o game.c --header game.h
+    dimscriptc examples/shapes.ds --check          # one script
+    dimscriptc game --run --frames 3          # a whole game folder
+    dimscriptc game -o game.c --header game.h
 
 A directory argument is a *game*: ``game.manifest`` plus ``.ds`` files, linked
 in ``require`` order and handed to the same frontend as a single file.

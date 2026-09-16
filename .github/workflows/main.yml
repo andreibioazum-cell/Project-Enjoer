@@ -41,15 +41,15 @@ jobs:
           set -eu
           # The manifest goes outside the packaging root: aapt would otherwise
           # also try to store staging/AndroidManifest.xml as a file.
-          python3 tools/gamepack.py games/brick --staging staging \
+          python3 tools/gamepack.py game --staging staging \
             --manifest-out apk-manifest/AndroidManifest.xml
           test -f staging/assets/game/game.manifest
           test -f staging/assets/game/main.ds
-          test -f staging/assets/game/blocks.ds
-          test -f staging/assets/game/hud.ds
+          test -f staging/assets/game/battle.ds
+          test -f staging/assets/game/ui.ds
           test -f apk-manifest/AndroidManifest.xml
-          grep -q 'package="com.cb4.brick"' apk-manifest/AndroidManifest.xml
-          grep -q 'android:label="Кирпич"' apk-manifest/AndroidManifest.xml
+          grep -q 'package="com.cb4.cubicbattle"' apk-manifest/AndroidManifest.xml
+          grep -q 'android:label="Cubic Battle 4"' apk-manifest/AndroidManifest.xml
 
       # Vulkan comes with the NDK, so the CI APK is the real GPU build.
       - name: Build native library
@@ -65,7 +65,7 @@ jobs:
             -DANDROID_NDK=$ANDROID_NDK_ROOT \
             -DCMAKE_BUILD_TYPE=Release \
             -DENJOER_USE_VULKAN=ON \
-            -DENJOER_GAME_DIR=games/brick 2>&1 | tee "$RUNNER_TEMP/cmake.log"; then
+            -DENJOER_GAME_DIR=game 2>&1 | tee "$RUNNER_TEMP/cmake.log"; then
             python3 tools/ci/annotate.py "$RUNNER_TEMP/cmake.log"
             exit 1
           fi

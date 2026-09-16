@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.cb4"
+    package="com.cb4.cubicbattle"
     android:versionCode="1"
     android:versionName="1.0">
 
@@ -9,16 +9,17 @@
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400003" android:required="true" />
 
     <application
-        android:label="Enjoer"
+        android:label="Cubic Battle 4"
         android:hasCode="true"
         android:allowBackup="false"
         android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
 
         <activity
             android:name="com.cb4.GameActivity"
-            android:label="Enjoer"
+            android:label="Cubic Battle 4"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:screenOrientation="sensorLandscape"
+            android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize|stateHidden"
             android:exported="true">
             <meta-data android:name="android.app.lib_name" android:value="ds_game" />
