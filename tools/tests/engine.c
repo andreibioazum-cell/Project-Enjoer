@@ -414,6 +414,33 @@ static int run_surface_transform(void) {
                 CHECK(fabsf(along * axis / (2.0f * step) - 1.0f) < 0.001f);
             }
         }
+        /* The invariant every check above is blind to: the mapping must be a
+         * rotation, never a mirror.  A reflection lands corners on corners and
+         * keeps step lengths, yet on the device it reads as "every letter
+         * backwards and upside down" — so pin the determinant (a rotation
+         * keeps it positive) and pin exact agreement with the point map, on
+         * asymmetric points a reflection would move: window pixel (x, y) must
+         * land on the very framebuffer pixel enjoer_surface_map() assigns it,
+         * which under the plain full-screen viewport is
+         * ndc = 2*u/size - 1 on *both* axes — the one negated axis is the
+         * whole bug. */
+        {
+            const float determinant = m[0] * m[5] - m[4] * m[1];
+            CHECK(determinant > 0.0f);
+        }
+        {
+            static const float px[6] = {0.0f, 2400.0f, 0.0f, 2400.0f, 37.0f, 2000.0f};
+            static const float py[6] = {0.0f, 0.0f, 1080.0f, 1080.0f, 91.0f, 555.0f};
+            int point = 0;
+            for (point = 0; point < 6; ++point) {
+                float want_u = 0.0f, want_v = 0.0f, got_x = 0.0f, got_y = 0.0f;
+                enjoer_surface_map(rotation, (float)fb_w, (float)fb_h, px[point], py[point],
+                                   &want_u, &want_v);
+                clip_of(m, px[point], py[point], &got_x, &got_y);
+                CHECK(fabsf(got_x - (2.0f * want_u / (float)fb_w - 1.0f)) < 0.001f);
+                CHECK(fabsf(got_y - (2.0f * want_v / (float)fb_h - 1.0f)) < 0.001f);
+            }
+        }
     }
     return 0;
 }

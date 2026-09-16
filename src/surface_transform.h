@@ -164,9 +164,20 @@ static inline void enjoer_surface_map(int rotation, float buffer_width, float bu
 }
 
 /* Column-major mat4 (GLSL layout) that turns the screen pixels a script draws
- * in into clip space for this framebuffer: the same orthographic flip the
- * renderer has always used, with the surface rotation folded in front of it.
- * `m` receives 16 floats. */
+ * in into clip space for this framebuffer: a plain 2D ortho with the surface
+ * rotation folded in front of it.  `m` receives 16 floats.
+ *
+ * The one rule this matrix must keep: window pixel (x, y) lands exactly on the
+ * framebuffer pixel enjoer_surface_map() assigns it.  With the plain
+ * full-screen viewport the renderer records (positive height), Vulkan's NDC
+ * runs (-1, -1) at the framebuffer's top-left and (+1, +1) at its bottom-right
+ * — the same direction the game's pixels run — so both axes take the SAME
+ * form: ndc = 2*u/width - 1, ndc = 2*v/height - 1.  Negating one axis is the
+ * classic OpenGL habit, and here it is not a flip but a mirror: the
+ * determinant goes negative, the "rotation" becomes a reflection, and on a
+ * pre-rotated surface that shows up as the landscape game with every letter
+ * backwards and upside down — readable only with the head tilted, and then
+ * still mirrored.  A rotation never mirrors text; a reflection always does. */
 static inline void enjoer_surface_ortho(int rotation, float buffer_width, float buffer_height,
                                         float *m) {
     float u0 = 0.0f, v0 = 0.0f;
@@ -184,14 +195,16 @@ static inline void enjoer_surface_ortho(int rotation, float buffer_width, float 
         const float d = uy - v0, e = vy - v0, f = v0; /* v = d*x + e*y + f */
         const float su = buffer_width > 0.0f ? 2.0f / buffer_width : 0.0f;
         const float sv = buffer_height > 0.0f ? 2.0f / buffer_height : 0.0f;
-        /* Vulkan clip space: x right, y down, so the framebuffer axis that runs
-         * down the screen is negated exactly like a plain 2D ortho would. */
+        /* Vulkan clip space: x right and y down across the framebuffer, so the
+         * framebuffer axis that runs down the screen is scaled like the one
+         * that runs across it — no sign is negated here, ever (see the
+         * function comment: a negation is a mirror, not a rotation). */
         m[0] = a * su;
         m[4] = b * su;
         m[12] = c * su - 1.0f;
-        m[1] = -d * sv;
-        m[5] = -e * sv;
-        m[13] = 1.0f - f * sv;
+        m[1] = d * sv;
+        m[5] = e * sv;
+        m[13] = f * sv - 1.0f;
         m[10] = 1.0f;
         m[14] = 0.5f;
         m[15] = 1.0f;
