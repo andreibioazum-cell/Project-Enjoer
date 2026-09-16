@@ -584,6 +584,14 @@ void ds_render_image(int32_t h,float x,float y,float w,float ht){
 }
 void ds_render_image_region(int32_t h,float x,float y,float w,float ht,float u0,float v0,float u1,float v1){
     if (!ds_image_valid(h)) return;
+    /* A script measures texture coordinates against the image it loaded — the
+     * whole sprite is (0,0)-(1,1) whatever the file's size.  The renderer
+     * samples an array layer that is as large as the biggest image, so the
+     * coordinates are restated in that space here: without this every sprite
+     * drawn on the GPU came out as the whole layer, a small picture in the top
+     * left corner of a quad that was mostly transparent margin. */
+    ds_image_layer_uv(h, &u0, &v0);
+    ds_image_layer_uv(h, &u1, &v1);
     enjoer_draw_image_quad(x,y,w,ht,u0,v0,u1,v1,h,current_color[0],current_color[1],current_color[2]);
     ++image_calls;
 }

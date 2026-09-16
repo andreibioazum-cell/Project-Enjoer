@@ -51,6 +51,25 @@ void ds_image_touch(void);
  * that gains a glyph per tap from re-uploading the whole array. */
 void ds_image_touch_layer(int32_t layer);
 
+/* Size of one layer of the renderer's texture array.
+ *
+ * A renderer that owns a sampler2DArray has to give every layer the same size,
+ * so the array is as wide and as tall as the largest image in it and a smaller
+ * image keeps a transparent margin on the right and at the bottom.  That makes
+ * "this image" and "the layer it lives in" two different coordinate spaces, and
+ * the draw batch has to be explicit about which one its UVs are measured in:
+ * the GPU samples the layer, so the batch carries layer coordinates, and
+ * ds_image_layer_uv() is the one conversion that every producer of texture
+ * coordinates goes through. */
+int32_t ds_image_layer_width(void);
+int32_t ds_image_layer_height(void);
+
+/* Converts a texture coordinate measured against `handle`'s own pixels into one
+ * measured against the array layer it is stored in, in place.  Whole-image
+ * coordinates (0,0)-(1,1) therefore land on the image's own rectangle inside
+ * the layer and never on the transparent margin around it. */
+void ds_image_layer_uv(int32_t handle, float *u, float *v);
+
 /* Handle of an already loaded file, or -1.  Lets `image.load` return the same
  * handle when a script asks for the same sprite sheet twice. */
 int32_t ds_image_find(const char *name);

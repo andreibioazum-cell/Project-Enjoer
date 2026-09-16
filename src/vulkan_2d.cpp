@@ -54,7 +54,15 @@ static uint32_t rgba(int r, int g, int b) {
 }
 
 /* Bilinear sample of a sprite sheet layer, clamped to the edge.  The GPU side
- * uses a linear filter with clamp-to-edge, so the two rasterizers agree. */
+ * uses a linear filter with clamp-to-edge, so the two rasterizers agree.
+ *
+ * The coordinates are measured against the whole layer, not against the image:
+ * a sampler2DArray gives every layer the size of the largest image, so a small
+ * sprite is stored in the layer's top left corner with a transparent margin
+ * around it.  Sampling the margin returns zero — the same thing the GPU reads
+ * from the padding the upload leaves behind — so a sprite whose quad is bigger
+ * than its picture comes out identical on both rasterizers instead of smearing
+ * the sprite's last row and column across the margin. */
 static void sample_image(const DsImage *image, float u, float v, int *red, int *green, int *blue,
                          int *alpha) {
     if (!image || !image->rgba || image->width < 1 || image->height < 1) {
@@ -62,8 +70,10 @@ static void sample_image(const DsImage *image, float u, float v, int *red, int *
         *alpha = 0;
         return;
     }
-    float x = u * (float)image->width - 0.5f;
-    float y = v * (float)image->height - 0.5f;
+    const float layer_width = (float)ds_image_layer_width();
+    const float layer_height = (float)ds_image_layer_height();
+    float x = u * layer_width - 0.5f;
+    float y = v * layer_height - 0.5f;
     const int x0 = (int)std::floor(x);
     const int y0 = (int)std::floor(y);
     const float fx = x - (float)x0;
@@ -71,8 +81,8 @@ static void sample_image(const DsImage *image, float u, float v, int *red, int *
     const auto texel = [&](int px, int py, int channel) -> float {
         if (px < 0) px = 0;
         if (py < 0) py = 0;
-        if (px >= image->width) px = image->width - 1;
-        if (py >= image->height) py = image->height - 1;
+        /* Outside the image is the layer's transparent margin. */
+        if (px >= image->width || py >= image->height) return 0.0f;
         return (float)image->rgba[((size_t)py * (size_t)image->width + (size_t)px) * 4 + channel] /
                255.0f;
     };
@@ -725,7 +735,7 @@ private:
         }
         const uint32_t dirty = ds_image_dirty_mask();
         if (!dirty) return;
-        if (upload_layers(layer_width_, layer_height_, dirty)) ds_image_clear_dirty();
+        if (upload_layers(layer_width_, layer_height_, dirty, false)) ds_image_clear_dirty();
     }
 
     void create_textures() {
@@ -800,7 +810,7 @@ private:
         layer_width_ = layer_width;
         layer_height_ = layer_height;
         upload_layers(layer_width, layer_height,
-                      count >= 32 ? 0xFFFFFFFFu : ((1u << count) - 1u));
+                      count >= 32 ? 0xFFFFFFFFu : ((1u << count) - 1u), true);
         ds_image_clear_dirty();
         texture_generation_ = ds_image_generation();
         app_log("Enjoer: %d image(s) uploaded as a %dx%d texture array", count, layer_width,
@@ -808,13 +818,31 @@ private:
     }
 
     /* Copies every layer named in `mask` into the array: a glyph added to one
-     * atlas is one small upload, not a rebuild of the texture set. */
-    bool upload_layers(int32_t layer_width, int32_t layer_height, uint32_t mask) {
+     * atlas is one small upload, not a rebuild of the texture set.
+     *
+     * Every layer owns its own slice of the staging buffer.  Sharing one slice
+     * looked cheaper but is not a copy at all: the CPU fills the buffer for
+     * layer 0, records a copy, overwrites the same bytes for layer 1, records
+     * another copy, and only then submits — every recorded copy reads whatever
+     * the buffer holds when the GPU reaches it, which is the last layer's
+     * pixels.  On a phone that draws the font atlas in place of every sprite,
+     * because the atlas is the layer that happens to be written last.
+     *
+     * `initial` is set only for the upload that follows vkCreateImage: a fresh
+     * image's contents are undefined, so it may be discarded.  A later upload
+     * must not discard anything, or the layers the mask leaves out — every
+     * sprite but the one atlas that grew a glyph — come back as whatever the
+     * driver finds in the memory it just invalidated. */
+    bool upload_layers(int32_t layer_width, int32_t layer_height, uint32_t mask, bool initial) {
         if (!command_pool_ || texture_image_ == VK_NULL_HANDLE) return false;
         const VkDeviceSize layer_bytes =
             static_cast<VkDeviceSize>(layer_width) * static_cast<VkDeviceSize>(layer_height) * 4u;
+        /* One slice per layer of the array, addressed by index: the offset of a
+         * layer then only depends on its handle, which is what lets the copies
+         * below be recorded in any order. */
+        const uint32_t slots = ds_image_count() > 0 ? static_cast<uint32_t>(ds_image_count()) : 1u;
         VkBufferCreateInfo buffer_info = vk_struct<VkBufferCreateInfo>(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
-        buffer_info.size = layer_bytes;
+        buffer_info.size = layer_bytes * slots;
         buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         VkBuffer staging = VK_NULL_HANDLE;
@@ -831,7 +859,7 @@ private:
         if (allocation.memoryTypeIndex == UINT32_MAX ||
             vkAllocateMemory(device_, &allocation, nullptr, &staging_memory) != VK_SUCCESS ||
             vkBindBufferMemory(device_, staging, staging_memory, 0) != VK_SUCCESS ||
-            vkMapMemory(device_, staging_memory, 0, layer_bytes, 0, &mapped) != VK_SUCCESS) {
+            vkMapMemory(device_, staging_memory, 0, layer_bytes * slots, 0, &mapped) != VK_SUCCESS) {
             if (staging) vkDestroyBuffer(device_, staging, nullptr);
             if (staging_memory) vkFreeMemory(device_, staging_memory, nullptr);
             return false;
@@ -850,7 +878,11 @@ private:
         VkImageMemoryBarrier to_transfer = vk_struct<VkImageMemoryBarrier>(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER);
         to_transfer.srcAccessMask = 0;
         to_transfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        to_transfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        /* A live image keeps its layers: only a freshly created one may be
+         * discarded, and discarding anything else is what turns every sprite
+         * the mask does not name into a frame of noise. */
+        to_transfer.oldLayout =
+            initial ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         to_transfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         to_transfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         to_transfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -865,10 +897,13 @@ private:
             if (!image || !image->rgba) continue;
             if (!(mask & (1u << static_cast<uint32_t>(index)))) continue;
             /* Zero the padding, then copy row by row: a smaller image keeps its
-             * transparent border instead of repeating the last row. */
-            std::memset(mapped, 0, static_cast<size_t>(layer_bytes));
+             * transparent border instead of repeating the last row.  The slice
+             * belongs to this layer alone, so it survives until the GPU reads
+             * it and no layer can overwrite another one's pixels. */
+            uint8_t *slice = static_cast<uint8_t *>(mapped) + static_cast<size_t>(index) * layer_bytes;
+            std::memset(slice, 0, static_cast<size_t>(layer_bytes));
             for (int32_t row = 0; row < image->height; ++row)
-                std::memcpy(static_cast<uint8_t *>(mapped) + static_cast<size_t>(row) * layer_width * 4,
+                std::memcpy(slice + static_cast<size_t>(row) * layer_width * 4,
                             image->rgba + static_cast<size_t>(row) * image->width * 4,
                             static_cast<size_t>(image->width) * 4);
             /* Vulkan gained an sType member on VkBufferImageCopy over time, so
@@ -878,7 +913,7 @@ private:
 #ifdef VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY
             copy.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY;
 #endif
-            copy.bufferOffset = 0;
+            copy.bufferOffset = static_cast<VkDeviceSize>(index) * layer_bytes;
             copy.bufferRowLength = static_cast<uint32_t>(layer_width);
             copy.bufferImageHeight = static_cast<uint32_t>(layer_height);
             copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<uint32_t>(index), 1};

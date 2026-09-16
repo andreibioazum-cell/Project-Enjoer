@@ -573,6 +573,99 @@ static int run_image_registry(void) {
     return 0;
 }
 
+/* The texture array gives every layer the size of the largest image, so "the
+ * whole image" and "the whole layer" are two different rectangles once one
+ * sprite is smaller than another.  A batch that states its coordinates against
+ * the image while the GPU samples against the layer draws every sprite as the
+ * layer: the picture squeezed into the top left corner of a quad that is
+ * otherwise transparent margin, which on a phone is a field of stretched font
+ * atlas where the grass and the cubes should be. */
+static int run_layer_uv(void) {
+    ds_runtime_init();
+    {
+        const int32_t big_w = 8, big_h = 8;
+        uint8_t *big = (uint8_t *)calloc((size_t)(big_w * big_h * 4), 1);
+        uint8_t *small = (uint8_t *)calloc(4, 1);
+        CHECK(big && small);
+        const int32_t large = ds_image_add("large.png", big, big_w, big_h);
+        const int32_t tiny = ds_image_add("tiny.png", small, 1, 1);
+        CHECK(large == 0 && tiny == 1);
+
+        /* The layer is the largest image in the registry. */
+        CHECK(ds_image_layer_width() == big_w);
+        CHECK(ds_image_layer_height() == big_h);
+
+        /* Whole-image coordinates become the image's own rectangle inside the
+         * layer: the 1x1 sprite covers one texel of eight, not all of them. */
+        float u = 1.0f, v = 1.0f;
+        ds_image_layer_uv(tiny, &u, &v);
+        CHECK(fabsf(u - 1.0f / (float)big_w) < 0.0001f);
+        CHECK(fabsf(v - 1.0f / (float)big_h) < 0.0001f);
+        u = 1.0f;
+        v = 1.0f;
+        ds_image_layer_uv(large, &u, &v);
+        CHECK(fabsf(u - 1.0f) < 0.0001f && fabsf(v - 1.0f) < 0.0001f);
+
+        /* And that is what the batch carries for a script's render.image: the
+         * sprite's rectangle in the layer, never the layer's own (0,0)-(1,1). */
+        enjoer_frame_begin(16, 16);
+        ds_render_color(1.0f, 1.0f, 1.0f);
+        ds_render_image(tiny, 0.0f, 0.0f, 8.0f, 8.0f);
+        CHECK(enjoer_frame()->vertex_count == 6);
+        for (int index = 0; index < 6; ++index) {
+            const EnjoerVertex *vertex = &enjoer_frame()->vertices[index];
+            CHECK(vertex->layer == (float)tiny);
+            CHECK(vertex->u >= 0.0f && vertex->u <= 1.0f / (float)big_w + 0.0001f);
+            CHECK(vertex->v >= 0.0f && vertex->v <= 1.0f / (float)big_h + 0.0001f);
+        }
+        /* The quad spans the sprite's rectangle: the far corner is not (0,0). */
+        CHECK(enjoer_frame()->vertices[2].u > 0.0f);
+        CHECK(enjoer_frame()->vertices[2].v > 0.0f);
+        enjoer_frame_clear(16, 16);
+
+        /* A region is measured the same way: half of the sprite is half of its
+         * rectangle, wherever the sprite sits inside the layer. */
+        enjoer_frame_begin(16, 16);
+        ds_render_image_region(tiny, 0.0f, 0.0f, 8.0f, 8.0f, 0.0f, 0.0f, 0.5f, 0.5f);
+        CHECK(fabsf(enjoer_frame()->vertices[2].u - 0.5f / (float)big_w) < 0.0001f);
+        CHECK(fabsf(enjoer_frame()->vertices[2].v - 0.5f / (float)big_h) < 0.0001f);
+        enjoer_frame_clear(16, 16);
+    }
+    ds_runtime_shutdown();
+    return 0;
+}
+
+/* Every textured quad the game and the text pass emit has to stay inside its
+ * image's rectangle: outside it is the layer's transparent margin, and a glyph
+ * that reaches into the margin samples its neighbour's ink instead. */
+static int run_uv_within_images(Buffer *frame) {
+    screen_w = 640;
+    screen_h = 360;
+    frame->width = frame->stride = screen_w;
+    frame->height = screen_h;
+    game_set_game_dir("game");
+    game_init(NULL);
+    CHECK(!app_failed());
+    dt = 1.0 / 60.0;
+    game_update();
+    game_draw(frame);
+    CHECK(enjoer_frame()->vertex_count > 0);
+    for (int index = 0; index < enjoer_frame()->vertex_count; ++index) {
+        const EnjoerVertex *vertex = &enjoer_frame()->vertices[index];
+        if (vertex->layer < 0.0f) continue;
+        const int32_t handle = (int32_t)(vertex->layer + 0.5f);
+        const float width = (float)ds_image_width(handle);
+        const float height = (float)ds_image_height(handle);
+        const float layer_width = (float)ds_image_layer_width();
+        const float layer_height = (float)ds_image_layer_height();
+        CHECK(ds_image_valid(handle));
+        CHECK(vertex->u >= 0.0f && vertex->u <= width / layer_width + 0.001f);
+        CHECK(vertex->v >= 0.0f && vertex->v <= height / layer_height + 0.001f);
+    }
+    game_shutdown();
+    return 0;
+}
+
 int main(void) {
     Buffer frame = {0};
     frame.pixels = (uint32_t*)calloc((size_t)320*240, sizeof(uint32_t));
@@ -585,6 +678,8 @@ int main(void) {
     if (run_assets(&frame)) return 1;
     if (run_manifest()) return 1;
     if (run_image_registry()) return 1;
+    if (run_layer_uv()) return 1;
+    if (run_uv_within_images(&frame)) return 1;
     if (run_text_pass()) return 1;
     if (run_aot_cubicbattle(&frame)) return 1;
     free(frame.pixels);
