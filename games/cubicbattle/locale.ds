@@ -1,0 +1,239 @@
+-- locale.ds — все строки игры на двух языках (порт старого locale.ds).
+-- Строки онлайна (вход, чат, бан, реконнект) удалены вместе с онлайном;
+-- вместо них — пара строк для плашки «Недоступно».
+
+tr_play(): string {
+    if language == 1 then
+        return "Играть"
+    }
+    return "Play"
+}
+
+tr_settings(): string {
+    if language == 1 then
+        return "Настройки"
+    }
+    return "Settings"
+}
+
+tr_solo(): string {
+    if language == 1 then
+        return "Соло"
+    }
+    return "Solo"
+}
+
+tr_online(): string {
+    if language == 1 then
+        return "Онлайн"
+    }
+    return "Online"
+}
+
+tr_back(): string {
+    if language == 1 then
+        return "Назад"
+    }
+    return "Back"
+}
+
+tr_punch(): string {
+    if language == 1 then
+        return "Удар"
+    }
+    return "Punch"
+}
+
+tr_tap_to_return(): string {
+    if language == 1 then
+        return "Нажмите, чтобы выйти"
+    }
+    return "Tap to return"
+}
+
+tr_victory(): string {
+    if language == 1 then
+        return "Победа!"
+    }
+    return "Victory!"
+}
+
+tr_defeat(): string {
+    if language == 1 then
+        return "Поражение"
+    }
+    return "Defeat"
+}
+
+-- Плашка при нажатии на кнопки онлайна: выглядит и ведёт себя как тост
+-- достижения, только с другим текстом.
+tr_unavailable_title(): string {
+    if language == 1 then
+        return "НЕДОСТУПНО"
+    }
+    return "UNAVAILABLE"
+}
+
+tr_unavailable_body(): string {
+    if language == 1 then
+        return "Онлайн пока недоступен"
+    }
+    return "Online is not available yet"
+}
+
+tr_no_connection(): string {
+    if language == 1 then
+        return "Нет соединения"
+    }
+    return "No connection"
+}
+
+tr_leaderboard(): string {
+    if language == 1 then
+        return "Лидерборд"
+    }
+    return "Leaderboard"
+}
+
+tr_account(): string {
+    if language == 1 then
+        return "Аккаунт"
+    }
+    return "Account"
+}
+
+tr_achievements(): string {
+    if language == 1 then
+        return "Достижения"
+    }
+    return "Achievements"
+}
+
+tr_achievements_title(): string {
+    if language == 1 then
+        return "Достижения"
+    }
+    return "Achievements"
+}
+
+-- Все названия и описания достижений переведены на оба языка: RU и EN.
+tr_achievement_welcome(): string {
+    if language == 1 then
+        return "Привет!"
+    }
+    return "Hello!"
+}
+
+tr_achievement_welcome_desc(): string {
+    if language == 1 then
+        return "Зайти в игру впервые"
+    }
+    return "Enter the game for the first time"
+}
+
+tr_achievement_grass(): string {
+    if language == 1 then
+        return "Потрогай траву"
+    }
+    return "Touch grass"
+}
+
+tr_achievement_grass_desc(): string {
+    if language == 1 then
+        return "Собери всех персонажей в игре"
+    }
+    return "Collect all the characters in the game"
+}
+
+tr_achievement_open(): string {
+    if language == 1 then
+        return "Получено"
+    }
+    return "Unlocked"
+}
+
+tr_achievement_locked(): string {
+    if language == 1 then
+        return "Не получено"
+    }
+    return "Locked"
+}
+
+tr_achievement_toast_title(): string {
+    if language == 1 then
+        return "ДОСТИЖЕНИЕ"
+    }
+    return "ACHIEVEMENT"
+}
+
+tr_achievement_first_win(): string {
+    if language == 1 then
+        return "Первая победа"
+    }
+    return "First win"
+}
+
+tr_achievement_first_win_desc(): string {
+    if language == 1 then
+        return "Выиграть первый бой"
+    }
+    return "Win your first battle"
+}
+
+tr_achievement_first_buy(): string {
+    if language == 1 then
+        return "Покупка"
+    }
+    return "First purchase"
+}
+
+tr_achievement_first_buy_desc(): string {
+    if language == 1 then
+        return "Купить первого персонажа"
+    }
+    return "Buy your first character"
+}
+
+-- Предупреждение об эпилепсии — оба языка сразу, язык настроек не важен.
+-- Вторая строка говорит о вспышках эффектов в бою (диско-режим жил в онлайне,
+-- которого в порте нет).
+tr_warn_title_en(): string {
+    return "WARNING"
+}
+
+tr_warn_title_ru(): string {
+    return "ВНИМАНИЕ"
+}
+
+tr_warn_en1(): string {
+    return "This game contains bright flashes"
+}
+
+tr_warn_en2(): string {
+    return "and flashing effects in battle."
+}
+
+tr_warn_en3(): string {
+    return "If you have epilepsy or are sensitive"
+}
+
+tr_warn_en4(): string {
+    return "to light, please play with caution."
+}
+
+tr_warn_ru1(): string {
+    return "В игре есть яркие вспышки и эффекты"
+}
+
+tr_warn_ru2(): string {
+    return "в бою."
+}
+
+tr_warn_ru3(): string {
+    return "При эпилепсии или чувствительности"
+}
+
+tr_warn_ru4(): string {
+    return "к свету играйте осторожно."
+}
+

@@ -1,0 +1,197 @@
+-- enemy_update.ds — главный конечный автомат бота (update_enemy из старого
+-- battle.ds): замах -> удар -> отход, уклонение от удара игрока и обычное
+-- сближение с «человечными» паузами и ошибками.
+
+update_enemy() {
+    enemy_track_player()
+    enemy.mvx = 0.0
+    enemy.mvy = 0.0
+    enemy.wobble_t = enemy.wobble_t + DT
+    if enemy_tick_timers() == 1.0 then
+        return
+    }
+
+    local dx = player.x - enemy.x
+    local dy = player.y - enemy.y
+    local d = math.sqrt(dx * dx + dy * dy)
+    if d < 1.0 then
+        d = 1.0
+    }
+    local pr = player.size * 0.65
+    local reach = enemy_punch_reach * U + pr
+
+    -- замах
+    if enemy.state == 1.0 then
+        enemy.state_time = enemy.state_time - DT
+        if enemy.state_time > enemy_lock_time then
+            enemy_turn_prediction()
+        }
+        enemy_predict(enemy_lead)
+        local adx = aim_tx - enemy.x
+        local ady = aim_ty - enemy.y
+        local ad = math.sqrt(adx * adx + ady * ady)
+        if ad < 1.0 then
+            ad = 1.0
+        }
+        if ad > reach - enemy_hit_margin * U then
+            enemy_move(adx / ad * bot_speed * U * 0.85, ady / ad * bot_speed * U * 0.85)
+        }
+        if enemy.state_time <= 0.0 then
+            enemy.state = 2.0
+            enemy.state_time = enemy_punch_time
+            enemy.hit = 0.0
+        }
+        return
+    }
+
+    -- удар
+    if enemy.state == 2.0 then
+        enemy.state_time = enemy.state_time - DT
+        if enemy.hit == 0.0 and player_in_enemy_punch() == 1.0 then
+            -- иногда человек промахивается даже в упор
+            if rint(100.0) >= enemy_human_miss * 100.0 or rint(100.0) < 30.0 then
+                enemy.hit = 1.0
+                if revive_prot <= 0.0 then
+                    take_damage(enemy_damage)
+                    if player.hp <= 0.0 then
+                        player.hp = 0.0
+                        if try_revive() == 0.0 then
+                            finish_game(2)
+                            return
+                        }
+                    }
+                }
+            }
+        }
+        if enemy.state_time <= 0.0 then
+            enemy.state = 3.0
+            enemy.state_time = enemy_recovery
+            enemy.cooldown = enemy_roll_cooldown()
+            if enemy.hit == 1.0 and enemy_free_window() == 1.0 then
+                enemy.cooldown = enemy_cooldown_min * 0.7
+                enemy.think = 0.0
+            } else {
+                enemy.think = enemy_think_min +
+                    math.random() * (enemy_think_max - enemy_think_min)
+            }
+        }
+        return
+    }
+
+    -- отход: остаёмся лицом к игроку, готовы бить снова
+    if enemy.state == 3.0 then
+        enemy.state_time = enemy.state_time - DT
+        if enemy_free_window() == 0.0 and d < reach * 0.85 then
+            enemy_predict(0.0)
+            enemy_engage(reach * 0.95)
+        }
+        enemy_face_player()
+        if enemy.state_time <= 0.0 then
+            enemy.state = 0.0
+            if enemy.flank <= 0.0 then
+                enemy_pick_flank()
+                enemy.flank = enemy_flank_time + rf100() * 0.4
+            }
+        }
+        return
+    }
+
+    -- уклонение: кривой уворот в сторону от замаха игрока
+    if enemy.state == 4.0 then
+        enemy.state_time = enemy.state_time - DT
+        local dpx = math.cos(player.angle)
+        local dpy = math.sin(player.angle)
+        local dodge_err = (rf100() - 0.5) * 0.6
+        local dvx = 0.0 - dpy * enemy.strafe * bot_dodge_speed * U * (0.7 + dodge_err) -
+            dpx * bot_speed * U * 0.25
+        local dvy = dpx * enemy.strafe * bot_dodge_speed * U * (0.7 + dodge_err) -
+            dpy * bot_speed * U * 0.25
+        enemy_move(dvx, dvy)
+        enemy_face_motion()
+        if enemy.state_time <= 0.0 then
+            enemy.state = 0.0
+            enemy.dodge_cd = enemy_dodge_cooldown + rf100() * 0.3
+            enemy.cooldown = 0.0
+            enemy.think = 0.08
+        }
+        return
+    }
+
+    -- реакция на удар игрока — не всегда уклоняется, иногда криво
+    if punch_left > 0.0 and punch_left <= punch_time - enemy.react and
+        enemy.dodge_cd <= 0.0 and enemy_in_danger() == 1.0 then
+        if enemy.react <= 0.0 then
+            if rint(100.0) < enemy_human_dodge_fail * 100.0 then
+                -- шанс не увернуться: стоит и получает
+            } else {
+                enemy_pick_flank()
+                if rint(100.0) < 18.0 then
+                    enemy.strafe = 0.0 - enemy.strafe
+                }
+                enemy.state = 4.0
+                enemy.state_time = enemy_dodge_time + (rf100() - 0.5) * 0.08
+                enemy.react = enemy_human_react_min +
+                    math.random() * (enemy_human_react_max - enemy_human_react_min)
+                return
+            }
+        }
+    }
+
+    -- окно после промаха игрока: бьём в ответ или иногда делаем фейнт
+    if enemy_free_window() == 1.0 then
+        enemy.think = 0.0
+        if enemy.cooldown <= 0.0 and (d <= reach or enemy_would_hit() == 1.0) then
+            if rint(100.0) < 12.0 then
+                enemy_pick_flank()
+                enemy.flank = enemy_flank_time
+                enemy.think = 0.12
+                enemy_engage(reach * 1.2)
+                enemy_face_motion()
+                return
+            }
+            if start_enemy_attack() == 1.0 then
+                return
+            }
+            -- ещё не довернулся: разворачиваемся, не замирая
+            enemy_predict(enemy_lead)
+            enemy_engage(reach * 0.55)
+            enemy_face_player()
+            return
+        }
+        enemy_predict(enemy_lead)
+        enemy_engage(reach * 0.55)
+        if d <= reach then
+            enemy_face_player()
+        } else {
+            enemy_face_motion()
+        }
+        return
+    }
+
+    if enemy.cooldown <= 0.0 and enemy.think <= 0.0 and
+        (d <= reach * 0.95 or enemy_would_hit() == 1.0) then
+        -- человечная задержка — бьёт не мгновенно
+        if enemy.react <= 0.0 then
+            if start_enemy_attack() == 1.0 then
+                return
+            }
+        }
+    }
+
+    if enemy.flank <= 0.0 then
+        enemy_pick_flank()
+        enemy.flank = enemy_flank_time
+    }
+
+    local desired = reach * 0.62
+    if d < enemy_min_distance * U * 0.75 then
+        desired = enemy_min_distance * U * 0.75
+    }
+    enemy_predict(enemy_lead)
+    enemy_engage(desired)
+    if d <= reach then
+        enemy_face_player()
+    } else {
+        enemy_face_motion()
+    }
+}

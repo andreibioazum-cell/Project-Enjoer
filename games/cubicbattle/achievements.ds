@@ -1,0 +1,95 @@
+-- achievements.ds — страница достижений и открытие тостов
+-- (порт из старого menu.ds).
+-- Раньше флаги зеркалировались с сервера, теперь живут только в сессии;
+-- «Привет!» открывается при первом заходе, «Потрогай траву» — когда
+-- собраны все открываемые классы.
+
+-- Показать тост: заголовок «ДОСТИЖЕНИЕ» и название награды по её биту.
+show_achievement_toast(bit: float) {
+    ach_toast_title = tr_achievement_toast_title()
+    ach_toast_body = tr_achievement_welcome()
+    if bit == ACH_FIRST_WIN then
+        ach_toast_body = tr_achievement_first_win()
+    }
+    if bit == ACH_FIRST_BUY then
+        ach_toast_body = tr_achievement_first_buy()
+    }
+    if bit == ACH_ALL_CHARACTERS then
+        ach_toast_body = tr_achievement_grass()
+    }
+    ach_toast_t = ACH_TOAST_DURATION
+}
+
+-- Плашка «Недоступно» для кнопок, которые вели онлайн-экраны:
+-- по требованию оформляем её тем же тостом, что и достижение.
+show_unavailable_toast() {
+    ach_toast_title = tr_unavailable_title()
+    ach_toast_body = tr_unavailable_body()
+    ach_toast_t = ACH_TOAST_DURATION
+}
+
+check_achievements() {
+    -- «Привет!»: первый запуск, флага ещё не было.
+    if achievement_welcome == 0 then
+        achievement_welcome = 1
+        show_achievement_toast(ACH_WELCOME)
+    }
+    -- Обычный доступен сразу, поэтому для полного набора нужны три
+    -- открываемых класса: Азум, Дед Мороз и буК.
+    if achievement_all_characters == 0 and azum_owned == 1 and
+        santa_owned == 1 and ebuc_owned == 1 then
+        achievement_all_characters = 1
+        show_achievement_toast(ACH_ALL_CHARACTERS)
+    }
+}
+
+-- Карточка одного достижения: закрытая — тёмно-фиолетовая плашка,
+-- полученная — яркая, как кнопки. Без кружка-медали, текст всегда белый.
+draw_achievement_card(y: float, h: float, title: string,
+    desc: string, unlocked: float) {
+    local x = 48.0 * U
+    local w = engine.width() - 96.0 * U
+    local bg = PURPLE_DARK
+    local status = tr_achievement_locked()
+    if unlocked == 1.0 then
+        bg = PURPLE
+        status = tr_achievement_open()
+    }
+    roundrect(x, y, w, h, 22.0 * U, bg, 1.0)
+    draw_text(title, x + 28.0 * U, y + h * 0.12, 1.1 * U, WHITE)
+    draw_text(desc, x + 28.0 * U, y + h * 0.48, 0.75 * U, WHITE)
+    draw_text(status, x + 28.0 * U, y + h * 0.75, 0.7 * U, WHITE)
+}
+
+ach_card_step(): float {
+    local y0 = back_y * U + bh() + 56.0 * U
+    local step = (engine.height() - y0 - 12.0 * U) / 4.0
+    if step > 124.0 * U then
+        step = 124.0 * U
+    }
+    return step
+}
+
+draw_achievements() {
+    paint(BG_DARK)
+    render.rect(0.0, 0.0, engine.width(), engine.height())
+    ctext(tr_achievements_title(), back_y * U + bh() + 12.0 * U, 1.6 * U, WHITE)
+    local y0 = back_y * U + bh() + 56.0 * U
+    local step = ach_card_step()
+    local h = step - 8.0 * U
+    draw_achievement_card(y0, h, tr_achievement_welcome(),
+        tr_achievement_welcome_desc(), achievement_welcome)
+    draw_achievement_card(y0 + step, h, tr_achievement_first_win(),
+        tr_achievement_first_win_desc(), achievement_first_win)
+    draw_achievement_card(y0 + step * 2.0, h, tr_achievement_first_buy(),
+        tr_achievement_first_buy_desc(), achievement_first_buy)
+    draw_achievement_card(y0 + step * 3.0, h, tr_achievement_grass(),
+        tr_achievement_grass_desc(), achievement_all_characters)
+    draw_back()
+}
+
+touch_achievements(x: float, y: float) {
+    if back_hit(x, y) == 1.0 then
+        start_transition(0)
+    }
+}

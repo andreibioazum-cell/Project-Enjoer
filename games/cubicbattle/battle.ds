@@ -1,0 +1,322 @@
+-- battle.ds — соло-бой: состояние, игрок, удары, ульты, конец матча и ввод
+-- (порт ядра старого battle.ds). Весь онлайн-код (remotes, чат, net_*) не
+-- перенесён — кнопка «Онлайн» в меню показывает плашку «Недоступно».
+
+-- ── Параметры классов ───────────────────────────────────────────────────
+class_idle_tex(cls: float): float {
+    if cls == 1 then
+        return tex_azum
+    }
+    if cls == 2 then
+        return tex_santa
+    }
+    if cls == 3 then
+        return tex_ebuc
+    }
+    return tex_ordinary
+}
+
+class_punch_tex(cls: float): float {
+    if cls == 1 then
+        return tex_azum_punch
+    }
+    if cls == 2 then
+        return tex_santa_punch
+    }
+    if cls == 3 then
+        return tex_ebuc_punch
+    }
+    return tex_ordinary_punch
+}
+
+class_punch_damage_for(cls: float, lv: float): float {
+    if cls == 2 then
+        return santa_damage
+    }
+    if cls == 3 then
+        return ebuc_damage
+    }
+    if cls == 0 and lv >= 1 then
+        return punch_damage * (1.0 + ordinary_damage_bonus)
+    }
+    return punch_damage
+}
+
+class_punch_damage(cls: float): float {
+    return class_punch_damage_for(cls, player_level)
+}
+
+player_max_hp_for(cls: float): float {
+    if cls == 3 then
+        return ebuc_hp
+    }
+    return 10.0
+}
+
+-- Уровни бука: 1 — у турели больше HP, 2 — спавн турели лечит, 3 — луч лечит.
+ebuc_station_hp_for(lv: float): float {
+    local h = ebuc_station_hp
+    if lv >= 1 then
+        h = h + ebuc_station_hp_bonus * 2.0
+    }
+    return h
+}
+
+santa_poison_time_for(lv: float): float {
+    return santa_poison_time
+}
+
+santa_poison_damage_for(lv: float): float {
+    local d = santa_poison_dps
+    if lv >= 1 then
+        d = d + santa_poison_damage_bonus
+    }
+    if lv >= 2 then
+        d = d + santa_poison_damage_bonus
+    }
+    return d
+}
+
+santa_freeze_time_for(lv: float): float {
+    local t = 3.0
+    if lv >= 3 then
+        t = t + santa_freeze_time_bonus
+    }
+    return t
+}
+
+-- ── Урон, лечение, возрождение ──────────────────────────────────────────
+take_damage(dmg: float) {
+    local reduction = 0.0
+    if player_class == 1 and azum_revived == 1 and player_level >= 1 then
+        reduction = azum_second_life_damage_reduction
+    }
+    reduction = clamp(reduction, 0.0, 0.9)
+    local real = dmg * (1.0 - reduction)
+    -- Станция бука впитывает урон, пока жива; лишний идёт в бука.
+    if player_class == 3 and station.active == 1.0 and real > 0.0 then
+        local absorbed = real
+        if absorbed > station.hp then
+            absorbed = station.hp
+        }
+        station.hp = station.hp - absorbed
+        real = real - absorbed
+        station_hit_t = station_hit_time
+        if station.hp <= 0.0 then
+            destroy_station()
+        }
+    }
+    player.hp = player.hp - real
+    if player.hp < 0.0 then
+        player.hp = 0.0
+    }
+}
+
+heal_after_attack() {
+    local amount = 0.0
+    if player_class == 1 and player_level >= 3 then
+        amount = azum_attack_heal
+    }
+    if player_class == 0 and player_level >= 3 then
+        amount = ordinary_attack_heal
+    }
+    if amount > 0.0 then
+        player.hp = clamp(player.hp + amount, 0.0, player.max_hp)
+    }
+}
+
+try_revive(): float {
+    if player.hp > 0.0 then
+        return 0.0
+    }
+    if player_class != 1 then
+        return 0.0
+    }
+    if azum_revived == 1 then
+        return 0.0
+    }
+    azum_revived = 1
+    player.hp = player.max_hp
+    revive_prot = 1.2
+    local k = 0
+    while k < 50 do {
+        local rx = 70.0 * U + rint(engine.width() - 140.0 * U)
+        local ry = 70.0 * U + rint(engine.height() - 140.0 * U)
+        if dist(rx, ry, enemy.x, enemy.y) > 200.0 * U then
+            player.x = rx
+            player.y = ry
+            k = 50
+        } else {
+            k = k + 1
+        }
+    }
+    return 1.0
+}
+
+tick_revive() {
+    if revive_prot > 0.0 then
+        revive_prot = revive_prot - DT
+        if revive_prot < 0.0 then
+            revive_prot = 0.0
+        }
+    }
+}
+
+-- Алерт победы/поражения нельзя закрыть alert_hold секунд после конца боя.
+tick_alert_hold() {
+    if finished != 0 and finish_t < alert_hold then
+        finish_t = finish_t + DT
+        if finish_t > alert_hold then
+            finish_t = alert_hold
+        }
+    }
+}
+
+tick_freeze() {
+    if player_freeze > 0.0 then
+        player_freeze = player_freeze - DT
+        if player_freeze < 0.0 then
+            player_freeze = 0.0
+        }
+    }
+    if player_freeze > 0.0 then
+        pfreeze_a = pfreeze_a + DT / freeze_fade_in
+    } else {
+        pfreeze_a = pfreeze_a - DT / freeze_fade_out
+    }
+    pfreeze_a = clamp(pfreeze_a, 0.0, 1.0)
+}
+
+tick_player_poison() {
+    if player_poison > 0.0 then
+        if player_poison_tick <= 0.0 then
+            player_poison_tick = santa_poison_tick_interval
+        }
+        player_poison = player_poison - DT
+        player_poison_tick = player_poison_tick - DT
+        if player_poison_tick <= 0.0 then
+            take_damage(player_poison_damage)
+            player_poison = 0.0
+            player_poison_tick = 0.0
+            player_poison_damage = 0.0
+        }
+        if player_poison <= 0.0 then
+            player_poison = 0.0
+            player_poison_tick = 0.0
+            player_poison_damage = 0.0
+        }
+    }
+    if player_poison > 0.0 then
+        ppoison_a = ppoison_a + DT / freeze_fade_in
+    } else {
+        ppoison_a = ppoison_a - DT / freeze_fade_out
+    }
+    ppoison_a = clamp(ppoison_a, 0.0, 1.0)
+}
+
+-- ── Сброс и старт боя ───────────────────────────────────────────────────
+reset_battle() {
+    player.x = engine.width() / 2.0
+    player.y = engine.height() / 2.0
+    player.angle = 0.0
+    player.max_hp = player_max_hp_for(player_class)
+    player.hp = player.max_hp
+    player.size = 25.0 * player_scale * U
+    enemy.size = 25.0 * enemy_scale * U
+    -- Здоровье врага всегда сбрасывается к стандартному перед боем.
+    enemy.max_hp = enemy_base_hp
+    enemy.hp = enemy.max_hp
+    enemy.state = 0.0
+    enemy.state_time = 0.0
+    enemy.cooldown = enemy_first_delay
+    enemy.hit = 0.0
+    enemy.dodge_cd = 0.0
+    enemy.think = 0.2
+    enemy.mvx = 0.0
+    enemy.mvy = 0.0
+    enemy.svx = 0.0
+    enemy.svy = 0.0
+    enemy.freeze = 0.0
+    enemy.freeze_slow = 1.0
+    enemy.poison = 0.0
+    enemy.poison_tick = 0.0
+    enemy.poison_damage = 0.0
+    enemy.aim_err = 0.0
+    enemy.hesit = 0.0
+    enemy.seen = 0.0
+    enemy.flank = 0.0
+    finished = 0
+    finish_t = 0.0
+    punch.active = 0.0
+    punch.hit = 0.0
+    punch_left = 0.0
+    punch_cd = 0.0
+    aim_id = -1
+    aim_a = 0.0
+    santa_follow = 0.0
+    azum_revived = 0
+    revive_prot = 0.0
+    cups_awarded = 0
+    gift.active = 0.0
+    gift.t = 0.0
+    gift.shot = 0.0
+    super_cd = 0.0
+    queued_punch = 0
+    queued_super = 0
+    super_id = -1
+    boom_t = 0.0
+    freeze_a = 0.0
+    super_windup = 0.0
+    station.active = 0.0
+    station.hp = 0.0
+    station.max_hp = 0.0
+    station_boom_xs.clear()
+    station_boom_ys.clear()
+    station_boom_ts.clear()
+    station_hit_t = 0.0
+    station_spawn_t = 0.0
+    station_heal_t = 0.0
+    ebuc_station_stack_x.clear()
+    ebuc_station_stack_y.clear()
+    ebuc_station_stack_hp.clear()
+    ebuc_station_stack_max.clear()
+    player_freeze = 0.0
+    player_freeze_slow = 1.0
+    pfreeze_a = 0.0
+    player_poison = 0.0
+    player_poison_tick = 0.0
+    player_poison_damage = 0.0
+    ppoison_a = 0.0
+    poison_a = 0.0
+    joy.x = 130.0 * U
+    joy.y = engine.height() - 150.0 * U
+    joy.r = 70.0 * U
+    atk_x = engine.width() - 140.0 * U
+    atk_y = engine.height() - 150.0 * U
+    atk2_x = engine.width() - 140.0 * U
+    atk2_y = engine.height() - 310.0 * U
+    drop_joy()
+    -- Пулы: леденцы и пыль.
+    candy_x.clear()
+    candy_y.clear()
+    local ci = 0
+    while ci < candy_count do {
+        candy_x.push(0.0)
+        candy_y.push(0.0)
+        ci = ci + 1
+    }
+    dust.clear()
+    dust_cd = 0.0
+    enemy_dust_cd = 0.0
+    local di = 0
+    while di < dust_max * dust_fields do {
+        dust.push(0.0)
+        di = di + 1
+    }
+}
+
+init_game() {
+    reset_battle()
+    spawn_enemy()
+    spawn_all_candies()
+}

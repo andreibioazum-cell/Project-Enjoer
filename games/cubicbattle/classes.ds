@@ -1,0 +1,399 @@
+-- classes.ds — экран классов: четыре карточки, скины Азума, бары статов
+-- (порт старого menu.ds; условия покупки/выбора те же).
+class_name(): string {
+    if player_class == 1 then
+        return tr_class_azum()
+    }
+    if player_class == 2 then
+        return tr_class_santa()
+    }
+    if player_class == 3 then
+        return tr_class_ebuc()
+    }
+    return tr_class_ordinary()
+}
+
+class_level_for(cls: float): float {
+    if cls == 1.0 then
+        return azum_level
+    }
+    if cls == 2.0 then
+        return santa_level
+    }
+    if cls == 3.0 then
+        return ebuc_level
+    }
+    return ordinary_level
+}
+
+class_levels_unlocked_for(cls: float): float {
+    if cls == 1.0 then
+        return azum_levels_unlocked
+    }
+    if cls == 2.0 then
+        return santa_levels_unlocked
+    }
+    if cls == 3.0 then
+        return ebuc_levels_unlocked
+    }
+    return ordinary_levels_unlocked
+}
+
+class_owned(cls: float): float {
+    if cls == 0.0 then
+        return 1.0
+    }
+    if cls == 1.0 then
+        return azum_owned
+    }
+    if cls == 2.0 then
+        return santa_owned
+    }
+    if cls == 3.0 then
+        return ebuc_owned
+    }
+    return 0.0
+}
+
+level_cost(n: float): float {
+    return level_base_cost + (n - 1.0) * level_cost_step
+}
+
+set_class_level(cls: float, lv: float, un: float) {
+    if cls == 1.0 then
+        azum_level = lv
+        azum_levels_unlocked = un
+        return
+    }
+    if cls == 2.0 then
+        santa_level = lv
+        santa_levels_unlocked = un
+        return
+    }
+    if cls == 3.0 then
+        ebuc_level = lv
+        ebuc_levels_unlocked = un
+        return
+    }
+    ordinary_level = lv
+    ordinary_levels_unlocked = un
+}
+
+load_selected_level() {
+    player_level = class_level_for(player_class)
+    levels_unlocked = class_levels_unlocked_for(player_class)
+}
+
+-- Раньше здесь же шло сохранение на сервер; теперь только копия в глобалы
+-- выбранного класса (экран уровней работает с player_level/levels_unlocked).
+save_progress() {
+    set_class_level(player_class, player_level, levels_unlocked)
+}
+
+-- ── Раскладка карточек ─────────────────────────────────────────────────
+CLS_GAP = 18.0
+
+cls_card_w(): float {
+    local available = engine.width() - 40.0 * U
+    local cw = (available - CLS_GAP * U * 3.0) / 4.0
+    if cw > 260.0 * U then
+        cw = 260.0 * U
+    }
+    if cw < 150.0 * U then
+        cw = 150.0 * U
+    }
+    return cw
+}
+
+cls_card_h(): float {
+    return 300.0 * U
+}
+
+cls_card_x(i: float): float {
+    local cw = cls_card_w()
+    local total = cw * 4.0 + CLS_GAP * U * 3.0
+    return (engine.width() - total) / 2.0 + i * (cw + CLS_GAP * U)
+}
+
+cls_card_y(): float {
+    return back_y * U + bh() + 16.0 * U
+}
+
+-- ── Карточка класса ──────────────────────────────────────────────────────
+class_tex(cls: float): float {
+    if cls == 1.0 then
+        return tex_azum
+    }
+    if cls == 2.0 then
+        return tex_santa
+    }
+    if cls == 3.0 then
+        return tex_ebuc
+    }
+    return tex_ordinary
+}
+
+draw_class_card(x: float, y: float, w: float, h: float, cls: float,
+    owned: float, cost: float, title: string, desc: string) {
+    local sel = 0.0
+    local locked = 0.0
+    if player_class == cls then
+        sel = 1.0
+    }
+    if cls != 0.0 and owned == 0.0 then
+        locked = 1.0
+        sel = 0.0
+    }
+    if sel == 1.0 then
+        roundrect(x - 5.0 * U, y - 5.0 * U, w + 10.0 * U, h + 10.0 * U,
+            26.0 * U, SEL_FRAME, 1.0)
+    }
+    roundrect(x, y, w, h, 22.0 * U, CARD_BG, 1.0)
+    local ts = 1.55 * U
+    local spr = 50.0 * ts
+    if cls == 1.0 and azum_skin == 1 then
+        -- Скин «Зомби» без текстуры — зелёный силуэт Азума, как и раньше.
+        sprite_tint(class_tex(cls), x + (w - spr) / 2.0, y + 12.0 * U, ts, ZOMBIE, 1.0)
+    } else {
+        sprite(class_tex(cls), x + (w - spr) / 2.0, y + 12.0 * U, ts)
+    }
+    local title_s = 1.0 * U
+    draw_text(title, x + (w - text_est(title, title_s)) / 2.0, y + 114.0 * U, title_s, WHITE)
+    local desc_s = 0.5 * U
+    draw_text(desc, x + (w - text_est(desc, desc_s)) / 2.0, y + 150.0 * U, desc_s, WHITE)
+    local lv = class_level_for(cls)
+    local lv_text = tr_level() .. " " .. num_str(lv)
+    local lv_s = 0.45 * U
+    draw_text(lv_text, x + (w - text_est(lv_text, lv_s)) / 2.0, y + 176.0 * U, lv_s, WHITE)
+    local cur = tr_cups()
+    if cls == 2.0 or cls == 3.0 then
+        cur = tr_candies()
+    }
+    if sel == 1.0 then
+        button_scaled(tr_class_selected(), x + 24.0 * U, y + h - 72.0 * U,
+            w - 48.0 * U, 48.0 * U, 0.55 * U)
+    } else {
+        if locked == 1.0 then
+            button_scaled(tr_buy_for(cost, cur), x + 24.0 * U, y + h - 72.0 * U,
+                w - 48.0 * U, 48.0 * U, 0.55 * U)
+        } else {
+            button_scaled(tr_class_pick(), x + 24.0 * U, y + h - 72.0 * U,
+                w - 48.0 * U, 48.0 * U, 0.55 * U)
+        }
+    }
+}
+
+-- ── Скины Азума ─────────────────────────────────────────────────────────
+skin_button(label: string, x: float, y: float, w: float, h: float,
+    sel: float, locked: float) {
+    local bg = PURPLE
+    if locked == 1.0 then
+        bg = PURPLE_DARK
+    }
+    if sel == 1.0 then
+        roundrect(x - 4.0 * U, y - 4.0 * U, w + 8.0 * U, h + 8.0 * U, 22.0 * U, SEL_FRAME, 1.0)
+    }
+    roundrect(x, y, w, h, 18.0 * U, bg, 1.0)
+    text_in_box(label, x, y, w, h, WHITE, 0.55 * U)
+}
+
+draw_skins_row(y: float, h: float) {
+    local label = tr_skins() .. ":"
+    local ls = 0.5 * U
+    draw_text(label, (engine.width() - text_est(label, ls)) / 2.0, y - 28.0 * U, ls, WHITE)
+    local sw = 200.0 * U
+    local sg = 16.0 * U
+    local x0 = (engine.width() - (sw * 2.0 + sg)) / 2.0
+    local sel0 = 0.0
+    if azum_skin == 0 then
+        sel0 = 1.0
+    }
+    local sel1 = 0.0
+    if azum_skin == 1 then
+        sel1 = 1.0
+    }
+    local locked = 0.0
+    if bp_level < 2 then
+        locked = 1.0
+    }
+    skin_button(tr_skin_normal(), x0, y, sw, h, sel0, 0.0)
+    skin_button(tr_skin_zombie(), x0 + sw + sg, y, sw, h, sel1, locked)
+}
+
+-- ── Бары статов выбранного класса ────────────────────────────────────────
+class_hp_of(cls: float): float {
+    if cls == 1.0 then
+        return 20.0
+    }
+    if cls == 3.0 then
+        return ebuc_hp
+    }
+    return 10.0
+}
+
+class_str_of(cls: float): float {
+    return class_punch_damage_for(cls, class_level_for(cls))
+}
+
+class_desc_of(cls: float): string {
+    if cls == 1.0 then
+        return tr_class_azum_desc()
+    }
+    if cls == 2.0 then
+        return tr_class_santa_desc()
+    }
+    if cls == 3.0 then
+        return tr_class_ebuc_desc()
+    }
+    return tr_class_ordinary_desc()
+}
+
+draw_stat_row(label: string, x: float, y: float, w: float, h: float,
+    cur: float, maxv: float, c: Palette) {
+    draw_text(label, x, y - 26.0 * U, 0.5 * U, WHITE)
+    hud_bar(x, y, w, h, cur, maxv, c, 0.0)
+}
+
+draw_class_stats() {
+    local bar_w = 520.0 * U
+    local bar_h = 26.0 * U
+    local bx = (engine.width() - bar_w) / 2.0
+    local hp_y = engine.height() - 110.0 * U
+    local st_y = engine.height() - 46.0 * U
+    local hp = class_hp_of(player_class)
+    local str = class_str_of(player_class)
+    ctext(class_desc_of(player_class), hp_y - 72.0 * U, 0.8 * U, WHITE)
+    draw_stat_row(tr_hp() .. ": " .. num_str(hp), bx, hp_y, bar_w, bar_h, hp, 20.0, RED)
+    draw_stat_row(tr_strength() .. ": " .. num_str(str), bx, st_y, bar_w, bar_h, str, 2.0, BLUE)
+}
+
+-- ── Выбор/покупка класса ─────────────────────────────────────────────────
+pick_class(cls: float) {
+    if class_owned(cls) == 1.0 then
+        player_class = cls
+        load_selected_level()
+        return
+    }
+    local bought = 0
+    if cls == 1.0 then
+        if cups >= azum_cost then
+            cups = cups - azum_cost
+            azum_owned = 1
+            bought = 1
+        }
+    }
+    if cls == 2.0 then
+        if candies >= santa_candy_cost then
+            candies = candies - santa_candy_cost
+            santa_owned = 1
+            bought = 1
+        }
+    }
+    if cls == 3.0 then
+        if candies >= ebuc_candy_cost then
+            candies = candies - ebuc_candy_cost
+            ebuc_owned = 1
+            bought = 1
+        }
+    }
+    if bought == 1 then
+        player_class = cls
+        load_selected_level()
+        -- Первая покупка класса открывает достижение «Покупка».
+        if achievement_first_buy == 0 then
+            achievement_first_buy = 1
+            show_achievement_toast(ACH_FIRST_BUY)
+        }
+        return
+    }
+    class_msg_t = msg_time
+}
+
+-- ── Экран ────────────────────────────────────────────────────────────────
+draw_classes() {
+    paint(BG_DARK)
+    render.rect(0.0, 0.0, engine.width(), engine.height())
+    local y = cls_card_y()
+    local cw = cls_card_w()
+    draw_class_card(cls_card_x(0.0), y, cw, cls_card_h(), 0.0, 1.0, 0.0,
+        tr_class_ordinary(), tr_class_ordinary_desc())
+    draw_class_card(cls_card_x(1.0), y, cw, cls_card_h(), 1.0, azum_owned,
+        azum_cost, tr_class_azum(), tr_class_azum_desc())
+    draw_class_card(cls_card_x(2.0), y, cw, cls_card_h(), 2.0, santa_owned,
+        santa_candy_cost, tr_class_santa(), tr_class_santa_desc())
+    draw_class_card(cls_card_x(3.0), y, cw, cls_card_h(), 3.0, ebuc_owned,
+        ebuc_candy_cost, tr_class_ebuc(), tr_class_ebuc_desc())
+    local by = y + cls_card_h() + CLS_GAP * U
+    local skin_h = 48.0 * U
+    if player_class == 1 then
+        -- Скины Азума: обычный и (после 2 уровня батл пасса) зомби.
+        draw_skins_row(by, skin_h)
+        by = by + skin_h + 10.0 * U
+    }
+    button_scaled(tr_levels(), (engine.width() - bw()) / 2.0, by, bw(), bh(), 0.9 * U)
+    local sy = by + bh() + 12.0 * U
+    draw_money()
+    if class_msg_t > 0.0 then
+        ctext_fade(tr_class_need_cups(), sy, 0.5 * U, WHITE, class_msg_t, msg_fade)
+    }
+    if skin_msg_t > 0.0 then
+        ctext_fade(tr_skin_zombie_locked(), sy, 0.5 * U, WHITE, skin_msg_t, msg_fade)
+    }
+    draw_class_stats()
+    draw_back()
+}
+
+touch_classes(x: float, y: float) {
+    if back_hit(x, y) == 1.0 then
+        start_transition(0)
+        return
+    }
+    local cy = cls_card_y()
+    local cw = cls_card_w()
+    if y >= cy and y <= cy + cls_card_h() then
+        if x >= cls_card_x(0.0) and x <= cls_card_x(0.0) + cw then
+            pick_class(0)
+            return
+        }
+        if x >= cls_card_x(1.0) and x <= cls_card_x(1.0) + cw then
+            pick_class(1)
+            return
+        }
+        if x >= cls_card_x(2.0) and x <= cls_card_x(2.0) + cw then
+            pick_class(2)
+            return
+        }
+        if x >= cls_card_x(3.0) and x <= cls_card_x(3.0) + cw then
+            pick_class(3)
+            return
+        }
+    }
+    local by = cy + cls_card_h() + CLS_GAP * U
+    local skin_h = 48.0 * U
+    if player_class == 1 then
+        local sw2 = 200.0 * U
+        local sg2 = 16.0 * U
+        local sx0 = (engine.width() - (sw2 * 2.0 + sg2)) / 2.0
+        if y >= by - 8.0 * U and y <= by + skin_h + 8.0 * U then
+            if x >= sx0 and x <= sx0 + sw2 then
+                azum_skin = 0
+                return
+            }
+            if x >= sx0 + sw2 + sg2 and x <= sx0 + sw2 * 2.0 + sg2 then
+                if bp_level >= 2 then
+                    azum_skin = 1
+                } else {
+                    skin_msg_t = msg_time
+                }
+                return
+            }
+        }
+        by = by + skin_h + 10.0 * U
+    }
+    if y >= by - 8.0 * U and y <= by + bh() + 8.0 * U then
+        if x >= (engine.width() - bw()) / 2.0 - 12.0 * U and
+            x <= (engine.width() + bw()) / 2.0 + 12.0 * U then
+            start_transition(9)
+        }
+    }
+}

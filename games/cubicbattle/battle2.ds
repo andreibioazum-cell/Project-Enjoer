@@ -1,0 +1,316 @@
+-- battle2.ds — движение игрока, леденцы, удары, ульты Деда Мороза и буКа,
+-- главный update боя, конец матча и тач-ввод (ядро старого battle.ds).
+
+candy_rand_pos(i: float) {
+    local m = candy_margin * U
+    local cx = m + rint(engine.width() - 2.0 * m)
+    local cy = m + rint(engine.height() - 2.0 * m)
+    local k = 0
+    while k < 24 do {
+        if dist(cx, cy, player.x, player.y) < 80.0 * U or
+            dist(cx, cy, enemy.x, enemy.y) < 80.0 * U then
+            cx = m + rint(engine.width() - 2.0 * m)
+            cy = m + rint(engine.height() - 2.0 * m)
+            k = k + 1
+        } else {
+            k = 24
+        }
+    }
+    candy_x[i] = cx
+    candy_y[i] = cy
+}
+
+spawn_all_candies() {
+    local i = 0
+    while i < candy_count do {
+        candy_rand_pos(i)
+        i = i + 1
+    }
+}
+
+-- ── Движение игрока ─────────────────────────────────────────────────────
+-- Джойстик плюс необязательная клавиатура (WASD/стрелки) для превью.
+move_player() {
+    local spd = joy_speed * U
+    if player_class == 1 and player_level >= 2 then
+        spd = spd * (1.0 + azum_speed_bonus)
+    }
+    if player_class == 0 and player_level >= 2 then
+        spd = spd * (1.0 + ordinary_speed_bonus)
+    }
+    if player_freeze > 0.0 then
+        spd = spd * player_freeze_slow
+    }
+    local mx = joy.dx
+    local my = joy.dy
+    local jm = math.sqrt(mx * mx + my * my)
+    if jm < 0.15 then
+        mx = 0.0
+        my = 0.0
+        if input.key("w") or input.key("ArrowUp") then
+            my = my - 1.0
+        }
+        if input.key("s") or input.key("ArrowDown") then
+            my = my + 1.0
+        }
+        if input.key("a") or input.key("ArrowLeft") then
+            mx = mx - 1.0
+        }
+        if input.key("d") or input.key("ArrowRight") then
+            mx = mx + 1.0
+        }
+        local km = math.sqrt(mx * mx + my * my)
+        if km > 1.0 then
+            mx = mx / km
+            my = my / km
+        }
+        jm = math.sqrt(mx * mx + my * my)
+    }
+    player.x = player.x + mx * spd * DT
+    player.y = player.y + my * spd * DT
+    if jm > 0.15 then
+        player.angle = atan2(my, mx)
+    }
+    player.x = clamp(player.x, player.size, engine.width() - player.size)
+    player.y = clamp(player.y, player.size, engine.height() - player.size)
+    tick_dust(mx, my, jm)
+}
+
+-- ── Удары ───────────────────────────────────────────────────────────────
+in_punch_box(px: float, py: float, pdx: float, pdy: float,
+                      tx: float, ty: float): float {
+    local rx = tx - px
+    local ry = ty - py
+    local fw = rx * pdx + ry * pdy
+    local side = ry * pdx - rx * pdy
+    if fw >= 0.0 and fw <= punch_reach * U and
+        side * side <= punch_width * U * punch_width * U / 4.0 then
+        return 1.0
+    }
+    return 0.0
+}
+
+-- Проверка попадания по кубу врага: центр и четыре угла хитбокса.
+enemy_in_punch(): float {
+    local hs = enemy.size * 0.65
+    local fx = math.cos(enemy.angle) * hs
+    local fy = math.sin(enemy.angle) * hs
+    local sx = 0.0 - math.sin(enemy.angle) * hs
+    local sy = math.cos(enemy.angle) * hs
+    if in_punch_box(punch.x, punch.y, punch.dx, punch.dy, enemy.x, enemy.y) == 1.0 then
+        return 1.0
+    }
+    if in_punch_box(punch.x, punch.y, punch.dx, punch.dy,
+        enemy.x - fx - sx, enemy.y - fy - sy) == 1.0 then
+        return 1.0
+    }
+    if in_punch_box(punch.x, punch.y, punch.dx, punch.dy,
+        enemy.x + fx - sx, enemy.y + fy - sy) == 1.0 then
+        return 1.0
+    }
+    if in_punch_box(punch.x, punch.y, punch.dx, punch.dy,
+        enemy.x + fx + sx, enemy.y + fy + sy) == 1.0 then
+        return 1.0
+    }
+    if in_punch_box(punch.x, punch.y, punch.dx, punch.dy,
+        enemy.x - fx + sx, enemy.y - fy + sy) == 1.0 then
+        return 1.0
+    }
+    return 0.0
+}
+
+update_aim() {
+    if punch_left > 0.0 and super_windup <= 0.0 and finished == 0 then
+        aim_a = 1.0
+    } else {
+        aim_a = aim_a - DT / aim_fade_out
+        if aim_a < 0.0 then
+            aim_a = 0.0
+        }
+    }
+    if punch_cd > 0.0 then
+        punch_cd = punch_cd - DT
+        if punch_cd < 0.0 then
+            punch_cd = 0.0
+        }
+    }
+}
+
+follow_punch() {
+    if punch_left <= 0.0 then
+        return
+    }
+    punch.x = player.x
+    punch.y = player.y
+    punch.dx = math.cos(player.angle)
+    punch.dy = math.sin(player.angle)
+}
+
+start_punch_now() {
+    punch.x = player.x
+    punch.y = player.y
+    punch.dx = math.cos(player.angle)
+    punch.dy = math.sin(player.angle)
+    punch.active = 1.0
+    punch.shot = punch.shot + 1.0
+    punch.hit = 0.0
+    punch_left = punch_time
+    punch_cd = punch_cooldown
+    queued_punch = 0
+}
+
+-- Пока играется эффект ульты, обычный удар ждёт: визуальные слои не
+-- накладываются друг на друга, нажатие встаёт в очередь.
+station_boom_visual_busy(): float {
+    local i = 0
+    while i < station_boom_ts.count do {
+        if station_boom_ts[i] > 0.0 then
+            return 1.0
+        }
+        i = i + 1
+    }
+    return 0.0
+}
+
+ultimate_visual_busy(): float {
+    if super_windup > 0.0 or gift.active == 1.0 or boom_t > 0.0 or station_spawn_t > 0.0 then
+        return 1.0
+    }
+    return station_boom_visual_busy()
+}
+
+fire_punch() {
+    if punch_cd > 0.0 or ultimate_visual_busy() == 1.0 then
+        queued_punch = 1
+        return
+    }
+    start_punch_now()
+    if player_class == 2 then
+        santa_follow = santa_follow_delay
+    }
+}
+
+tick_santa_follow() {
+    if santa_follow <= 0.0 then
+        return
+    }
+    santa_follow = santa_follow - DT
+    if santa_follow > 0.0 then
+        return
+    }
+    santa_follow = 0.0
+    if finished != 0 or player_class != 2 then
+        return
+    }
+    if super_windup > 0.0 or gift.active == 1.0 or boom_t > 0.0 or station_spawn_t > 0.0 then
+        return
+    }
+    start_punch_now()
+}
+
+fire_super() {
+    if player_class != 2 and player_class != 3 then
+        return
+    }
+    if super_cd > 0.0 then
+        return
+    }
+    -- Ульта ждёт окончания обычного удара и его кулдауна.
+    if punch_left > 0.0 or punch_cd > 0.0 or gift.active == 1.0 or
+        boom_t > 0.0 or station_spawn_t > 0.0 or station_boom_visual_busy() == 1.0 then
+        queued_super = 1
+        return
+    }
+    if super_windup > 0.0 then
+        queued_super = 1
+        return
+    }
+    -- Отменяем отложенный второй удар Деда Мороза.
+    santa_follow = 0.0
+    queued_super = 0
+    super_windup = punch_time
+    punch_left = punch_time
+    punch.active = 0.0
+    punch.hit = 0.0
+    if player_class == 3 then
+        super_cd = ebuc_super_cd_time
+    } else {
+        super_cd = super_cd_time
+    }
+}
+
+tick_super_windup() {
+    if super_windup <= 0.0 then
+        return
+    }
+    super_windup = super_windup - DT
+    if super_windup > 0.0 then
+        return
+    }
+    super_windup = 0.0
+    if finished != 0 then
+        return
+    }
+    if player_class == 2 then
+        gift.x = player.x
+        gift.y = player.y
+        gift.dx = math.cos(player.angle)
+        gift.dy = math.sin(player.angle)
+        gift.active = 1.0
+        gift.t = 0.0
+        gift.shot = gift.shot + 1.0
+        return
+    }
+    if player_class == 3 then
+        place_station()
+    }
+}
+
+update_gift() {
+    if gift.active == 0.0 then
+        return
+    }
+    gift.t = gift.t + DT
+    gift.x = gift.x + gift.dx * super_speed * U * DT
+    gift.y = gift.y + gift.dy * super_speed * U * DT
+    local touched = 0
+    if dist(gift.x, gift.y, enemy.x, enemy.y) < enemy.size * 0.65 + 24.0 * U then
+        touched = 1
+    }
+    if gift.t > super_range / super_speed then
+        touched = 1
+    }
+    if touched == 0 then
+        return
+    }
+    gift.active = 0.0
+    boom_x = gift.x
+    boom_y = gift.y
+    boom_t = boom_time
+    if dist(gift.x, gift.y, enemy.x, enemy.y) <= super_radius * U then
+        freeze_enemy(santa_freeze_time_for(player_level), super_freeze_slow)
+        enemy.hp = enemy.hp - santa_super_damage
+        if enemy.hp <= 0.0 then
+            enemy.hp = 0.0
+            finish_game(1)
+        }
+    }
+}
+
+flush_queued_action() {
+    if queued_punch == 0 and queued_super == 0 then
+        return
+    }
+    if punch_left > 0.0 or punch_cd > 0.0 or ultimate_visual_busy() == 1.0 then
+        return
+    }
+    if queued_super == 1 and super_cd <= 0.0 then
+        queued_super = 0
+        fire_super()
+        return
+    }
+    if queued_punch == 1 then
+        queued_punch = 0
+        fire_punch()
+    }
+}

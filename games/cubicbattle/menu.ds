@@ -1,0 +1,166 @@
+-- menu.ds — лобби, выбор режима и настройки (порт части старого menu.ds).
+-- Экраны онлайна (вход, лидерборд, чат) не перенесены: их кнопки остались на
+-- месте, но по нажатию показывают плашку «Недоступно» — как достижение.
+
+-- ── Раскладка вертикального меню ─────────────────────────────────────────
+-- n кнопок по центру экрана; высота кнопки ужимается на низких экранах.
+menu_gap(): float {
+    return 12.0 * U
+}
+
+menu_bh(n: float): float {
+    local gap = menu_gap()
+    local h_fit = (engine.height() * 0.62 - (n - 1.0) * gap) / n
+    return math.min(btn_h * U, h_fit)
+}
+
+menu_y0(n: float): float {
+    local total = menu_bh(n) * n + menu_gap() * (n - 1.0)
+    return engine.height() / 2.0 - total / 2.0 + 8.0 * U
+}
+
+menu_slot(n: float, i: float): float {
+    return menu_y0(n) + i * (menu_bh(n) + menu_gap())
+}
+
+-- Хит по i-й кнопке меню (область чуть шире плашки, как в старой игре).
+menu_hit_at(n: float, i: float, x: float, y: float): float {
+    local bx = (engine.width() - bw()) / 2.0
+    local sy = menu_slot(n, i)
+    if x < bx - 12.0 * U or x > bx + bw() + 12.0 * U then
+        return 0.0
+    }
+    if y >= sy - 8.0 * U and y <= sy + menu_bh(n) + 8.0 * U then
+        return 1.0
+    }
+    return 0.0
+}
+
+-- ── Деньги ───────────────────────────────────────────────────────────────
+draw_money() {
+    local cup_s = tr_cups() .. ": " .. num_str(cups)
+    local cd_s = tr_candies() .. ": " .. num_str(candies)
+    local cw = text_est(cup_s, 0.8 * U)
+    draw_text(cup_s, engine.width() - cw - 20.0 * U, 18.0 * U, 0.8 * U, WHITE)
+    local dw = text_est(cd_s, 0.8 * U)
+    draw_text(cd_s, engine.width() - dw - 20.0 * U, 44.0 * U, 0.8 * U, WHITE)
+}
+
+draw_lobby_money(y: float) {
+    local cup_s = tr_cups() .. ": " .. num_str(cups)
+    local cd_s = tr_candies() .. ": " .. num_str(candies)
+    local cw = text_est(cup_s, 0.8 * U)
+    local dw = text_est(cd_s, 0.8 * U)
+    local gap = 24.0 * U
+    local x = (engine.width() - cw - dw - gap) / 2.0
+    draw_text(cup_s, x, y, 0.8 * U, WHITE)
+    draw_text(cd_s, x + cw + gap, y, 0.8 * U, WHITE)
+}
+
+-- ── Лобби ────────────────────────────────────────────────────────────────
+LOBBY_N = 5.0
+
+draw_lobby() {
+    check_achievements()
+    paint(BG_DARK)
+    render.rect(0.0, 0.0, engine.width(), engine.height())
+    local mx = (engine.width() - bw()) / 2.0
+    local y0 = menu_y0(LOBBY_N)
+    ctext("Cubic Battle 4", y0 - 58.0 * U, 2.2 * U, WHITE)
+    button(tr_play(), mx, menu_slot(LOBBY_N, 0.0), bw(), menu_bh(LOBBY_N))
+    button(tr_settings(), mx, menu_slot(LOBBY_N, 1.0), bw(), menu_bh(LOBBY_N))
+    button(tr_shop(), mx, menu_slot(LOBBY_N, 2.0), bw(), menu_bh(LOBBY_N))
+    button(tr_account(), mx, menu_slot(LOBBY_N, 3.0), bw(), menu_bh(LOBBY_N))
+    button(tr_achievements(), mx, menu_slot(LOBBY_N, 4.0), bw(), menu_bh(LOBBY_N))
+    draw_lobby_money(menu_slot(LOBBY_N, 4.0) + menu_bh(LOBBY_N) + 14.0 * U)
+    -- Кнопка «???» слева снизу — вход в хэллоуинский батл пасс.
+    button_scaled("???", 20.0 * U, engine.height() - bh() - 20.0 * U, bw(), bh(), 1.3 * U)
+}
+
+touch_lobby(x: float, y: float) {
+    if x >= 8.0 * U and x <= 20.0 * U + bw() + 12.0 * U and
+        y >= engine.height() - bh() - 28.0 * U and y <= engine.height() - 12.0 * U then
+        start_transition(12)
+        return
+    }
+    if menu_hit_at(LOBBY_N, 0.0, x, y) == 1.0 then
+        start_transition(2)
+        return
+    }
+    if menu_hit_at(LOBBY_N, 1.0, x, y) == 1.0 then
+        start_transition(4)
+        return
+    }
+    if menu_hit_at(LOBBY_N, 2.0, x, y) == 1.0 then
+        start_transition(8)
+        return
+    }
+    if menu_hit_at(LOBBY_N, 3.0, x, y) == 1.0 then
+        -- Аккаунт жил на сервере: показываем плашку, как у достижения.
+        show_unavailable_toast()
+        return
+    }
+    if menu_hit_at(LOBBY_N, 4.0, x, y) == 1.0 then
+        start_transition(11)
+    }
+}
+
+-- ── Режимы ───────────────────────────────────────────────────────────────
+MODES_N = 4.0
+
+draw_modes() {
+    paint(BG_DARK)
+    render.rect(0.0, 0.0, engine.width(), engine.height())
+    local x = (engine.width() - bw()) / 2.0
+    button(tr_back(), x, menu_slot(MODES_N, 0.0), bw(), menu_bh(MODES_N))
+    button(tr_solo(), x, menu_slot(MODES_N, 1.0), bw(), menu_bh(MODES_N))
+    button(tr_online(), x, menu_slot(MODES_N, 2.0), bw(), menu_bh(MODES_N))
+    button(tr_leaderboard(), x, menu_slot(MODES_N, 3.0), bw(), menu_bh(MODES_N))
+}
+
+touch_modes(x: float, y: float) {
+    if menu_hit_at(MODES_N, 0.0, x, y) == 1.0 then
+        start_transition(0)
+        return
+    }
+    if menu_hit_at(MODES_N, 1.0, x, y) == 1.0 then
+        start_transition(1)
+        return
+    }
+    if menu_hit_at(MODES_N, 2.0, x, y) == 1.0 then
+        -- Онлайн не перенесён: плашка «Недоступно» как у достижения.
+        show_unavailable_toast()
+        return
+    }
+    if menu_hit_at(MODES_N, 3.0, x, y) == 1.0 then
+        -- Лидерборд тоже был серверным.
+        show_unavailable_toast()
+        return
+    }
+}
+
+-- ── Настройки ────────────────────────────────────────────────────────────
+SET_N = 3.0
+
+draw_settings() {
+    paint(BG_DARK)
+    render.rect(0.0, 0.0, engine.width(), engine.height())
+    local x = (engine.width() - bw()) / 2.0
+    button(tr_back(), x, menu_slot(SET_N, 0.0), bw(), menu_bh(SET_N))
+    button("English", x, menu_slot(SET_N, 1.0), bw(), menu_bh(SET_N))
+    button("Русский", x, menu_slot(SET_N, 2.0), bw(), menu_bh(SET_N))
+}
+
+touch_settings(x: float, y: float) {
+    if menu_hit_at(SET_N, 0.0, x, y) == 1.0 then
+        start_transition(0)
+        return
+    }
+    if menu_hit_at(SET_N, 1.0, x, y) == 1.0 then
+        language = 0
+        return
+    }
+    if menu_hit_at(SET_N, 2.0, x, y) == 1.0 then
+        language = 1
+    }
+}

@@ -1,0 +1,135 @@
+-- levels.ds — экран уровней выбранного класса (порт из старого menu.ds).
+-- Три уровня на класс, цена 30/40/50 кубков, покупка строго по порядку.
+
+LVL_ROW_H = 78.0
+LVL_W = 520.0
+
+lvl_rows_y0(): float {
+    return back_y * U + bh() + 100.0 * U
+}
+
+unlock_next_level(n: float) {
+    if n < 1.0 or n > max_level then
+        return
+    }
+    if n != levels_unlocked + 1.0 then
+        return
+    }
+    local cost = level_cost(n)
+    if cups < cost then
+        level_msg_t = msg_time
+        return
+    }
+    cups = cups - cost
+    levels_unlocked = n
+    player_level = n
+    level_msg_t = 0.0
+    save_progress()
+}
+
+tr_lvl_unlock(): string {
+    if language == 1 then
+        return "Открыть"
+    }
+    return "Unlock"
+}
+
+tr_lvl_opened(): string {
+    if language == 1 then
+        return "Открыт"
+    }
+    return "Opened"
+}
+
+tr_lvl_locked(): string {
+    if language == 1 then
+        return "Закрыт"
+    }
+    return "Locked"
+}
+
+draw_levels() {
+    paint(BG_DARK)
+    render.rect(0.0, 0.0, engine.width(), engine.height())
+    -- Заголовок ниже кнопки «Назад», чтобы не налезал на неё буквами.
+    ctext(tr_levels_for_class() .. " · " .. class_name(),
+        back_y * U + bh() + 32.0 * U, 1.0 * U, WHITE)
+    local row_h = LVL_ROW_H * U
+    local w = LVL_W * U
+    local x = (engine.width() - w) / 2.0
+    local y = lvl_rows_y0()
+    local n = 1.0
+    while n <= max_level do {
+        local unlocked = 0.0
+        local next = 0.0
+        local sel = 0.0
+        if n <= levels_unlocked then
+            unlocked = 1.0
+        }
+        if n == levels_unlocked + 1.0 then
+            next = 1.0
+        }
+        if player_level == n and unlocked == 1.0 then
+            sel = 1.0
+        }
+        if sel == 1.0 then
+            roundrect(x - 4.0 * U, y - 4.0 * U, w + 8.0 * U, row_h + 8.0 * U,
+                24.0 * U, SEL_FRAME, 1.0)
+        }
+        roundrect(x, y, w, row_h, 20.0 * U, CARD_BG, 1.0)
+        local desc = tr_class_level_effect(player_class, n)
+        local level_title = tr_level() .. " " .. num_str(n)
+        local ts1 = 0.7 * U
+        draw_text(level_title, x + (w - text_est(level_title, ts1)) / 2.0,
+            y + 18.0 * U, ts1, WHITE)
+        local ts2 = 0.5 * U
+        draw_text(desc, x + (w - text_est(desc, ts2)) / 2.0, y + 42.0 * U, ts2, WHITE)
+        local status = ""
+        if unlocked == 1.0 then
+            status = tr_lvl_opened()
+        } else {
+            if next == 1.0 then
+                status = tr_lvl_unlock() .. ": " .. num_str(level_cost(n)) ..
+                    " " .. tr_cups_unit()
+            } else {
+                status = tr_lvl_locked()
+            }
+        }
+        local ts3 = 0.45 * U
+        draw_text(status, x + (w - text_est(status, ts3)) / 2.0, y + 58.0 * U, ts3, WHITE)
+        n = n + 1.0
+        y = y + row_h + 10.0 * U
+    }
+    if level_msg_t > 0.0 then
+        ctext_fade(tr_level_need_cups(), y + 8.0 * U, 0.5 * U, WHITE, level_msg_t, msg_fade)
+    }
+    draw_money()
+    draw_back()
+}
+
+touch_levels(x: float, y: float) {
+    if back_hit(x, y) == 1.0 then
+        start_transition(8)
+        return
+    }
+    local row_h = LVL_ROW_H * U
+    local w = LVL_W * U
+    local rx = (engine.width() - w) / 2.0
+    local ry = lvl_rows_y0()
+    local n = 1.0
+    while n <= max_level do {
+        if x >= rx and x <= rx + w and y >= ry and y <= ry + row_h then
+            if n <= levels_unlocked then
+                player_level = n
+                save_progress()
+            } else {
+                if n == levels_unlocked + 1.0 then
+                    unlock_next_level(n)
+                }
+            }
+            return
+        }
+        n = n + 1.0
+        ry = ry + row_h + 10.0 * U
+    }
+}

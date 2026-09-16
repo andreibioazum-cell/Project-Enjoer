@@ -1,0 +1,280 @@
+-- main.ds — входная точка порта Cubic Battle 4: загрузка, переходы,
+-- предупреждение об эпилепсии, тост и диспетчеризация экранов
+-- (порт старого engine.ds, без онлайна и звука).
+--
+-- Экраны: 0 лобби, 1 бой, 2 режимы, 4 настройки, 8 классы, 9 уровни,
+-- 11 достижения, 12 батл пасс. Онлайн-экраны (5/7/10) не перенесены:
+-- их кнопки показывают плашку «Недоступно», оформленную как тост
+-- достижения (см. achievements.ds).
+
+-- ── Переходы ────────────────────────────────────────────────────────────
+start_transition(t: int) {
+    if t_dir != 0 then
+        return
+    }
+    t_target = t
+    t_dir = 1
+}
+
+update_transition() {
+    if t_dir == 1 then
+        t_fade = t_fade + DT / transition_duration
+        if t_fade >= 1.0 then
+            t_fade = 1.0
+            t_dir = 2
+        }
+        return
+    }
+    if t_dir == 2 then
+        game_state = t_target
+        if t_target == 1 then
+            init_game()
+        }
+        t_dir = -1
+        return
+    }
+    if t_dir == -1 then
+        t_fade = t_fade - DT / transition_duration
+        if t_fade <= 0.0 then
+            t_fade = 0.0
+            t_dir = 0
+        }
+    }
+}
+
+-- ── Предупреждение об эпилепсии ─────────────────────────────────────────
+-- Полноэкранная плашка при запуске: 2.5 с держится и ещё 0.6 с тает.
+-- Нажатия её не закрывают и в меню не проходят, пока она висит.
+update_warning() {
+    if warn_open != 1 then
+        return
+    }
+    warn_t = warn_t + DT
+    if warn_t <= warn_hold then
+        warn_a = 1.0
+        return
+    }
+    warn_a = 1.0 - (warn_t - warn_hold) / warn_fade
+    if warn_a <= 0.0 then
+        warn_a = 0.0
+        warn_open = 0
+    }
+}
+
+draw_warning() {
+    paint_a(BLACK, warn_a)
+    render.rect(0.0, 0.0, engine.width(), engine.height())
+    local y = engine.height() / 2.0 - 196.0 * U
+    ctext_a(tr_warn_title_en(), y, 1.15 * U, WHITE, warn_a)
+    ctext_a(tr_warn_en1(), y + 48.0 * U, 0.52 * U, WHITE, warn_a)
+    ctext_a(tr_warn_en2(), y + 76.0 * U, 0.52 * U, WHITE, warn_a)
+    ctext_a(tr_warn_en3(), y + 104.0 * U, 0.52 * U, WHITE, warn_a)
+    ctext_a(tr_warn_en4(), y + 132.0 * U, 0.52 * U, WHITE, warn_a)
+    ctext_a(tr_warn_title_ru(), y + 186.0 * U, 1.15 * U, WHITE, warn_a)
+    ctext_a(tr_warn_ru1(), y + 234.0 * U, 0.52 * U, WHITE, warn_a)
+    ctext_a(tr_warn_ru2(), y + 262.0 * U, 0.52 * U, WHITE, warn_a)
+    ctext_a(tr_warn_ru3(), y + 290.0 * U, 0.52 * U, WHITE, warn_a)
+    ctext_a(tr_warn_ru4(), y + 318.0 * U, 0.52 * U, WHITE, warn_a)
+}
+
+-- ── Тост ────────────────────────────────────────────────────────────────
+-- Тост висит поверх любого экрана, но ПОД предупреждением. Выглядит как
+-- кнопка — фиолетовая плашка и белый текст, без рамки и медали. Движение
+-- строго вертикальное: быстрый выезд сверху с торможением, пауза, уход
+-- вверх с разгоном до полного скрытия за краем. Альфа не анимируется:
+-- исчезновение выглядит как уход, а не испарение.
+tick_achievement_toast() {
+    if ach_toast_t > 0.0 then
+        ach_toast_t = ach_toast_t - DT
+        if ach_toast_t < 0.0 then
+            ach_toast_t = 0.0
+        }
+    }
+}
+
+draw_achievement_toast() {
+    if ach_toast_t <= 0.0 then
+        return
+    }
+    local elapsed = ACH_TOAST_DURATION - ach_toast_t
+    -- Ширина подстраивается под экран, чтобы на узких плашка не вылезала.
+    local w = 460.0 * U
+    if w > engine.width() - 32.0 * U then
+        w = engine.width() - 32.0 * U
+    }
+    local h = 70.0 * U
+    local x = (engine.width() - w) / 2.0
+    local home_y = 64.0 * U
+    -- Сколько пикселей нужно пройти вверх, чтобы плашка ушла за край.
+    local off = home_y + h + 8.0 * U
+    local y = home_y
+    if elapsed < ACH_TOAST_FADE_IN then
+        local k = elapsed / ACH_TOAST_FADE_IN
+        local ease = 1.0 - (1.0 - k) * (1.0 - k)
+        y = home_y - off * (1.0 - ease)
+    }
+    if elapsed > ACH_TOAST_FADE_IN + ACH_TOAST_HOLD then
+        local k2 = (elapsed - ACH_TOAST_FADE_IN - ACH_TOAST_HOLD) / ACH_TOAST_EXIT
+        if k2 > 1.0 then
+            k2 = 1.0
+        }
+        y = home_y - off * k2 * k2
+    }
+    -- Плашку не рисуем, пока она целиком за верхним краем.
+    if y + h <= 0.0 then
+        return
+    }
+    roundrect(x, y, w, h, 20.0 * U, PURPLE, 1.0)
+    text_in_box(ach_toast_title, x, y + 6.0 * U, w, h * 0.42, WHITE, 0.42 * U)
+    text_in_box(ach_toast_body, x, y + h * 0.40, w, h * 0.54, WHITE, 0.62 * U)
+}
+
+-- ── Загрузка ────────────────────────────────────────────────────────────
+load() {
+    update_ui()
+    init_palette()
+    tex_grass = image.load(GRASS)
+    tex_ordinary = image.load(ORDINARY_TEX)
+    tex_ordinary_punch = image.load(PUNCH_TEX)
+    tex_azum = image.load(AZUM_TEX)
+    tex_azum_punch = image.load(AZUM_PUNCH_TEX)
+    tex_santa = image.load(SANTA_TEX)
+    tex_santa_punch = image.load(SANTA_PUNCH_TEX)
+    tex_ebuc = image.load(EBUC_TEX)
+    tex_ebuc_punch = image.load(EBUC_PUNCH_TEX)
+    tex_despenser = image.load(DESPENSER_TEX)
+    tex_candy = image.load(CANDY_TEX)
+    tex_snowflake = image.load(SNOWFLAKE_TEX)
+    game_font = font.load("font.ttf")
+    -- Профиль живёт одну сессию: чистим рантайм-флаги, как при чистой установке.
+    cups_awarded = 0
+    class_msg_t = 0.0
+    level_msg_t = 0.0
+    bp_msg_t = 0.0
+    skin_msg_t = 0.0
+    ach_toast_t = 0.0
+    game_state = 0
+    warn_open = 1
+    warn_t = 0.0
+    warn_a = 1.0
+    t_dir = 0
+    t_fade = 0.0
+    load_selected_level()
+}
+
+-- ── Кадр ────────────────────────────────────────────────────────────────
+update(dt: float) {
+    DT = dt
+    update_ui()
+    update_warning()
+    update_transition()
+    tick_achievement_toast()
+    if class_msg_t > 0.0 then
+        class_msg_t = class_msg_t - dt
+    }
+    if level_msg_t > 0.0 then
+        level_msg_t = level_msg_t - dt
+    }
+    if bp_msg_t > 0.0 then
+        bp_msg_t = bp_msg_t - dt
+    }
+    if skin_msg_t > 0.0 then
+        skin_msg_t = skin_msg_t - dt
+    }
+    if game_state == 1 then
+        update_game()
+    }
+}
+
+draw() {
+    render.clear(0.102, 0.102, 0.180)
+    render.font(game_font)
+    if game_state == 0 then
+        draw_lobby()
+    }
+    if game_state == 1 then
+        draw_game()
+    }
+    if game_state == 2 then
+        draw_modes()
+    }
+    if game_state == 4 then
+        draw_settings()
+    }
+    if game_state == 8 then
+        draw_classes()
+    }
+    if game_state == 9 then
+        draw_levels()
+    }
+    if game_state == 11 then
+        draw_achievements()
+    }
+    if game_state == 12 then
+        draw_battlepass()
+    }
+    if t_fade > 0.0 then
+        paint_a(BLACK, t_fade)
+        render.rect(0.0, 0.0, engine.width(), engine.height())
+    }
+    -- Уведомление о достижении — над всем, но под предупреждением.
+    draw_achievement_toast()
+    -- Предупреждение об эпилепсии поверх всего, включая фейд перехода.
+    if warn_open == 1 then
+        draw_warning()
+    }
+}
+
+-- ── Ввод ────────────────────────────────────────────────────────────────
+-- Пока идёт переход или висит предупреждение, нажатия не проходят.
+touch_blocked(): float {
+    if t_dir != 0 then
+        return 1.0
+    }
+    if warn_open == 1 then
+        return 1.0
+    }
+    return 0.0
+}
+
+touchpressed(id, touch_x, touch_y) {
+    if touch_blocked() == 1.0 then
+        return
+    }
+    if game_state == 0 then
+        touch_lobby(touch_x, touch_y)
+    }
+    if game_state == 1 then
+        battle_touch_down(id, touch_x, touch_y)
+    }
+    if game_state == 2 then
+        touch_modes(touch_x, touch_y)
+    }
+    if game_state == 4 then
+        touch_settings(touch_x, touch_y)
+    }
+    if game_state == 8 then
+        touch_classes(touch_x, touch_y)
+    }
+    if game_state == 9 then
+        touch_levels(touch_x, touch_y)
+    }
+    if game_state == 11 then
+        touch_achievements(touch_x, touch_y)
+    }
+    if game_state == 12 then
+        touch_battlepass(touch_x, touch_y)
+    }
+}
+
+touchmoved(id, touch_x, touch_y) {
+    if game_state == 1 then
+        battle_touch_moved(id, touch_x, touch_y)
+    }
+}
+
+touchreleased(id, touch_x, touch_y) {
+    if game_state == 1 then
+        battle_touch_up(id, touch_x, touch_y)
+    }
+}

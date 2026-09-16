@@ -1,0 +1,210 @@
+-- station.ds — турель буКа: стек запасных станций, поглощение урона,
+-- лечение лучом и зелёные взрывы при разрушении (порт из старого battle.ds).
+-- Вторая ульта («вселенная») была отключена ещё в старой игре и не перенесена.
+
+-- Детерминированный шум для осколков взрыва (sin-хэш, как раньше).
+hash01(i: float): float {
+    local v = math.sin(i * 127.1 + 11.7) * 43758.5453
+    return v - math.floor(v)
+}
+
+-- Каждая поломка турели ставит свой взрыв в очередь: он живёт на своём месте
+-- и доигрывает до конца, его не перезаписывает ни новая турель, ни поломка
+-- следующей запасной.
+push_station_boom(x: float, y: float) {
+    station_boom_xs.push(x)
+    station_boom_ys.push(y)
+    station_boom_ts.push(station_boom_time)
+    -- не копим больше station_booms_max взрывов: самые старые убираем
+    while station_boom_ts.count > station_booms_max do {
+        station_boom_xs.remove_at(0)
+        station_boom_ys.remove_at(0)
+        station_boom_ts.remove_at(0)
+    }
+}
+
+destroy_station() {
+    if station.active == 0.0 then
+        return
+    }
+    -- Запоминаем место поломки: взрыв рисуется именно там.
+    push_station_boom(station.x, station.y)
+    station.active = 0.0
+    station.hp = 0.0
+    station.max_hp = 0.0
+    station_hit_t = 0.0
+    -- Если есть запасные станции в стеке, достаём последнюю (LIFO).
+    local stack_len = ebuc_station_stack_x.count
+    if stack_len > 0 then
+        station.x = ebuc_station_stack_x[stack_len - 1]
+        station.y = ebuc_station_stack_y[stack_len - 1]
+        station.hp = ebuc_station_stack_hp[stack_len - 1]
+        station.max_hp = ebuc_station_stack_max[stack_len - 1]
+        station.active = 1.0
+        ebuc_station_stack_x.remove_at(stack_len - 1)
+        ebuc_station_stack_y.remove_at(stack_len - 1)
+        ebuc_station_stack_hp.remove_at(stack_len - 1)
+        ebuc_station_stack_max.remove_at(stack_len - 1)
+    }
+}
+
+place_station() {
+    -- Стек станций: новая ставится последней и впитывает первой.
+    if station.active == 1.0 then
+        ebuc_station_stack_x.push(station.x)
+        ebuc_station_stack_y.push(station.y)
+        ebuc_station_stack_hp.push(station.hp)
+        ebuc_station_stack_max.push(station.max_hp)
+    }
+    station.x = player.x
+    station.y = player.y
+    station.max_hp = ebuc_station_hp_for(player_level)
+    station.hp = station.max_hp
+    station.active = 1.0
+    station.shot = station.shot + 1.0
+    station_hit_t = 0.0
+    -- Анимация появления: спрайт чуть крупнее и быстро сжимается.
+    station_spawn_t = station_spawn_time
+    -- Уровень 2: спавн турели лечит бука.
+    if player_class == 3 and player_level >= 2 then
+        player.hp = clamp(player.hp + ebuc_place_heal, 0.0, player.max_hp)
+    }
+}
+
+tick_station() {
+    -- Взрывы поломанных турелей догорают на своих местах.
+    local i = 0
+    while i < station_boom_ts.count do {
+        local t = station_boom_ts[i]
+        if t > 0.0 then
+            t = t - DT
+            if t < 0.0 then
+                t = 0.0
+            }
+            station_boom_ts[i] = t
+        }
+        i = i + 1
+    }
+    if station_hit_t > 0.0 then
+        station_hit_t = station_hit_t - DT
+        if station_hit_t < 0.0 then
+            station_hit_t = 0.0
+        }
+    }
+    if station_spawn_t > 0.0 then
+        station_spawn_t = station_spawn_t - DT
+        if station_spawn_t < 0.0 then
+            station_spawn_t = 0.0
+        }
+    }
+    -- Уровень 3: каждую секунду луч живой турели лечит бука.
+    if player_class == 3 and player_level >= 3 and station.active == 1.0 and
+        finished == 0 and player.hp > 0.0 then
+        station_heal_t = station_heal_t + DT
+        if station_heal_t >= 1.0 then
+            station_heal_t = station_heal_t - 1.0
+            player.hp = clamp(player.hp + ebuc_beam_heal, 0.0, player.max_hp)
+        }
+    } else {
+        station_heal_t = 0.0
+    }
+}
+
+-- ── Луч турели ──────────────────────────────────────────────────────────
+-- Живая турель непрерывно излучает луч до своего хозяина: яркое ядро внутри
+-- зелёного свечения, растущее прямо из центра спрайта.
+draw_station_beam(sx: float, sy: float, px: float, py: float) {
+    local dx = px - sx
+    local dy = py - sy
+    local d = math.sqrt(dx * dx + dy * dy)
+    if d < 40.0 * U then
+        return
+    }
+    local nx = dx / d
+    local ny = dy / d
+    -- не заходить внутрь спрайта игрока
+    local x2 = px - nx * 32.0 * U
+    local y2 = py - ny * 32.0 * U
+    paint_a(BEAM, 0.78)
+    render.line(sx, sy, x2, y2, 15.0 * U)
+    paint_a(BEAM_CORE, 0.98)
+    render.line(sx, sy, x2, y2, 6.0 * U)
+}
+
+draw_station_at(x: float, y: float, hp: float, max_hp: float) {
+    local scale = station_scale * U
+    if station.active == 1.0 and x == station.x and y == station.y then
+        -- Появление: спрайт увеличен и быстро сжимается до нормы.
+        if station_spawn_t > 0.0 then
+            local sp = clamp(station_spawn_t / station_spawn_time, 0.0, 1.0)
+            scale = station_scale * U * (1.0 + 0.25 * sp)
+        }
+    }
+    local hw = 25.0 * scale
+    sprite(tex_despenser, x - hw, y - hw, scale)
+    -- Полоса здоровья турели — прямо над ней.
+    local bw2 = 46.0 * scale
+    hud_bar(x - bw2 / 2.0, y - hw - 12.0 * U, bw2, 7.0 * U, hp, max_hp, HP_GREEN, 0.0)
+}
+
+-- Взрыв турели при полном разрушении: тот же характер, что у снежинки
+-- Деда Мороза, но в зелёных тонах бука.
+draw_turret_boom(x: float, y: float, bt: float) {
+    if bt <= 0.0 then
+        return
+    }
+    local p = 1.0 - bt / station_boom_time
+    p = clamp(p, 0.0, 1.0)
+    local fade_in = clamp(p / boom_fade_in, 0.0, 1.0)
+    local fade_out = clamp(bt / (station_boom_time * boom_fade_out), 0.0, 1.0)
+    local a = fade_in * fade_out * 0.94
+    if a <= 0.01 then
+        return
+    }
+    local r = (30.0 + 95.0 * p) * U
+    paint_a(BEAM, a)
+    render.ring(x, y, r, 9.0 * U)
+    paint_a(BEAM_CORE, a * 0.85)
+    render.ring(x, y, r * 0.66, 6.0 * U)
+    paint_a(HP_GREEN, a * 0.65)
+    render.ring(x, y, r * 0.36, 5.0 * U)
+    -- яркая вспышка в центре
+    paint_a(BEAM, a * 0.7)
+    render.circle(x, y, r * 0.22 + 6.0 * U * (1.0 - p))
+    -- разлетающиеся зелёные осколки
+    local i = 0
+    while i < 18 do {
+        local h1 = hash01(i * 37.0 + 11.0)
+        local h2 = hash01(i * 61.0 + 7.0)
+        local ang = h1 * 2.0 * PI
+        local rr = r * (0.5 + 0.5 * h2)
+        local px2 = x + math.cos(ang) * rr
+        local py2 = y + math.sin(ang) * rr
+        paint_a(BEAM, a * (0.7 + 0.3 * h2))
+        render.circle(px2, py2, (2.0 + 4.0 * (1.0 - p)) * U)
+        i = i + 1
+    }
+}
+
+draw_station() {
+    -- Запасные турели из стека рисуются под активной.
+    local si = 0
+    while si < ebuc_station_stack_x.count do {
+        draw_station_at(ebuc_station_stack_x[si], ebuc_station_stack_y[si],
+            ebuc_station_stack_hp[si], ebuc_station_stack_max[si])
+        si = si + 1
+    }
+    if station.active == 1.0 then
+        -- Луч под спрайтом, чтобы «расти» из центра турели.
+        draw_station_beam(station.x, station.y, player.x, player.y)
+        draw_station_at(station.x, station.y, station.hp, station.max_hp)
+    }
+    local bi = 0
+    while bi < station_boom_ts.count do {
+        local bt = station_boom_ts[bi]
+        if bt > 0.0 then
+            draw_turret_boom(station_boom_xs[bi], station_boom_ys[bi], bt)
+        }
+        bi = bi + 1
+    }
+}

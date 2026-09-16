@@ -1,0 +1,339 @@
+-- locale_shop.ds — строки магазина, классов, уровней, батл пасса и скинов
+-- (вторая половина старого locale.ds; вынесена, чтобы файлы были короче 400 строк).
+
+tr_hp(): string {
+    if language == 1 then
+        return "Здоровье"
+    }
+    return "HP"
+}
+
+tr_strength(): string {
+    if language == 1 then
+        return "Сила"
+    }
+    return "Power"
+}
+
+tr_shop(): string {
+    if language == 1 then
+        return "Магазин"
+    }
+    return "Shop"
+}
+
+tr_candies(): string {
+    if language == 1 then
+        return "Леденцы"
+    }
+    return "Candies"
+}
+
+tr_class_ordinary(): string {
+    if language == 1 then
+        return "Обычный"
+    }
+    return "Ordinary"
+}
+
+tr_class_azum(): string {
+    if language == 1 then
+        return "Азум"
+    }
+    return "Azum"
+}
+
+tr_class_ordinary_desc(): string {
+    return "I was the first"
+}
+
+tr_class_azum_desc(): string {
+    return "NEVER GIVE UP!"
+}
+
+tr_class_santa(): string {
+    if language == 1 then
+        return "Дед Мороз"
+    }
+    return "Santa"
+}
+
+tr_class_santa_desc(): string {
+    return "It's 12:00 AM!"
+}
+
+tr_class_ebuc(): string {
+    if language == 1 then
+        return "буК"
+    }
+    return "ebuC"
+}
+
+-- Описание бука не переводится — как и девизы остальных классов.
+tr_class_ebuc_desc(): string {
+    return "The universe's chaos!"
+}
+
+tr_super(): string {
+    if language == 1 then
+        return "Снежинка"
+    }
+    return "Snowflake"
+}
+
+tr_super_ebuc(): string {
+    if language == 1 then
+        return "Ульта"
+    }
+    return "Ult"
+}
+
+tr_class_selected(): string {
+    if language == 1 then
+        return "Выбран"
+    }
+    return "Selected"
+}
+
+tr_class_pick(): string {
+    if language == 1 then
+        return "Выбрать"
+    }
+    return "Select"
+}
+
+tr_levels(): string {
+    if language == 1 then
+        return "Уровни"
+    }
+    return "Levels"
+}
+
+tr_level(): string {
+    if language == 1 then
+        return "Уровень"
+    }
+    return "Level"
+}
+
+tr_levels_for_class(): string {
+    if language == 1 then
+        return "Уровни класса"
+    }
+    return "Class levels"
+}
+
+tr_class_level_effect(cls: float, n: float): string {
+    if cls == 1 and n == 1 then
+        if language == 1 then
+            return "Вторая жизнь: урон -10%"
+        }
+        return "Second life: damage -10%"
+    }
+    if cls == 1 and n == 2 then
+        if language == 1 then
+            return "Скорость +3%"
+        }
+        return "Speed +3%"
+    }
+    if cls == 1 and n == 3 then
+        if language == 1 then
+            return "Атака лечит +0.1 HP"
+        }
+        return "Attack heals +0.1 HP"
+    }
+    if cls == 2 and n == 1 then
+        if language == 1 then
+            return "Тик яда +0.15 урона"
+        }
+        return "Poison tick +0.15 damage"
+    }
+    if cls == 2 and n == 2 then
+        if language == 1 then
+            return "Тик яда +0.15 урона (x2)"
+        }
+        return "Poison tick +0.15 damage (x2)"
+    }
+    if cls == 2 and n == 3 then
+        if language == 1 then
+            return "Яд стакается, снежинка наносит урон"
+        }
+        return "Poison stacks, snowflake deals damage"
+    }
+    if cls == 3 and n == 1 then
+        if language == 1 then
+            return "Турель +2 HP"
+        }
+        return "Turret +2 HP"
+    }
+    if cls == 3 and n == 2 then
+        if language == 1 then
+            return "Спавн турели лечит +0.5 HP"
+        }
+        return "Placing a turret heals +0.5 HP"
+    }
+    if cls == 3 and n == 3 then
+        if language == 1 then
+            return "Луч турели лечит +0.1 HP/сек"
+        }
+        return "Turret beam heals +0.1 HP/sec"
+    }
+    if cls == 0 and n == 1 then
+        if language == 1 then
+            return "Урон атаки +5%"
+        }
+        return "Attack damage +5%"
+    }
+    if cls == 0 and n == 2 then
+        if language == 1 then
+            return "Скорость +2%"
+        }
+        return "Speed +2%"
+    }
+    if language == 1 then
+        return "Атака лечит +0.05 HP"
+    }
+    return "Attack heals +0.05 HP"
+}
+
+tr_cups_unit(): string {
+    if language == 1 then
+        return "кубков"
+    }
+    return "cups"
+}
+
+tr_level_need_cups(): string {
+    if language == 1 then
+        return "Не хватает кубков для уровня"
+    }
+    return "Not enough cups for this level"
+}
+
+tr_levels_soon(): string {
+    if language == 1 then
+        return "Скоро!"
+    }
+    return "Coming soon!"
+}
+
+tr_cups(): string {
+    if language == 1 then
+        return "Кубки"
+    }
+    return "Cups"
+}
+
+tr_buy_for(cost: float, currency: string): string {
+    if language == 1 then
+        return "Купить · " .. int_str(cost) .. " " .. currency
+    }
+    return "Buy · " .. int_str(cost) .. " " .. currency
+}
+
+tr_class_need_cups(): string {
+    if language == 1 then
+        return "Не хватает кубков"
+    }
+    return "Not enough cups"
+}
+
+-- ── Хэллоуинский батл пасс ──────────────────────────────────────────────
+tr_battlepass_title(): string {
+    if language == 1 then
+        return "Хэллоуинский батл пасс"
+    }
+    return "Halloween Battle Pass"
+}
+
+tr_bp_level(): string {
+    if language == 1 then
+        return "Уровень"
+    }
+    return "Level"
+}
+
+tr_bp_bought(): string {
+    if language == 1 then
+        return "Куплено"
+    }
+    return "Bought"
+}
+
+tr_bp_buy(): string {
+    if language == 1 then
+        return "Купить"
+    }
+    return "Buy"
+}
+
+tr_bp_locked(): string {
+    if language == 1 then
+        return "Заблокировано"
+    }
+    return "Locked"
+}
+
+tr_bp_need_prev(): string {
+    if language == 1 then
+        return "Сначала купи предыдущий уровень"
+    }
+    return "Buy the previous level first"
+}
+
+tr_bp_need_cups(): string {
+    if language == 1 then
+        return "Не хватает кубков для уровня"
+    }
+    return "Not enough cups for this level"
+}
+
+tr_bp_reward_1(): string {
+    if language == 1 then
+        return "Обычный класс: сразу 3 уровень"
+    }
+    return "Ordinary class: instant level 3"
+}
+
+tr_bp_reward_2(): string {
+    if language == 1 then
+        return "Скин «Зомби» на Азума"
+    }
+    return "Azum «Zombie» skin"
+}
+
+-- ── Скины Азума ─────────────────────────────────────────────────────────
+tr_skins(): string {
+    if language == 1 then
+        return "Скины"
+    }
+    return "Skins"
+}
+
+tr_skin_normal(): string {
+    if language == 1 then
+        return "Обычный"
+    }
+    return "Normal"
+}
+
+tr_skin_zombie(): string {
+    if language == 1 then
+        return "Зомби"
+    }
+    return "Zombie"
+}
+
+tr_skin_zombie_locked(): string {
+    if language == 1 then
+        return "Открой 2 уровень батл пасса"
+    }
+    return "Unlock battle pass level 2"
+}
+
+tr_cups_reward(amount: float): string {
+    if language == 1 then
+        return "+" .. int_str(amount) .. " кубков"
+    }
+    return "+" .. int_str(amount) .. " Cups"
+}

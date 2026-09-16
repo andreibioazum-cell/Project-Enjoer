@@ -1,0 +1,119 @@
+-- dust.ds — след пыли от ходьбы (порт старого dust.ds).
+-- Частицы рождаются ПОЗАДИ кубика и летят главным образом назад, поэтому след
+-- остаётся за спиной. Пул на dust_max частиц, по dust_fields чисел каждая:
+-- x, y, vx, vy, life. Старые arr_get/arr_set стали обычным списком.
+
+dust_spawn(px: float, py: float, jdx: float, jdy: float) {
+    -- Ищем свободный слот (life <= 0).
+    local i = 0
+    local base = 0
+    local found = 0
+    while i < dust_max do {
+        base = i * dust_fields
+        if dust[base + 4] <= 0.0 then
+            found = 1
+            i = dust_max
+        }
+        i = i + 1
+    }
+    if found == 0 then
+        return
+    }
+    -- Основной импульс летит назад по ходу движения, плюс разброс вбок.
+    local angle = rf100() * 6.28
+    local vx = math.cos(angle) * dust_spd * dust_side_share * U -
+        jdx * dust_spd * dust_back_share * U
+    local vy = math.sin(angle) * dust_spd * dust_side_share * U -
+        jdy * dust_spd * dust_back_share * U
+    dust[base] = px
+    dust[base + 1] = py
+    dust[base + 2] = vx
+    dust[base + 3] = vy
+    dust[base + 4] = dust_life_max
+}
+
+update_dust() {
+    local i = 0
+    local base = 0
+    while i < dust_max do {
+        base = i * dust_fields
+        local lf = dust[base + 4]
+        if lf > 0.0 then
+            dust[base] = dust[base] + dust[base + 2] * DT
+            dust[base + 1] = dust[base + 1] + dust[base + 3] * DT
+            -- Трение: частицы плавно тормозят, а не исчезают рывком.
+            dust[base + 2] = dust[base + 2] * 0.88
+            dust[base + 3] = dust[base + 3] * 0.88
+            dust[base + 4] = lf - DT
+        }
+        i = i + 1
+    }
+}
+
+draw_dust() {
+    local i = 0
+    local base = 0
+    while i < dust_max do {
+        base = i * dust_fields
+        local lf = dust[base + 4]
+        if lf > 0.0 then
+            local t = lf / dust_life_max
+            -- Свежая частица яркая и крупная, потом плавно гаснет.
+            local fade = clamp(t / 0.5, 0.0, 1.0)
+            local r = dust_r_max * U * (0.45 + 0.55 * fade)
+            local a = fade * fade * 0.6
+            if a > 0.01 then
+                local grey = 0.47 + 0.39 * t
+                render.color_alpha(grey, grey, grey, a)
+                render.circle(dust[base], dust[base + 1], r)
+            }
+        }
+        i = i + 1
+    }
+}
+
+-- Общий спавн следа: 1-2 частицы для пышности.
+dust_trail(px: float, py: float, jdx: float, jdy: float) {
+    dust_spawn(px, py, jdx, jdy)
+    if rint(2.0) == 0.0 then
+        dust_spawn(px - jdx * dust_back_off * 0.4 * U,
+            py - jdy * dust_back_off * 0.4 * U, jdx, jdy)
+    }
+}
+
+-- Тик спавна пыли игрока (вызывается из move_player).
+tick_dust(jdx: float, jdy: float, jmag: float) {
+    if finished != 0 then
+        return
+    }
+    if jmag < 0.18 then
+        return
+    }
+    if dust_cd > 0.0 then
+        dust_cd = dust_cd - DT
+        return
+    }
+    dust_cd = dust_spawn_cd
+    dust_trail(player.x - jdx * dust_back_off * U,
+        player.y - jdy * dust_back_off * U, jdx, jdy)
+}
+
+-- След врага-бота: тот же шлейф, что и у игрока.
+tick_enemy_dust(vx: float, vy: float) {
+    if finished != 0 or enemy.hp <= 0.0 then
+        return
+    }
+    local mag = math.sqrt(vx * vx + vy * vy)
+    if mag < dust_enemy_min_speed * U then
+        return
+    }
+    if enemy_dust_cd > 0.0 then
+        enemy_dust_cd = enemy_dust_cd - DT
+        return
+    }
+    enemy_dust_cd = dust_spawn_cd
+    local dx = vx / mag
+    local dy = vy / mag
+    dust_trail(enemy.x - dx * dust_back_off * U,
+        enemy.y - dy * dust_back_off * U, dx, dy)
+}

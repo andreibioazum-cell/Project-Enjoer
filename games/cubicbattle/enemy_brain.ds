@@ -1,0 +1,218 @@
+-- enemy_brain.ds — решения бота: выбор фланга, кулдауны, начало атаки,
+-- сближение и главный конечный автомат update_enemy (вторая часть ИИ
+-- из старого battle.ds; вынесена, чтобы файлы были короче 400 строк).
+
+enemy_pick_flank() {
+    local side = (enemy.y - player.y) * math.cos(player.angle) -
+        (enemy.x - player.x) * math.sin(player.angle)
+    if side >= 0.0 then
+        enemy.strafe = 1.0
+    } else {
+        enemy.strafe = -1.0
+    }
+    -- иногда человек меняет решение
+    if rint(100.0) < 22.0 then
+        enemy.strafe = 0.0 - enemy.strafe
+    }
+}
+
+enemy_roll_cooldown(): float {
+    local r = enemy_cooldown_min +
+        math.random() * (enemy_cooldown_max - enemy_cooldown_min)
+    -- вариация скорости
+    enemy.speed_var = 0.85 + rf100() * enemy_human_speed_var
+    if r < enemy_cooldown_min then
+        r = enemy_cooldown_min
+    }
+    return r
+}
+
+start_enemy_attack(): float {
+    local ta = atan2(player.y - enemy.y, player.x - enemy.x)
+    local da = ta - enemy.angle
+    if da > PI then
+        da = da - 2.0 * PI
+    }
+    if da < 0.0 - PI then
+        da = da + 2.0 * PI
+    }
+    -- человечный промах по углу
+    local err = (rf100() - 0.5) * enemy_human_wobble * PI / 180.0
+    if rint(100.0) < enemy_human_miss * 100.0 then
+        err = err + (rf100() - 0.5) * 0.35
+    }
+    enemy.aim_err = err
+    -- Атака начинается, только если бот успеет довернуться за замах —
+    -- иначе он доворачивается плавно (enemy_turn_prediction), без рывков.
+    local turn_budget = enemy_attack_turn_speed * (enemy_windup - enemy_lock_time)
+    if math.abs(da) > turn_budget then
+        return 0.0
+    }
+    enemy.state = 1.0
+    enemy.state_time = enemy_windup
+    enemy.hit = 0.0
+    enemy.react = enemy_human_react_min +
+        math.random() * (enemy_human_react_max - enemy_human_react_min)
+    return 1.0
+}
+
+enemy_engage(desired: float) {
+    local dx = aim_tx - enemy.x
+    local dy = aim_ty - enemy.y
+    local d = math.sqrt(dx * dx + dy * dy)
+    if d < 1.0 then
+        d = 1.0
+    }
+    -- кривизна ходьбы
+    enemy.wobble_t = enemy.wobble_t + DT * (1.2 + math.random())
+    local wobble_off = math.sin(enemy.wobble_t * 2.7) * 14.0 * U +
+        math.cos(enemy.wobble_t * 1.3) * 9.0 * U
+    -- желаемая дистанция с рандомом
+    local want = desired + (rf100() - 0.5) * 18.0 * U
+    local radial = clamp((d - want) * enemy_close_gain,
+        0.0 - bot_speed * U, bot_speed * U)
+    local orbit = bot_strafe_speed * U * enemy.strafe * 0.5
+    if d > want + 110.0 * U then
+        orbit = orbit * 0.4
+    }
+    -- боковой шум: человек не идёт идеально ровно
+    local perp_x = 0.0 - dy / d * wobble_off
+    local perp_y = dx / d * wobble_off
+    local vx = dx / d * radial - dy / d * orbit + perp_x * 0.3
+    local vy = dy / d * radial + dx / d * orbit + perp_y * 0.3
+    -- скорость как у игрока, но с вариацией
+    local cap = bot_speed * U * enemy.speed_var
+    local sp = math.sqrt(vx * vx + vy * vy)
+    if sp > cap and sp > 0.001 then
+        vx = vx / sp * cap
+        vy = vy / sp * cap
+    }
+    -- иногда человек спотыкается — резко меняет скорость
+    if rint(1000.0) < 8.0 then
+        vx = vx * 0.4
+        vy = vy * 0.4
+        enemy.hesit = 0.08 + rf100() / 10.0
+    }
+    if enemy.hesit > 0.0 then
+        enemy.hesit = enemy.hesit - DT
+        vx = vx * 0.55
+        vy = vy * 0.55
+        if enemy.hesit < 0.0 then
+            enemy.hesit = 0.0
+        }
+    }
+    local ms = clamp(DT * enemy_move_smooth, 0.0, 1.0)
+    enemy.svx = lerp(enemy.svx, vx, ms)
+    enemy.svy = lerp(enemy.svy, vy, ms)
+    enemy_move(enemy.svx, enemy.svy)
+}
+
+spawn_enemy() {
+    local margin = 70.0 * U
+    local i = 0
+    while i < 50 do {
+        enemy.x = margin + rint(engine.width() - 140.0 * U)
+        enemy.y = margin + rint(engine.height() - 140.0 * U)
+        if dist(enemy.x, enemy.y, player.x, player.y) > 300.0 * U then
+            i = 50
+        } else {
+            i = i + 1
+        }
+    }
+    enemy.state = 0.0
+    enemy.spawn_t = 0.0
+    enemy.state_time = 0.0
+    enemy.cooldown = enemy_first_delay
+    enemy.hit = 0.0
+    enemy.dodge_cd = 0.0
+    enemy.think = 0.3
+    enemy.mvx = 0.0
+    enemy.mvy = 0.0
+    enemy.svx = 0.0
+    enemy.svy = 0.0
+    enemy.wobble = rf100() * 2.0 * PI
+    enemy.wobble_t = 0.0
+    enemy.react = enemy_human_react_min +
+        math.random() * (enemy_human_react_max - enemy_human_react_min)
+    enemy.speed_var = 0.9 + rint(40.0) / 100.0
+    enemy.aim_err = 0.0
+    if rint(2.0) == 0.0 then
+        enemy.strafe = -1.0
+    } else {
+        enemy.strafe = 1.0
+    }
+}
+
+-- Таймеры бота: заморозка, яд, кулдауны (вызывается из update_enemy).
+enemy_tick_timers(): float {
+    if enemy.freeze > 0.0 then
+        enemy.freeze = enemy.freeze - DT
+        if enemy.freeze < 0.0 then
+            enemy.freeze = 0.0
+        }
+    }
+    if enemy.freeze > 0.0 then
+        freeze_a = freeze_a + DT / freeze_fade_in
+    } else {
+        freeze_a = freeze_a - DT / freeze_fade_out
+    }
+    freeze_a = clamp(freeze_a, 0.0, 1.0)
+    if enemy.cooldown > 0.0 then
+        enemy.cooldown = enemy.cooldown - DT * enemy_freeze_factor()
+        if enemy.cooldown < 0.0 then
+            enemy.cooldown = 0.0
+        }
+    }
+    if enemy.dodge_cd > 0.0 then
+        enemy.dodge_cd = enemy.dodge_cd - DT
+        if enemy.dodge_cd < 0.0 then
+            enemy.dodge_cd = 0.0
+        }
+    }
+    if enemy.flank > 0.0 then
+        enemy.flank = enemy.flank - DT
+    }
+    if enemy.react > 0.0 then
+        enemy.react = enemy.react - DT
+        if enemy.react < 0.0 then
+            enemy.react = 0.0
+        }
+    }
+    if enemy.think > 0.0 then
+        enemy.think = enemy.think - DT
+    }
+    if enemy.poison > 0.0 then
+        if enemy.poison_tick <= 0.0 then
+            enemy.poison_tick = santa_poison_tick_interval
+        }
+        enemy.poison = enemy.poison - DT
+        enemy.poison_tick = enemy.poison_tick - DT
+        if enemy.poison_tick <= 0.0 then
+            local tick_dmg = santa_poison_damage_for(player_level)
+            if player_level >= 3 and enemy.poison_damage > 0.0 then
+                tick_dmg = enemy.poison_damage
+            }
+            enemy.hp = enemy.hp - tick_dmg
+            enemy.poison = 0.0
+            enemy.poison_tick = 0.0
+            enemy.poison_damage = 0.0
+            if enemy.hp <= 0.0 then
+                enemy.hp = 0.0
+                finish_game(1)
+                return 1.0
+            }
+        }
+        if enemy.poison <= 0.0 then
+            enemy.poison = 0.0
+            enemy.poison_tick = 0.0
+            enemy.poison_damage = 0.0
+        }
+    }
+    if enemy.poison > 0.0 then
+        poison_a = poison_a + DT / freeze_fade_in
+    } else {
+        poison_a = poison_a - DT / freeze_fade_out
+    }
+    poison_a = clamp(poison_a, 0.0, 1.0)
+    return 0.0
+}
