@@ -147,8 +147,9 @@ draw_settings() {
     render.rect(0.0, 0.0, engine.width(), engine.height())
     local x = (engine.width() - bw()) / 2.0
     button(tr_back(), x, menu_slot(SET_N, 0.0), bw(), menu_bh(SET_N))
-    button("English", x, menu_slot(SET_N, 1.0), bw(), menu_bh(SET_N))
-    button("Русский", x, menu_slot(SET_N, 2.0), bw(), menu_bh(SET_N))
+    -- Используем функции перевода для кнопок языка
+    button(tr_language_en(), x, menu_slot(SET_N, 1.0), bw(), menu_bh(SET_N))
+    button(tr_language_ru(), x, menu_slot(SET_N, 2.0), bw(), menu_bh(SET_N))
 }
 
 touch_settings(x: float, y: float) {
@@ -162,5 +163,6 @@ touch_settings(x: float, y: float) {
     }
     if menu_hit_at(SET_N, 2.0, x, y) == 1.0 then
         language = 1
+        return
     }
 }

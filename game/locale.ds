@@ -194,6 +194,18 @@ tr_achievement_first_buy_desc(): string {
     return "Buy your first character"
 }
 
+-- Языки для настроек
+tr_language_en(): string {
+    return "English"
+}
+
+tr_language_ru(): string {
+    if language == 1 then
+        return "Русский"
+    }
+    return "Russian"
+}
+
 -- Предупреждение об эпилепсии — оба языка сразу, язык настроек не важен.
 -- Вторая строка говорит о вспышках эффектов в бою (диско-режим жил в онлайне,
 -- которого в порте нет).

@@ -165,7 +165,7 @@ freeze_fade_out = 0.35
 boom_fade_in = 0.25
 boom_fade_out = 0.5
 shadow_off = 10.0
-shadow_alpha = 0.38
+shadow_alpha = 0.25
 
 ebuc_hp = 12.0
 ebuc_station_hp = 9.0

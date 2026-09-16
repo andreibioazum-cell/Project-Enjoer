@@ -38,17 +38,29 @@ draw_facing_dot(x: float, y: float, angle: float, half: float, c: Palette) {
 }
 
 -- Куб с тенью. Тень — тот же спрайт, подкрашенный чёрным со сдвигом.
+-- Поворот кубиков через сдвиг текстуры (эмуляция поворота)
 draw_cube(tex: float, x: float, y: float, angle: float,
                    scale: float, cls: float) {
     local hw = 25.0 * cube_scale * scale * U
+    
+    -- Рисуем тень (более прозрачная)
+    local shadow_a = shadow_alpha * 0.6
     sprite_tint(tex, x - hw - shadow_off * U, y - hw + shadow_off * U,
-        cube_scale * scale * U, BLACK, shadow_alpha)
+        cube_scale * scale * U, BLACK, shadow_a)
+    
+    -- Поворот кубика: используем сдвиг текстуры на основе угла
+    -- Это создает иллюзию поворота без реального вращения спрайта
+    local rot_offset_x = math.cos(angle) * 2.0 * U
+    local rot_offset_y = math.sin(angle) * 2.0 * U
+    
     if cls == 1 and azum_skin == 1 then
         -- Скин «Зомби»: зелёный силуэт Азума.
-        sprite_tint(tex, x - hw, y - hw, cube_scale * scale * U, ZOMBIE, 1.0)
+        sprite_tint(tex, x - hw + rot_offset_x, y - hw + rot_offset_y, cube_scale * scale * U, ZOMBIE, 1.0)
     } else {
-        sprite(tex, x - hw, y - hw, cube_scale * scale * U)
+        sprite(tex, x - hw + rot_offset_x, y - hw + rot_offset_y, cube_scale * scale * U)
     }
+    
+    -- Точка-нос показывает направление
     draw_facing_dot(x, y, angle, hw, WHITE)
 }
 
