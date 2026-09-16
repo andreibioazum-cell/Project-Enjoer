@@ -1474,8 +1474,8 @@ class CCompiler:
     def emit_globals(self) -> None:
         for declaration in self.program.globals:
             dtype = self.model.global_types[declaration.name]
-            self.emit(f"static {self.c_type(dtype)} {self.global_c_names[declaration.name]} = "
-                      f"{self.default_value(dtype)};")
+            self.emit(f"static __attribute__((unused)) {self.c_type(dtype)} "
+                      f"{self.global_c_names[declaration.name]} = {self.default_value(dtype)};")
 
     def emit_function_declarations(self) -> None:
         for function in self.program.functions:
@@ -1594,10 +1594,11 @@ class CCompiler:
         for name, dtype in local_types.items():
             if name in parameter_names:
                 continue
-            self.emit(f"{self.c_type(dtype)} {_sanitize(name)} = {self.default_value(dtype)};")
+            self.emit(f"{self.c_type(dtype)} {_sanitize(name)} __attribute__((unused)) = "
+                      f"{self.default_value(dtype)};")
         for statement in function.body:
             if isinstance(statement, For) and statement.variable not in local_types:
-                self.emit(f"int32_t {_sanitize(statement.variable)} = 0;")
+                self.emit(f"int32_t {_sanitize(statement.variable)} __attribute__((unused)) = 0;")
         for statement in function.body:
             self.emit_statement(statement)
         self.emit_releases(function)

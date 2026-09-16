@@ -100,278 +100,278 @@ typedef struct Joy {
 /* Station: only plain values, no dtor. */
 /* Joy: only plain values, no dtor. */
 
-static float g_U = 0.0f;
-static int32_t g_game_state = 0;
-static int32_t g_language = 0;
-static float g_DT = 0.0f;
-static int32_t g_t_dir = 0;
-static int32_t g_t_target = 0;
-static float g_t_fade = 0.0f;
-static float g_transition_duration = 0.0f;
-static int32_t g_achievement_welcome = 0;
-static int32_t g_achievement_first_win = 0;
-static int32_t g_achievement_first_buy = 0;
-static int32_t g_achievement_all_characters = 0;
-static int32_t g_ACH_WELCOME = 0;
-static int32_t g_ACH_FIRST_WIN = 0;
-static int32_t g_ACH_FIRST_BUY = 0;
-static int32_t g_ACH_ALL_CHARACTERS = 0;
-static float g_ach_toast_t = 0.0f;
-static DsString * g_ach_toast_title = NULL;
-static DsString * g_ach_toast_body = NULL;
-static float g_ACH_TOAST_FADE_IN = 0.0f;
-static float g_ACH_TOAST_HOLD = 0.0f;
-static float g_ACH_TOAST_EXIT = 0.0f;
-static float g_ACH_TOAST_DURATION = 0.0f;
-static Palette * g_PURPLE = NULL;
-static Palette * g_PURPLE_DARK = NULL;
-static Palette * g_CARD_BG = NULL;
-static Palette * g_SEL_FRAME = NULL;
-static Palette * g_BG_DARK = NULL;
-static Palette * g_WHITE = NULL;
-static Palette * g_BLACK = NULL;
-static Palette * g_HP_GREEN = NULL;
-static Palette * g_RED = NULL;
-static Palette * g_BLUE = NULL;
-static Palette * g_BAR_BG = NULL;
-static Palette * g_ICE = NULL;
-static Palette * g_ICE_LIGHT = NULL;
-static Palette * g_BEAM = NULL;
-static Palette * g_BEAM_CORE = NULL;
-static Palette * g_ZOMBIE = NULL;
-static Palette * g_GOLD = NULL;
-static Palette * g_SILVER = NULL;
-static Palette * g_BRONZE = NULL;
-static float g_PI = 0.0f;
-static float g_btn_w = 0.0f;
-static float g_btn_h = 0.0f;
-static float g_back_y = 0.0f;
-static float g_msg_time = 0.0f;
-static float g_msg_fade = 0.0f;
-static float g_alert_hold = 0.0f;
-static float g_finish_t = 0.0f;
-static DsString * g_GRASS = NULL;
-static DsString * g_ORDINARY_TEX = NULL;
-static DsString * g_PUNCH_TEX = NULL;
-static DsString * g_AZUM_TEX = NULL;
-static DsString * g_AZUM_PUNCH_TEX = NULL;
-static DsString * g_SANTA_TEX = NULL;
-static DsString * g_SANTA_PUNCH_TEX = NULL;
-static DsString * g_EBUC_TEX = NULL;
-static DsString * g_EBUC_PUNCH_TEX = NULL;
-static DsString * g_DESPENSER_TEX = NULL;
-static DsString * g_CANDY_TEX = NULL;
-static DsString * g_SNOWFLAKE_TEX = NULL;
-static int32_t g_tex_grass = 0;
-static int32_t g_tex_ordinary = 0;
-static int32_t g_tex_ordinary_punch = 0;
-static int32_t g_tex_azum = 0;
-static int32_t g_tex_azum_punch = 0;
-static int32_t g_tex_santa = 0;
-static int32_t g_tex_santa_punch = 0;
-static int32_t g_tex_ebuc = 0;
-static int32_t g_tex_ebuc_punch = 0;
-static int32_t g_tex_despenser = 0;
-static int32_t g_tex_candy = 0;
-static int32_t g_tex_snowflake = 0;
-static int32_t g_game_font = 0;
-static int32_t g_warn_open = 0;
-static float g_warn_t = 0.0f;
-static float g_warn_a = 0.0f;
-static float g_warn_hold = 0.0f;
-static float g_warn_fade = 0.0f;
-static float g_cups = 0.0f;
-static float g_candies = 0.0f;
-static float g_player_class = 0.0f;
-static int32_t g_azum_owned = 0;
-static int32_t g_santa_owned = 0;
-static int32_t g_ebuc_owned = 0;
-static float g_cup_win = 0.0f;
-static float g_candy_win = 0.0f;
-static float g_azum_cost = 0.0f;
-static float g_santa_candy_cost = 0.0f;
-static float g_ebuc_candy_cost = 0.0f;
-static int32_t g_cups_awarded = 0;
-static float g_class_msg_t = 0.0f;
-static float g_player_level = 0.0f;
-static float g_levels_unlocked = 0.0f;
-static float g_max_level = 0.0f;
-static float g_level_base_cost = 0.0f;
-static float g_level_cost_step = 0.0f;
-static float g_level_msg_t = 0.0f;
-static float g_ordinary_level = 0.0f;
-static float g_ordinary_levels_unlocked = 0.0f;
-static float g_azum_level = 0.0f;
-static float g_azum_levels_unlocked = 0.0f;
-static float g_santa_level = 0.0f;
-static float g_santa_levels_unlocked = 0.0f;
-static float g_ebuc_level = 0.0f;
-static float g_ebuc_levels_unlocked = 0.0f;
-static float g_bp_level = 0.0f;
-static float g_bp_max = 0.0f;
-static float g_bp_cost = 0.0f;
-static float g_bp_msg_t = 0.0f;
-static int32_t g_bp_msg_kind = 0;
-static int32_t g_azum_skin = 0;
-static float g_skin_msg_t = 0.0f;
-static float g_punch_time = 0.0f;
-static float g_punch_cooldown = 0.0f;
-static float g_punch_reach = 0.0f;
-static float g_punch_width = 0.0f;
-static float g_punch_damage = 0.0f;
-static float g_joy_speed = 0.0f;
-static float g_bot_speed = 0.0f;
-static float g_bot_strafe_speed = 0.0f;
-static float g_bot_dodge_speed = 0.0f;
-static float g_cube_scale = 0.0f;
-static float g_player_scale = 0.0f;
-static float g_enemy_scale = 0.0f;
-static float g_aim_fade_out = 0.0f;
-static float g_aim_max_alpha = 0.0f;
-static float g_enemy_min_distance = 0.0f;
-static float g_enemy_punch_reach = 0.0f;
-static float g_enemy_punch_width = 0.0f;
-static float g_enemy_windup = 0.0f;
-static float g_enemy_lock_time = 0.0f;
-static float g_enemy_punch_time = 0.0f;
-static float g_enemy_recovery = 0.0f;
-static float g_enemy_cooldown_min = 0.0f;
-static float g_enemy_cooldown_max = 0.0f;
-static float g_enemy_damage = 0.0f;
-static float g_enemy_base_hp = 0.0f;
-static float g_enemy_first_delay = 0.0f;
-static float g_enemy_dodge_time = 0.0f;
-static float g_enemy_dodge_cooldown = 0.0f;
-static float g_enemy_think_min = 0.0f;
-static float g_enemy_think_max = 0.0f;
-static float g_enemy_lead = 0.0f;
-static float g_enemy_hit_margin = 0.0f;
-static float g_enemy_close_gain = 0.0f;
-static float g_enemy_flank_time = 0.0f;
-static float g_enemy_still_speed = 0.0f;
-static float g_enemy_punish_react = 0.0f;
-static float g_enemy_move_smooth = 0.0f;
-static float g_enemy_face_speed = 0.0f;
-static float g_enemy_face_max_speed = 0.0f;
-static float g_enemy_attack_turn_speed = 0.0f;
-static float g_enemy_human_wobble = 0.0f;
-static float g_enemy_human_error = 0.0f;
-static float g_enemy_human_miss = 0.0f;
-static float g_enemy_human_react_min = 0.0f;
-static float g_enemy_human_react_max = 0.0f;
-static float g_enemy_human_speed_var = 0.0f;
-static float g_enemy_human_dodge_fail = 0.0f;
-static int32_t g_azum_revived = 0;
-static float g_revive_prot = 0.0f;
-static float g_azum_second_life_damage_reduction = 0.0f;
-static float g_azum_speed_bonus = 0.0f;
-static float g_azum_attack_heal = 0.0f;
-static float g_ordinary_damage_bonus = 0.0f;
-static float g_ordinary_speed_bonus = 0.0f;
-static float g_ordinary_attack_heal = 0.0f;
-static float g_santa_poison_damage_bonus = 0.0f;
-static float g_santa_freeze_time_bonus = 0.0f;
-static float g_santa_damage = 0.0f;
-static float g_santa_poison_time = 0.0f;
-static float g_santa_poison_tick_interval = 0.0f;
-static float g_santa_poison_dps = 0.0f;
-static float g_santa_follow_delay = 0.0f;
-static float g_santa_super_damage = 0.0f;
-static float g_super_freeze_slow = 0.0f;
-static float g_super_cd_time = 0.0f;
-static float g_super_speed = 0.0f;
-static float g_super_range = 0.0f;
-static float g_super_radius = 0.0f;
-static float g_boom_time = 0.0f;
-static float g_freeze_fade_in = 0.0f;
-static float g_freeze_fade_out = 0.0f;
-static float g_boom_fade_in = 0.0f;
-static float g_boom_fade_out = 0.0f;
-static float g_shadow_off = 0.0f;
-static float g_shadow_alpha = 0.0f;
-static float g_ebuc_hp = 0.0f;
-static float g_ebuc_station_hp = 0.0f;
-static float g_ebuc_station_hp_bonus = 0.0f;
-static float g_ebuc_damage = 0.0f;
-static float g_ebuc_super_cd_time = 0.0f;
-static float g_station_boom_time = 0.0f;
-static float g_station_hit_time = 0.0f;
-static float g_station_scale = 0.0f;
-static float g_station_spawn_time = 0.0f;
-static float g_station_spawn_t = 0.0f;
-static float g_ebuc_place_heal = 0.0f;
-static float g_ebuc_beam_heal = 0.0f;
-static float g_station_heal_t = 0.0f;
-static int32_t g_candy_count = 0;
-static float g_candy_margin = 0.0f;
-static float g_candy_scale = 0.0f;
-static int32_t g_candy_give = 0;
-static int32_t g_dust_max = 0;
-static int32_t g_dust_fields = 0;
-static float g_dust_life_max = 0.0f;
-static float g_dust_spawn_cd = 0.0f;
-static float g_dust_r_max = 0.0f;
-static float g_dust_spd = 0.0f;
-static float g_dust_back_off = 0.0f;
-static float g_dust_back_share = 0.0f;
-static float g_dust_side_share = 0.0f;
-static float g_dust_cd = 0.0f;
-static float g_enemy_dust_cd = 0.0f;
-static float g_dust_enemy_min_speed = 0.0f;
-static Player * g_player = NULL;
-static Enemy * g_enemy = NULL;
-static Punch * g_punch = NULL;
-static Gift * g_gift = NULL;
-static Station * g_station = NULL;
-static Joy * g_joy = NULL;
-static float g_aim_tx = 0.0f;
-static float g_aim_ty = 0.0f;
-static float g_finished = 0.0f;
-static float g_atk_x = 0.0f;
-static float g_atk_y = 0.0f;
-static float g_atk2_x = 0.0f;
-static float g_atk2_y = 0.0f;
-static float g_joy_id = 0.0f;
-static float g_aim_id = 0.0f;
-static float g_super_id = 0.0f;
-static float g_punch_left = 0.0f;
-static float g_punch_cd = 0.0f;
-static float g_aim_a = 0.0f;
-static float g_santa_follow = 0.0f;
-static float g_super_cd = 0.0f;
-static float g_boom_t = 0.0f;
-static float g_boom_x = 0.0f;
-static float g_boom_y = 0.0f;
-static float g_super_windup = 0.0f;
-static int32_t g_queued_punch = 0;
-static int32_t g_queued_super = 0;
-static float g_freeze_a = 0.0f;
-static float g_player_freeze = 0.0f;
-static float g_player_freeze_slow = 0.0f;
-static float g_pfreeze_a = 0.0f;
-static float g_player_poison = 0.0f;
-static float g_player_poison_tick = 0.0f;
-static float g_player_poison_damage = 0.0f;
-static float g_ppoison_a = 0.0f;
-static float g_poison_a = 0.0f;
-static int32_t g_station_booms_max = 0;
-static DsList * g_station_boom_xs = NULL;
-static DsList * g_station_boom_ys = NULL;
-static DsList * g_station_boom_ts = NULL;
-static float g_station_hit_t = 0.0f;
-static DsList * g_ebuc_station_stack_x = NULL;
-static DsList * g_ebuc_station_stack_y = NULL;
-static DsList * g_ebuc_station_stack_hp = NULL;
-static DsList * g_ebuc_station_stack_max = NULL;
-static DsList * g_candy_x = NULL;
-static DsList * g_candy_y = NULL;
-static DsList * g_dust = NULL;
-static float g_LOBBY_N = 0.0f;
-static float g_MODES_N = 0.0f;
-static float g_SET_N = 0.0f;
-static float g_CLS_GAP = 0.0f;
-static float g_LVL_ROW_H = 0.0f;
-static float g_LVL_W = 0.0f;
+static __attribute__((unused)) float g_U = 0.0f;
+static __attribute__((unused)) int32_t g_game_state = 0;
+static __attribute__((unused)) int32_t g_language = 0;
+static __attribute__((unused)) float g_DT = 0.0f;
+static __attribute__((unused)) int32_t g_t_dir = 0;
+static __attribute__((unused)) int32_t g_t_target = 0;
+static __attribute__((unused)) float g_t_fade = 0.0f;
+static __attribute__((unused)) float g_transition_duration = 0.0f;
+static __attribute__((unused)) int32_t g_achievement_welcome = 0;
+static __attribute__((unused)) int32_t g_achievement_first_win = 0;
+static __attribute__((unused)) int32_t g_achievement_first_buy = 0;
+static __attribute__((unused)) int32_t g_achievement_all_characters = 0;
+static __attribute__((unused)) int32_t g_ACH_WELCOME = 0;
+static __attribute__((unused)) int32_t g_ACH_FIRST_WIN = 0;
+static __attribute__((unused)) int32_t g_ACH_FIRST_BUY = 0;
+static __attribute__((unused)) int32_t g_ACH_ALL_CHARACTERS = 0;
+static __attribute__((unused)) float g_ach_toast_t = 0.0f;
+static __attribute__((unused)) DsString * g_ach_toast_title = NULL;
+static __attribute__((unused)) DsString * g_ach_toast_body = NULL;
+static __attribute__((unused)) float g_ACH_TOAST_FADE_IN = 0.0f;
+static __attribute__((unused)) float g_ACH_TOAST_HOLD = 0.0f;
+static __attribute__((unused)) float g_ACH_TOAST_EXIT = 0.0f;
+static __attribute__((unused)) float g_ACH_TOAST_DURATION = 0.0f;
+static __attribute__((unused)) Palette * g_PURPLE = NULL;
+static __attribute__((unused)) Palette * g_PURPLE_DARK = NULL;
+static __attribute__((unused)) Palette * g_CARD_BG = NULL;
+static __attribute__((unused)) Palette * g_SEL_FRAME = NULL;
+static __attribute__((unused)) Palette * g_BG_DARK = NULL;
+static __attribute__((unused)) Palette * g_WHITE = NULL;
+static __attribute__((unused)) Palette * g_BLACK = NULL;
+static __attribute__((unused)) Palette * g_HP_GREEN = NULL;
+static __attribute__((unused)) Palette * g_RED = NULL;
+static __attribute__((unused)) Palette * g_BLUE = NULL;
+static __attribute__((unused)) Palette * g_BAR_BG = NULL;
+static __attribute__((unused)) Palette * g_ICE = NULL;
+static __attribute__((unused)) Palette * g_ICE_LIGHT = NULL;
+static __attribute__((unused)) Palette * g_BEAM = NULL;
+static __attribute__((unused)) Palette * g_BEAM_CORE = NULL;
+static __attribute__((unused)) Palette * g_ZOMBIE = NULL;
+static __attribute__((unused)) Palette * g_GOLD = NULL;
+static __attribute__((unused)) Palette * g_SILVER = NULL;
+static __attribute__((unused)) Palette * g_BRONZE = NULL;
+static __attribute__((unused)) float g_PI = 0.0f;
+static __attribute__((unused)) float g_btn_w = 0.0f;
+static __attribute__((unused)) float g_btn_h = 0.0f;
+static __attribute__((unused)) float g_back_y = 0.0f;
+static __attribute__((unused)) float g_msg_time = 0.0f;
+static __attribute__((unused)) float g_msg_fade = 0.0f;
+static __attribute__((unused)) float g_alert_hold = 0.0f;
+static __attribute__((unused)) float g_finish_t = 0.0f;
+static __attribute__((unused)) DsString * g_GRASS = NULL;
+static __attribute__((unused)) DsString * g_ORDINARY_TEX = NULL;
+static __attribute__((unused)) DsString * g_PUNCH_TEX = NULL;
+static __attribute__((unused)) DsString * g_AZUM_TEX = NULL;
+static __attribute__((unused)) DsString * g_AZUM_PUNCH_TEX = NULL;
+static __attribute__((unused)) DsString * g_SANTA_TEX = NULL;
+static __attribute__((unused)) DsString * g_SANTA_PUNCH_TEX = NULL;
+static __attribute__((unused)) DsString * g_EBUC_TEX = NULL;
+static __attribute__((unused)) DsString * g_EBUC_PUNCH_TEX = NULL;
+static __attribute__((unused)) DsString * g_DESPENSER_TEX = NULL;
+static __attribute__((unused)) DsString * g_CANDY_TEX = NULL;
+static __attribute__((unused)) DsString * g_SNOWFLAKE_TEX = NULL;
+static __attribute__((unused)) int32_t g_tex_grass = 0;
+static __attribute__((unused)) int32_t g_tex_ordinary = 0;
+static __attribute__((unused)) int32_t g_tex_ordinary_punch = 0;
+static __attribute__((unused)) int32_t g_tex_azum = 0;
+static __attribute__((unused)) int32_t g_tex_azum_punch = 0;
+static __attribute__((unused)) int32_t g_tex_santa = 0;
+static __attribute__((unused)) int32_t g_tex_santa_punch = 0;
+static __attribute__((unused)) int32_t g_tex_ebuc = 0;
+static __attribute__((unused)) int32_t g_tex_ebuc_punch = 0;
+static __attribute__((unused)) int32_t g_tex_despenser = 0;
+static __attribute__((unused)) int32_t g_tex_candy = 0;
+static __attribute__((unused)) int32_t g_tex_snowflake = 0;
+static __attribute__((unused)) int32_t g_game_font = 0;
+static __attribute__((unused)) int32_t g_warn_open = 0;
+static __attribute__((unused)) float g_warn_t = 0.0f;
+static __attribute__((unused)) float g_warn_a = 0.0f;
+static __attribute__((unused)) float g_warn_hold = 0.0f;
+static __attribute__((unused)) float g_warn_fade = 0.0f;
+static __attribute__((unused)) float g_cups = 0.0f;
+static __attribute__((unused)) float g_candies = 0.0f;
+static __attribute__((unused)) float g_player_class = 0.0f;
+static __attribute__((unused)) int32_t g_azum_owned = 0;
+static __attribute__((unused)) int32_t g_santa_owned = 0;
+static __attribute__((unused)) int32_t g_ebuc_owned = 0;
+static __attribute__((unused)) float g_cup_win = 0.0f;
+static __attribute__((unused)) float g_candy_win = 0.0f;
+static __attribute__((unused)) float g_azum_cost = 0.0f;
+static __attribute__((unused)) float g_santa_candy_cost = 0.0f;
+static __attribute__((unused)) float g_ebuc_candy_cost = 0.0f;
+static __attribute__((unused)) int32_t g_cups_awarded = 0;
+static __attribute__((unused)) float g_class_msg_t = 0.0f;
+static __attribute__((unused)) float g_player_level = 0.0f;
+static __attribute__((unused)) float g_levels_unlocked = 0.0f;
+static __attribute__((unused)) float g_max_level = 0.0f;
+static __attribute__((unused)) float g_level_base_cost = 0.0f;
+static __attribute__((unused)) float g_level_cost_step = 0.0f;
+static __attribute__((unused)) float g_level_msg_t = 0.0f;
+static __attribute__((unused)) float g_ordinary_level = 0.0f;
+static __attribute__((unused)) float g_ordinary_levels_unlocked = 0.0f;
+static __attribute__((unused)) float g_azum_level = 0.0f;
+static __attribute__((unused)) float g_azum_levels_unlocked = 0.0f;
+static __attribute__((unused)) float g_santa_level = 0.0f;
+static __attribute__((unused)) float g_santa_levels_unlocked = 0.0f;
+static __attribute__((unused)) float g_ebuc_level = 0.0f;
+static __attribute__((unused)) float g_ebuc_levels_unlocked = 0.0f;
+static __attribute__((unused)) float g_bp_level = 0.0f;
+static __attribute__((unused)) float g_bp_max = 0.0f;
+static __attribute__((unused)) float g_bp_cost = 0.0f;
+static __attribute__((unused)) float g_bp_msg_t = 0.0f;
+static __attribute__((unused)) int32_t g_bp_msg_kind = 0;
+static __attribute__((unused)) int32_t g_azum_skin = 0;
+static __attribute__((unused)) float g_skin_msg_t = 0.0f;
+static __attribute__((unused)) float g_punch_time = 0.0f;
+static __attribute__((unused)) float g_punch_cooldown = 0.0f;
+static __attribute__((unused)) float g_punch_reach = 0.0f;
+static __attribute__((unused)) float g_punch_width = 0.0f;
+static __attribute__((unused)) float g_punch_damage = 0.0f;
+static __attribute__((unused)) float g_joy_speed = 0.0f;
+static __attribute__((unused)) float g_bot_speed = 0.0f;
+static __attribute__((unused)) float g_bot_strafe_speed = 0.0f;
+static __attribute__((unused)) float g_bot_dodge_speed = 0.0f;
+static __attribute__((unused)) float g_cube_scale = 0.0f;
+static __attribute__((unused)) float g_player_scale = 0.0f;
+static __attribute__((unused)) float g_enemy_scale = 0.0f;
+static __attribute__((unused)) float g_aim_fade_out = 0.0f;
+static __attribute__((unused)) float g_aim_max_alpha = 0.0f;
+static __attribute__((unused)) float g_enemy_min_distance = 0.0f;
+static __attribute__((unused)) float g_enemy_punch_reach = 0.0f;
+static __attribute__((unused)) float g_enemy_punch_width = 0.0f;
+static __attribute__((unused)) float g_enemy_windup = 0.0f;
+static __attribute__((unused)) float g_enemy_lock_time = 0.0f;
+static __attribute__((unused)) float g_enemy_punch_time = 0.0f;
+static __attribute__((unused)) float g_enemy_recovery = 0.0f;
+static __attribute__((unused)) float g_enemy_cooldown_min = 0.0f;
+static __attribute__((unused)) float g_enemy_cooldown_max = 0.0f;
+static __attribute__((unused)) float g_enemy_damage = 0.0f;
+static __attribute__((unused)) float g_enemy_base_hp = 0.0f;
+static __attribute__((unused)) float g_enemy_first_delay = 0.0f;
+static __attribute__((unused)) float g_enemy_dodge_time = 0.0f;
+static __attribute__((unused)) float g_enemy_dodge_cooldown = 0.0f;
+static __attribute__((unused)) float g_enemy_think_min = 0.0f;
+static __attribute__((unused)) float g_enemy_think_max = 0.0f;
+static __attribute__((unused)) float g_enemy_lead = 0.0f;
+static __attribute__((unused)) float g_enemy_hit_margin = 0.0f;
+static __attribute__((unused)) float g_enemy_close_gain = 0.0f;
+static __attribute__((unused)) float g_enemy_flank_time = 0.0f;
+static __attribute__((unused)) float g_enemy_still_speed = 0.0f;
+static __attribute__((unused)) float g_enemy_punish_react = 0.0f;
+static __attribute__((unused)) float g_enemy_move_smooth = 0.0f;
+static __attribute__((unused)) float g_enemy_face_speed = 0.0f;
+static __attribute__((unused)) float g_enemy_face_max_speed = 0.0f;
+static __attribute__((unused)) float g_enemy_attack_turn_speed = 0.0f;
+static __attribute__((unused)) float g_enemy_human_wobble = 0.0f;
+static __attribute__((unused)) float g_enemy_human_error = 0.0f;
+static __attribute__((unused)) float g_enemy_human_miss = 0.0f;
+static __attribute__((unused)) float g_enemy_human_react_min = 0.0f;
+static __attribute__((unused)) float g_enemy_human_react_max = 0.0f;
+static __attribute__((unused)) float g_enemy_human_speed_var = 0.0f;
+static __attribute__((unused)) float g_enemy_human_dodge_fail = 0.0f;
+static __attribute__((unused)) int32_t g_azum_revived = 0;
+static __attribute__((unused)) float g_revive_prot = 0.0f;
+static __attribute__((unused)) float g_azum_second_life_damage_reduction = 0.0f;
+static __attribute__((unused)) float g_azum_speed_bonus = 0.0f;
+static __attribute__((unused)) float g_azum_attack_heal = 0.0f;
+static __attribute__((unused)) float g_ordinary_damage_bonus = 0.0f;
+static __attribute__((unused)) float g_ordinary_speed_bonus = 0.0f;
+static __attribute__((unused)) float g_ordinary_attack_heal = 0.0f;
+static __attribute__((unused)) float g_santa_poison_damage_bonus = 0.0f;
+static __attribute__((unused)) float g_santa_freeze_time_bonus = 0.0f;
+static __attribute__((unused)) float g_santa_damage = 0.0f;
+static __attribute__((unused)) float g_santa_poison_time = 0.0f;
+static __attribute__((unused)) float g_santa_poison_tick_interval = 0.0f;
+static __attribute__((unused)) float g_santa_poison_dps = 0.0f;
+static __attribute__((unused)) float g_santa_follow_delay = 0.0f;
+static __attribute__((unused)) float g_santa_super_damage = 0.0f;
+static __attribute__((unused)) float g_super_freeze_slow = 0.0f;
+static __attribute__((unused)) float g_super_cd_time = 0.0f;
+static __attribute__((unused)) float g_super_speed = 0.0f;
+static __attribute__((unused)) float g_super_range = 0.0f;
+static __attribute__((unused)) float g_super_radius = 0.0f;
+static __attribute__((unused)) float g_boom_time = 0.0f;
+static __attribute__((unused)) float g_freeze_fade_in = 0.0f;
+static __attribute__((unused)) float g_freeze_fade_out = 0.0f;
+static __attribute__((unused)) float g_boom_fade_in = 0.0f;
+static __attribute__((unused)) float g_boom_fade_out = 0.0f;
+static __attribute__((unused)) float g_shadow_off = 0.0f;
+static __attribute__((unused)) float g_shadow_alpha = 0.0f;
+static __attribute__((unused)) float g_ebuc_hp = 0.0f;
+static __attribute__((unused)) float g_ebuc_station_hp = 0.0f;
+static __attribute__((unused)) float g_ebuc_station_hp_bonus = 0.0f;
+static __attribute__((unused)) float g_ebuc_damage = 0.0f;
+static __attribute__((unused)) float g_ebuc_super_cd_time = 0.0f;
+static __attribute__((unused)) float g_station_boom_time = 0.0f;
+static __attribute__((unused)) float g_station_hit_time = 0.0f;
+static __attribute__((unused)) float g_station_scale = 0.0f;
+static __attribute__((unused)) float g_station_spawn_time = 0.0f;
+static __attribute__((unused)) float g_station_spawn_t = 0.0f;
+static __attribute__((unused)) float g_ebuc_place_heal = 0.0f;
+static __attribute__((unused)) float g_ebuc_beam_heal = 0.0f;
+static __attribute__((unused)) float g_station_heal_t = 0.0f;
+static __attribute__((unused)) int32_t g_candy_count = 0;
+static __attribute__((unused)) float g_candy_margin = 0.0f;
+static __attribute__((unused)) float g_candy_scale = 0.0f;
+static __attribute__((unused)) int32_t g_candy_give = 0;
+static __attribute__((unused)) int32_t g_dust_max = 0;
+static __attribute__((unused)) int32_t g_dust_fields = 0;
+static __attribute__((unused)) float g_dust_life_max = 0.0f;
+static __attribute__((unused)) float g_dust_spawn_cd = 0.0f;
+static __attribute__((unused)) float g_dust_r_max = 0.0f;
+static __attribute__((unused)) float g_dust_spd = 0.0f;
+static __attribute__((unused)) float g_dust_back_off = 0.0f;
+static __attribute__((unused)) float g_dust_back_share = 0.0f;
+static __attribute__((unused)) float g_dust_side_share = 0.0f;
+static __attribute__((unused)) float g_dust_cd = 0.0f;
+static __attribute__((unused)) float g_enemy_dust_cd = 0.0f;
+static __attribute__((unused)) float g_dust_enemy_min_speed = 0.0f;
+static __attribute__((unused)) Player * g_player = NULL;
+static __attribute__((unused)) Enemy * g_enemy = NULL;
+static __attribute__((unused)) Punch * g_punch = NULL;
+static __attribute__((unused)) Gift * g_gift = NULL;
+static __attribute__((unused)) Station * g_station = NULL;
+static __attribute__((unused)) Joy * g_joy = NULL;
+static __attribute__((unused)) float g_aim_tx = 0.0f;
+static __attribute__((unused)) float g_aim_ty = 0.0f;
+static __attribute__((unused)) float g_finished = 0.0f;
+static __attribute__((unused)) float g_atk_x = 0.0f;
+static __attribute__((unused)) float g_atk_y = 0.0f;
+static __attribute__((unused)) float g_atk2_x = 0.0f;
+static __attribute__((unused)) float g_atk2_y = 0.0f;
+static __attribute__((unused)) float g_joy_id = 0.0f;
+static __attribute__((unused)) float g_aim_id = 0.0f;
+static __attribute__((unused)) float g_super_id = 0.0f;
+static __attribute__((unused)) float g_punch_left = 0.0f;
+static __attribute__((unused)) float g_punch_cd = 0.0f;
+static __attribute__((unused)) float g_aim_a = 0.0f;
+static __attribute__((unused)) float g_santa_follow = 0.0f;
+static __attribute__((unused)) float g_super_cd = 0.0f;
+static __attribute__((unused)) float g_boom_t = 0.0f;
+static __attribute__((unused)) float g_boom_x = 0.0f;
+static __attribute__((unused)) float g_boom_y = 0.0f;
+static __attribute__((unused)) float g_super_windup = 0.0f;
+static __attribute__((unused)) int32_t g_queued_punch = 0;
+static __attribute__((unused)) int32_t g_queued_super = 0;
+static __attribute__((unused)) float g_freeze_a = 0.0f;
+static __attribute__((unused)) float g_player_freeze = 0.0f;
+static __attribute__((unused)) float g_player_freeze_slow = 0.0f;
+static __attribute__((unused)) float g_pfreeze_a = 0.0f;
+static __attribute__((unused)) float g_player_poison = 0.0f;
+static __attribute__((unused)) float g_player_poison_tick = 0.0f;
+static __attribute__((unused)) float g_player_poison_damage = 0.0f;
+static __attribute__((unused)) float g_ppoison_a = 0.0f;
+static __attribute__((unused)) float g_poison_a = 0.0f;
+static __attribute__((unused)) int32_t g_station_booms_max = 0;
+static __attribute__((unused)) DsList * g_station_boom_xs = NULL;
+static __attribute__((unused)) DsList * g_station_boom_ys = NULL;
+static __attribute__((unused)) DsList * g_station_boom_ts = NULL;
+static __attribute__((unused)) float g_station_hit_t = 0.0f;
+static __attribute__((unused)) DsList * g_ebuc_station_stack_x = NULL;
+static __attribute__((unused)) DsList * g_ebuc_station_stack_y = NULL;
+static __attribute__((unused)) DsList * g_ebuc_station_stack_hp = NULL;
+static __attribute__((unused)) DsList * g_ebuc_station_stack_max = NULL;
+static __attribute__((unused)) DsList * g_candy_x = NULL;
+static __attribute__((unused)) DsList * g_candy_y = NULL;
+static __attribute__((unused)) DsList * g_dust = NULL;
+static __attribute__((unused)) float g_LOBBY_N = 0.0f;
+static __attribute__((unused)) float g_MODES_N = 0.0f;
+static __attribute__((unused)) float g_SET_N = 0.0f;
+static __attribute__((unused)) float g_CLS_GAP = 0.0f;
+static __attribute__((unused)) float g_LVL_ROW_H = 0.0f;
+static __attribute__((unused)) float g_LVL_W = 0.0f;
 
 static int ds_program_initialized;
 
@@ -900,7 +900,7 @@ static __attribute__((unused)) void ds_fn_update_warning(void) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_warning(void) {
-    float y = 0.0f;
+    float y __attribute__((unused)) = 0.0f;
     ds_fn_paint_a(g_BLACK, g_warn_a);
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     y = (ds_div((double)(ds_engine_height()), (double)(2.0f), "game/main.ds:67") - (196.0f * g_U));
@@ -948,16 +948,16 @@ static __attribute__((unused)) void ds_fn_tick_achievement_toast(void) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_achievement_toast(void) {
-    float elapsed = 0.0f;
-    float w = 0.0f;
-    float h = 0.0f;
-    float x = 0.0f;
-    float home_y = 0.0f;
-    float off = 0.0f;
-    float y = 0.0f;
-    float k = 0.0f;
-    float ease = 0.0f;
-    float k2 = 0.0f;
+    float elapsed __attribute__((unused)) = 0.0f;
+    float w __attribute__((unused)) = 0.0f;
+    float h __attribute__((unused)) = 0.0f;
+    float x __attribute__((unused)) = 0.0f;
+    float home_y __attribute__((unused)) = 0.0f;
+    float off __attribute__((unused)) = 0.0f;
+    float y __attribute__((unused)) = 0.0f;
+    float k __attribute__((unused)) = 0.0f;
+    float ease __attribute__((unused)) = 0.0f;
+    float k2 __attribute__((unused)) = 0.0f;
     if (g_ach_toast_t <= 0.0f) {
         return;
     }
@@ -1209,8 +1209,8 @@ static __attribute__((unused)) float ds_fn_dist(float x0, float y0, float x1, fl
     (void)y0;
     (void)x1;
     (void)y1;
-    float dx = 0.0f;
-    float dy = 0.0f;
+    float dx __attribute__((unused)) = 0.0f;
+    float dy __attribute__((unused)) = 0.0f;
     dx = (x1 - x0);
     dy = (y1 - y0);
     return ds_math_sqrt((double)(((dx * dx) + (dy * dy))));
@@ -1250,8 +1250,8 @@ static __attribute__((unused)) float ds_fn_sign(float v) {
 
 static __attribute__((unused)) float ds_fn_atan_approx(float z) {
     (void)z;
-    float az = 0.0f;
-    float r = 0.0f;
+    float az __attribute__((unused)) = 0.0f;
+    float r __attribute__((unused)) = 0.0f;
     az = ds_math_abs((double)(z));
     if (az <= 1.0f) {
         return (z * (0.7853981634f + (0.273f * (1.0f - az))));
@@ -1288,8 +1288,8 @@ static __attribute__((unused)) float ds_fn_atan2(float y, float x) {
 
 static __attribute__((unused)) DsString * ds_fn_int_str(float v) {
     (void)v;
-    float t = 0.0f;
-    int32_t n = 0;
+    float t __attribute__((unused)) = 0.0f;
+    int32_t n __attribute__((unused)) = 0;
     t = v;
     if (t < 0.0f) {
         t = (0.0f - t);
@@ -1318,8 +1318,8 @@ static __attribute__((unused)) DsString * ds_fn_int_str(float v) {
 
 static __attribute__((unused)) DsString * ds_fn_ceil_str(float v) {
     (void)v;
-    float t = 0.0f;
-    int32_t n = 0;
+    float t __attribute__((unused)) = 0.0f;
+    int32_t n __attribute__((unused)) = 0;
     t = v;
     n = 0;
     while (t > 0.0f) {
@@ -2048,8 +2048,8 @@ static __attribute__((unused)) void ds_fn_roundrect(float x, float y, float w, f
     (void)r;
     (void)c;
     (void)a;
-    float rr = 0.0f;
-    float lim = 0.0f;
+    float rr __attribute__((unused)) = 0.0f;
+    float lim __attribute__((unused)) = 0.0f;
     if ((w <= 0.0f) || (h <= 0.0f)) {
         return;
     }
@@ -2130,7 +2130,7 @@ static __attribute__((unused)) void ds_fn_text_in_box(DsString * label, float x,
     (void)h;
     (void)c;
     (void)scale;
-    float est = 0.0f;
+    float est __attribute__((unused)) = 0.0f;
     est = ds_fn_text_est(label, scale);
     ds_fn_draw_text(label, (x + ds_div((double)((w - est)), (double)(2.0f), "game/ui.ds:73")), ((y + ds_div((double)(h), (double)(2.0f), "game/ui.ds:73")) - (9.04f * scale)), scale, c);
     return;
@@ -2154,7 +2154,7 @@ static __attribute__((unused)) void ds_fn_ctext_fade(DsString * s, float y, floa
     (void)c;
     (void)t;
     (void)fade;
-    float a = 0.0f;
+    float a __attribute__((unused)) = 0.0f;
     a = ds_fn_clamp(ds_div((double)(t), (double)(fade), "game/ui.ds:82"), 0.0f, 1.0f);
     ds_fn_ctext_a(s, y, scale, c, a);
     return;
@@ -2203,7 +2203,7 @@ static __attribute__((unused)) void ds_fn_draw_back(void) {
 static __attribute__((unused)) float ds_fn_back_hit(float x, float y) {
     (void)x;
     (void)y;
-    float bx = 0.0f;
+    float bx __attribute__((unused)) = 0.0f;
     bx = ds_div((double)((ds_engine_width() - ds_fn_bw())), (double)(2.0f), "game/ui.ds:110");
     if ((((x >= (bx - (12.0f * g_U))) && (x <= ((bx + ds_fn_bw()) + (12.0f * g_U)))) && (y >= ((g_back_y * g_U) - (8.0f * g_U)))) && (y <= (((g_back_y * g_U) + ds_fn_bh()) + (8.0f * g_U)))) {
         return 1.0f;
@@ -2221,10 +2221,10 @@ static __attribute__((unused)) void ds_fn_hud_bar(float bx, float by, float w, f
     (void)max;
     (void)c;
     (void)from_right;
-    float shown = 0.0f;
-    float pad = 0.0f;
-    float fh = 0.0f;
-    float fill_w = 0.0f;
+    float shown __attribute__((unused)) = 0.0f;
+    float pad __attribute__((unused)) = 0.0f;
+    float fh __attribute__((unused)) = 0.0f;
+    float fill_w __attribute__((unused)) = 0.0f;
     ds_fn_roundrect(bx, by, w, h, ds_div((double)(h), (double)(2.0f), "game/ui.ds:122"), g_BAR_BG, 0.87f);
     shown = cur;
     if (shown < 0.0f) {
@@ -2256,7 +2256,7 @@ static __attribute__((unused)) void ds_fn_sprite(float handle, float x, float y,
     (void)x;
     (void)y;
     (void)scale;
-    float h32 = 0.0f;
+    float h32 __attribute__((unused)) = 0.0f;
     h32 = ds_math_floor((double)(handle));
     if (h32 < 0.0f) {
         return;
@@ -2273,7 +2273,7 @@ static __attribute__((unused)) void ds_fn_sprite_tint(float handle, float x, flo
     (void)scale;
     (void)c;
     (void)a;
-    float h32 = 0.0f;
+    float h32 __attribute__((unused)) = 0.0f;
     h32 = ds_math_floor((double)(handle));
     if (h32 < 0.0f) {
         return;
@@ -2288,12 +2288,12 @@ static __attribute__((unused)) void ds_fn_dust_spawn(float px, float py, float j
     (void)py;
     (void)jdx;
     (void)jdy;
-    int32_t i = 0;
-    int32_t base = 0;
-    int32_t found = 0;
-    float angle = 0.0f;
-    float vx = 0.0f;
-    float vy = 0.0f;
+    int32_t i __attribute__((unused)) = 0;
+    int32_t base __attribute__((unused)) = 0;
+    int32_t found __attribute__((unused)) = 0;
+    float angle __attribute__((unused)) = 0.0f;
+    float vx __attribute__((unused)) = 0.0f;
+    float vy __attribute__((unused)) = 0.0f;
     i = 0;
     base = 0;
     found = 0;
@@ -2320,9 +2320,9 @@ static __attribute__((unused)) void ds_fn_dust_spawn(float px, float py, float j
 }
 
 static __attribute__((unused)) void ds_fn_update_dust(void) {
-    int32_t i = 0;
-    int32_t base = 0;
-    float lf = 0.0f;
+    int32_t i __attribute__((unused)) = 0;
+    int32_t base __attribute__((unused)) = 0;
+    float lf __attribute__((unused)) = 0.0f;
     i = 0;
     base = 0;
     while (i < g_dust_max) {
@@ -2341,14 +2341,14 @@ static __attribute__((unused)) void ds_fn_update_dust(void) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_dust(void) {
-    int32_t i = 0;
-    int32_t base = 0;
-    float lf = 0.0f;
-    float t = 0.0f;
-    float fade = 0.0f;
-    float r = 0.0f;
-    float a = 0.0f;
-    float grey = 0.0f;
+    int32_t i __attribute__((unused)) = 0;
+    int32_t base __attribute__((unused)) = 0;
+    float lf __attribute__((unused)) = 0.0f;
+    float t __attribute__((unused)) = 0.0f;
+    float fade __attribute__((unused)) = 0.0f;
+    float r __attribute__((unused)) = 0.0f;
+    float a __attribute__((unused)) = 0.0f;
+    float grey __attribute__((unused)) = 0.0f;
     i = 0;
     base = 0;
     while (i < g_dust_max) {
@@ -2404,9 +2404,9 @@ static __attribute__((unused)) void ds_fn_tick_dust(float jdx, float jdy, float 
 static __attribute__((unused)) void ds_fn_tick_enemy_dust(float vx, float vy) {
     (void)vx;
     (void)vy;
-    float mag = 0.0f;
-    float dx = 0.0f;
-    float dy = 0.0f;
+    float mag __attribute__((unused)) = 0.0f;
+    float dx __attribute__((unused)) = 0.0f;
+    float dy __attribute__((unused)) = 0.0f;
     if ((g_finished != 0) || (((Enemy *)ds_require((void *)(g_enemy), "game/dust.ds:103"))->hp <= 0.0f)) {
         return;
     }
@@ -2446,7 +2446,7 @@ static __attribute__((unused)) void ds_fn_freeze_enemy(float t, float slow) {
 static __attribute__((unused)) void ds_fn_enemy_move(float vx, float vy) {
     (void)vx;
     (void)vy;
-    float f = 0.0f;
+    float f __attribute__((unused)) = 0.0f;
     f = (ds_fn_enemy_freeze_factor() * ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:20"))->speed_var);
     ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:21"))->mvx = (vx * f);
     ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:22"))->mvy = (vy * f);
@@ -2469,11 +2469,11 @@ static __attribute__((unused)) void ds_fn_enemy_move(float vx, float vy) {
 }
 
 static __attribute__((unused)) void ds_fn_enemy_face_motion(void) {
-    float sp = 0.0f;
-    float ta = 0.0f;
-    float da = 0.0f;
-    float turn = 0.0f;
-    float maxturn = 0.0f;
+    float sp __attribute__((unused)) = 0.0f;
+    float ta __attribute__((unused)) = 0.0f;
+    float da __attribute__((unused)) = 0.0f;
+    float turn __attribute__((unused)) = 0.0f;
+    float maxturn __attribute__((unused)) = 0.0f;
     sp = ds_math_sqrt((double)(((((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:42"))->mvx * ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:42"))->mvx) + (((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:42"))->mvy * ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:42"))->mvy))));
     if (sp < (10.0f * g_U)) {
         return;
@@ -2494,10 +2494,10 @@ static __attribute__((unused)) void ds_fn_enemy_face_motion(void) {
 }
 
 static __attribute__((unused)) void ds_fn_enemy_track_player(void) {
-    float vx = 0.0f;
-    float vy = 0.0f;
-    float sp = 0.0f;
-    float cap = 0.0f;
+    float vx __attribute__((unused)) = 0.0f;
+    float vy __attribute__((unused)) = 0.0f;
+    float sp __attribute__((unused)) = 0.0f;
+    float cap __attribute__((unused)) = 0.0f;
     if (((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:62"))->seen == 0.0f) {
         ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:63"))->px = ((Player *)ds_require((void *)(g_player), "game/enemy.ds:63"))->x;
         ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:64"))->py = ((Player *)ds_require((void *)(g_player), "game/enemy.ds:64"))->y;
@@ -2529,8 +2529,8 @@ static __attribute__((unused)) void ds_fn_enemy_track_player(void) {
 
 static __attribute__((unused)) void ds_fn_enemy_predict(float lead) {
     (void)lead;
-    float errx = 0.0f;
-    float erry = 0.0f;
+    float errx __attribute__((unused)) = 0.0f;
+    float erry __attribute__((unused)) = 0.0f;
     errx = (((ds_fn_rf100() - 0.5f) * 18.0f) * g_U);
     erry = (((ds_fn_rf100() - 0.5f) * 18.0f) * g_U);
     g_aim_tx = ds_fn_clamp(((((Player *)ds_require((void *)(g_player), "game/enemy.ds:95"))->x + (((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:95"))->pvx * lead)) + errx), ((Player *)ds_require((void *)(g_player), "game/enemy.ds:96"))->size, (ds_engine_width() - ((Player *)ds_require((void *)(g_player), "game/enemy.ds:96"))->size));
@@ -2539,9 +2539,9 @@ static __attribute__((unused)) void ds_fn_enemy_predict(float lead) {
 }
 
 static __attribute__((unused)) void ds_fn_enemy_turn_prediction(void) {
-    float ta = 0.0f;
-    float da = 0.0f;
-    float step = 0.0f;
+    float ta __attribute__((unused)) = 0.0f;
+    float da __attribute__((unused)) = 0.0f;
+    float step __attribute__((unused)) = 0.0f;
     ds_fn_enemy_predict(g_enemy_lead);
     ta = (ds_fn_atan2((g_aim_ty - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:103"))->y), (g_aim_tx - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:103"))->x)) + ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:103"))->aim_err);
     da = (ta - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:104"))->angle);
@@ -2557,9 +2557,9 @@ static __attribute__((unused)) void ds_fn_enemy_turn_prediction(void) {
 }
 
 static __attribute__((unused)) void ds_fn_enemy_face_player(void) {
-    float ta = 0.0f;
-    float da = 0.0f;
-    float step = 0.0f;
+    float ta __attribute__((unused)) = 0.0f;
+    float da __attribute__((unused)) = 0.0f;
+    float step __attribute__((unused)) = 0.0f;
     ds_fn_enemy_predict(g_enemy_lead);
     ta = ds_fn_atan2((g_aim_ty - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:118"))->y), (g_aim_tx - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:118"))->x));
     da = (ta - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:119"))->angle);
@@ -2575,14 +2575,14 @@ static __attribute__((unused)) void ds_fn_enemy_face_player(void) {
 }
 
 static __attribute__((unused)) float ds_fn_player_in_enemy_punch(void) {
-    float pdx = 0.0f;
-    float pdy = 0.0f;
-    float rx = 0.0f;
-    float ry = 0.0f;
-    float fw = 0.0f;
-    float side = 0.0f;
-    float pr = 0.0f;
-    float half = 0.0f;
+    float pdx __attribute__((unused)) = 0.0f;
+    float pdy __attribute__((unused)) = 0.0f;
+    float rx __attribute__((unused)) = 0.0f;
+    float ry __attribute__((unused)) = 0.0f;
+    float fw __attribute__((unused)) = 0.0f;
+    float side __attribute__((unused)) = 0.0f;
+    float pr __attribute__((unused)) = 0.0f;
+    float half __attribute__((unused)) = 0.0f;
     pdx = ds_math_cos((double)(((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:131"))->angle));
     pdy = ds_math_sin((double)(((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:132"))->angle));
     rx = (((Player *)ds_require((void *)(g_player), "game/enemy.ds:133"))->x - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:133"))->x);
@@ -2599,11 +2599,11 @@ static __attribute__((unused)) float ds_fn_player_in_enemy_punch(void) {
 }
 
 static __attribute__((unused)) float ds_fn_enemy_would_hit(void) {
-    float rx = 0.0f;
-    float ry = 0.0f;
-    float fd = 0.0f;
-    float pr = 0.0f;
-    float margin = 0.0f;
+    float rx __attribute__((unused)) = 0.0f;
+    float ry __attribute__((unused)) = 0.0f;
+    float fd __attribute__((unused)) = 0.0f;
+    float pr __attribute__((unused)) = 0.0f;
+    float margin __attribute__((unused)) = 0.0f;
     ds_fn_enemy_predict(g_enemy_lead);
     rx = (g_aim_tx - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:147"))->x);
     ry = (g_aim_ty - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:148"))->y);
@@ -2621,14 +2621,14 @@ static __attribute__((unused)) float ds_fn_enemy_would_hit(void) {
 }
 
 static __attribute__((unused)) float ds_fn_enemy_in_danger(void) {
-    float pdx = 0.0f;
-    float pdy = 0.0f;
-    float rx = 0.0f;
-    float ry = 0.0f;
-    float fw = 0.0f;
-    float side = 0.0f;
-    float er = 0.0f;
-    float half = 0.0f;
+    float pdx __attribute__((unused)) = 0.0f;
+    float pdy __attribute__((unused)) = 0.0f;
+    float rx __attribute__((unused)) = 0.0f;
+    float ry __attribute__((unused)) = 0.0f;
+    float fw __attribute__((unused)) = 0.0f;
+    float side __attribute__((unused)) = 0.0f;
+    float er __attribute__((unused)) = 0.0f;
+    float half __attribute__((unused)) = 0.0f;
     pdx = ds_math_cos((double)(((Player *)ds_require((void *)(g_player), "game/enemy.ds:162"))->angle));
     pdy = ds_math_sin((double)(((Player *)ds_require((void *)(g_player), "game/enemy.ds:163"))->angle));
     rx = (((Enemy *)ds_require((void *)(g_enemy), "game/enemy.ds:164"))->x - ((Player *)ds_require((void *)(g_player), "game/enemy.ds:164"))->x);
@@ -2653,7 +2653,7 @@ static __attribute__((unused)) float ds_fn_enemy_free_window(void) {
 }
 
 static __attribute__((unused)) void ds_fn_enemy_pick_flank(void) {
-    float side = 0.0f;
+    float side __attribute__((unused)) = 0.0f;
     side = (((((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:6"))->y - ((Player *)ds_require((void *)(g_player), "game/enemy_brain.ds:6"))->y) * ds_math_cos((double)(((Player *)ds_require((void *)(g_player), "game/enemy_brain.ds:6"))->angle))) - ((((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:7"))->x - ((Player *)ds_require((void *)(g_player), "game/enemy_brain.ds:7"))->x) * ds_math_sin((double)(((Player *)ds_require((void *)(g_player), "game/enemy_brain.ds:7"))->angle))));
     if (side >= 0.0f) {
         ((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:9"))->strafe = 1.0f;
@@ -2667,7 +2667,7 @@ static __attribute__((unused)) void ds_fn_enemy_pick_flank(void) {
 }
 
 static __attribute__((unused)) float ds_fn_enemy_roll_cooldown(void) {
-    float r = 0.0f;
+    float r __attribute__((unused)) = 0.0f;
     r = (g_enemy_cooldown_min + (ds_engine_random() * (g_enemy_cooldown_max - g_enemy_cooldown_min)));
     ((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:23"))->speed_var = (0.85f + (ds_fn_rf100() * g_enemy_human_speed_var));
     if (r < g_enemy_cooldown_min) {
@@ -2678,10 +2678,10 @@ static __attribute__((unused)) float ds_fn_enemy_roll_cooldown(void) {
 }
 
 static __attribute__((unused)) float ds_fn_start_enemy_attack(void) {
-    float ta = 0.0f;
-    float da = 0.0f;
-    float err = 0.0f;
-    float turn_budget = 0.0f;
+    float ta __attribute__((unused)) = 0.0f;
+    float da __attribute__((unused)) = 0.0f;
+    float err __attribute__((unused)) = 0.0f;
+    float turn_budget __attribute__((unused)) = 0.0f;
     ta = ds_fn_atan2((((Player *)ds_require((void *)(g_player), "game/enemy_brain.ds:31"))->y - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:31"))->y), (((Player *)ds_require((void *)(g_player), "game/enemy_brain.ds:31"))->x - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:31"))->x));
     da = (ta - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:32"))->angle);
     if (da > g_PI) {
@@ -2709,20 +2709,20 @@ static __attribute__((unused)) float ds_fn_start_enemy_attack(void) {
 
 static __attribute__((unused)) void ds_fn_enemy_engage(float desired) {
     (void)desired;
-    float dx = 0.0f;
-    float dy = 0.0f;
-    float d = 0.0f;
-    float wobble_off = 0.0f;
-    float want = 0.0f;
-    float radial = 0.0f;
-    float orbit = 0.0f;
-    float perp_x = 0.0f;
-    float perp_y = 0.0f;
-    float vx = 0.0f;
-    float vy = 0.0f;
-    float cap = 0.0f;
-    float sp = 0.0f;
-    float ms = 0.0f;
+    float dx __attribute__((unused)) = 0.0f;
+    float dy __attribute__((unused)) = 0.0f;
+    float d __attribute__((unused)) = 0.0f;
+    float wobble_off __attribute__((unused)) = 0.0f;
+    float want __attribute__((unused)) = 0.0f;
+    float radial __attribute__((unused)) = 0.0f;
+    float orbit __attribute__((unused)) = 0.0f;
+    float perp_x __attribute__((unused)) = 0.0f;
+    float perp_y __attribute__((unused)) = 0.0f;
+    float vx __attribute__((unused)) = 0.0f;
+    float vy __attribute__((unused)) = 0.0f;
+    float cap __attribute__((unused)) = 0.0f;
+    float sp __attribute__((unused)) = 0.0f;
+    float ms __attribute__((unused)) = 0.0f;
     dx = (g_aim_tx - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:60"))->x);
     dy = (g_aim_ty - ((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:61"))->y);
     d = ds_math_sqrt((double)(((dx * dx) + (dy * dy))));
@@ -2768,8 +2768,8 @@ static __attribute__((unused)) void ds_fn_enemy_engage(float desired) {
 }
 
 static __attribute__((unused)) void ds_fn_spawn_enemy(void) {
-    float margin = 0.0f;
-    int32_t i = 0;
+    float margin __attribute__((unused)) = 0.0f;
+    int32_t i __attribute__((unused)) = 0;
     margin = (70.0f * g_U);
     i = 0;
     while (i < 50) {
@@ -2806,7 +2806,7 @@ static __attribute__((unused)) void ds_fn_spawn_enemy(void) {
 }
 
 static __attribute__((unused)) float ds_fn_enemy_tick_timers(void) {
-    float tick_dmg = 0.0f;
+    float tick_dmg __attribute__((unused)) = 0.0f;
     if (((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:148"))->freeze > 0.0f) {
         ((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:149"))->freeze = (((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:149"))->freeze - g_DT);
         if (((Enemy *)ds_require((void *)(g_enemy), "game/enemy_brain.ds:150"))->freeze < 0.0f) {
@@ -2881,20 +2881,20 @@ static __attribute__((unused)) float ds_fn_enemy_tick_timers(void) {
 }
 
 static __attribute__((unused)) void ds_fn_update_enemy(void) {
-    float dx = 0.0f;
-    float dy = 0.0f;
-    float d = 0.0f;
-    float pr = 0.0f;
-    float reach = 0.0f;
-    float adx = 0.0f;
-    float ady = 0.0f;
-    float ad = 0.0f;
-    float dpx = 0.0f;
-    float dpy = 0.0f;
-    float dodge_err = 0.0f;
-    float dvx = 0.0f;
-    float dvy = 0.0f;
-    float desired = 0.0f;
+    float dx __attribute__((unused)) = 0.0f;
+    float dy __attribute__((unused)) = 0.0f;
+    float d __attribute__((unused)) = 0.0f;
+    float pr __attribute__((unused)) = 0.0f;
+    float reach __attribute__((unused)) = 0.0f;
+    float adx __attribute__((unused)) = 0.0f;
+    float ady __attribute__((unused)) = 0.0f;
+    float ad __attribute__((unused)) = 0.0f;
+    float dpx __attribute__((unused)) = 0.0f;
+    float dpy __attribute__((unused)) = 0.0f;
+    float dodge_err __attribute__((unused)) = 0.0f;
+    float dvx __attribute__((unused)) = 0.0f;
+    float dvy __attribute__((unused)) = 0.0f;
+    float desired __attribute__((unused)) = 0.0f;
     ds_fn_enemy_track_player();
     ((Enemy *)ds_require((void *)(g_enemy), "game/enemy_update.ds:7"))->mvx = 0.0f;
     ((Enemy *)ds_require((void *)(g_enemy), "game/enemy_update.ds:8"))->mvy = 0.0f;
@@ -3065,7 +3065,7 @@ static __attribute__((unused)) void ds_fn_update_enemy(void) {
 
 static __attribute__((unused)) float ds_fn_hash01(float i) {
     (void)i;
-    float v = 0.0f;
+    float v __attribute__((unused)) = 0.0f;
     v = (ds_math_sin((double)(((i * 127.1f) + 11.7f))) * 43758.5453f);
     return (v - ds_math_floor((double)(v)));
     return 0.0f;
@@ -3086,7 +3086,7 @@ static __attribute__((unused)) void ds_fn_push_station_boom(float x, float y) {
 }
 
 static __attribute__((unused)) void ds_fn_destroy_station(void) {
-    int32_t stack_len = 0;
+    int32_t stack_len __attribute__((unused)) = 0;
     if (((Station *)ds_require((void *)(g_station), "game/station.ds:27"))->active == 0.0f) {
         return;
     }
@@ -3132,8 +3132,8 @@ static __attribute__((unused)) void ds_fn_place_station(void) {
 }
 
 static __attribute__((unused)) void ds_fn_tick_station(void) {
-    int32_t i = 0;
-    float t = 0.0f;
+    int32_t i __attribute__((unused)) = 0;
+    float t __attribute__((unused)) = 0.0f;
     i = 0;
     while (i < ds_list_count(g_station_boom_ts)) {
         t = ds_list_get_float(g_station_boom_ts, (int64_t)(i), "game/station.ds:78");
@@ -3175,13 +3175,13 @@ static __attribute__((unused)) void ds_fn_draw_station_beam(float sx, float sy, 
     (void)sy;
     (void)px;
     (void)py;
-    float dx = 0.0f;
-    float dy = 0.0f;
-    float d = 0.0f;
-    float nx = 0.0f;
-    float ny = 0.0f;
-    float x2 = 0.0f;
-    float y2 = 0.0f;
+    float dx __attribute__((unused)) = 0.0f;
+    float dy __attribute__((unused)) = 0.0f;
+    float d __attribute__((unused)) = 0.0f;
+    float nx __attribute__((unused)) = 0.0f;
+    float ny __attribute__((unused)) = 0.0f;
+    float x2 __attribute__((unused)) = 0.0f;
+    float y2 __attribute__((unused)) = 0.0f;
     dx = (px - sx);
     dy = (py - sy);
     d = ds_math_sqrt((double)(((dx * dx) + (dy * dy))));
@@ -3204,10 +3204,10 @@ static __attribute__((unused)) void ds_fn_draw_station_at(float x, float y, floa
     (void)y;
     (void)hp;
     (void)max_hp;
-    float scale = 0.0f;
-    float sp = 0.0f;
-    float hw = 0.0f;
-    float bw2 = 0.0f;
+    float scale __attribute__((unused)) = 0.0f;
+    float sp __attribute__((unused)) = 0.0f;
+    float hw __attribute__((unused)) = 0.0f;
+    float bw2 __attribute__((unused)) = 0.0f;
     scale = (g_station_scale * g_U);
     if (((((Station *)ds_require((void *)(g_station), "game/station.ds:136"))->active == 1.0f) && (x == ((Station *)ds_require((void *)(g_station), "game/station.ds:136"))->x)) && (y == ((Station *)ds_require((void *)(g_station), "game/station.ds:136"))->y)) {
         if (g_station_spawn_t > 0.0f) {
@@ -3226,18 +3226,18 @@ static __attribute__((unused)) void ds_fn_draw_turret_boom(float x, float y, flo
     (void)x;
     (void)y;
     (void)bt;
-    float p = 0.0f;
-    float fade_in = 0.0f;
-    float fade_out = 0.0f;
-    float a = 0.0f;
-    float r = 0.0f;
-    int32_t i = 0;
-    float h1 = 0.0f;
-    float h2 = 0.0f;
-    float ang = 0.0f;
-    float rr = 0.0f;
-    float px2 = 0.0f;
-    float py2 = 0.0f;
+    float p __attribute__((unused)) = 0.0f;
+    float fade_in __attribute__((unused)) = 0.0f;
+    float fade_out __attribute__((unused)) = 0.0f;
+    float a __attribute__((unused)) = 0.0f;
+    float r __attribute__((unused)) = 0.0f;
+    int32_t i __attribute__((unused)) = 0;
+    float h1 __attribute__((unused)) = 0.0f;
+    float h2 __attribute__((unused)) = 0.0f;
+    float ang __attribute__((unused)) = 0.0f;
+    float rr __attribute__((unused)) = 0.0f;
+    float px2 __attribute__((unused)) = 0.0f;
+    float py2 __attribute__((unused)) = 0.0f;
     if (bt <= 0.0f) {
         return;
     }
@@ -3274,9 +3274,9 @@ static __attribute__((unused)) void ds_fn_draw_turret_boom(float x, float y, flo
 }
 
 static __attribute__((unused)) void ds_fn_draw_station(void) {
-    int32_t si = 0;
-    int32_t bi = 0;
-    float bt = 0.0f;
+    int32_t si __attribute__((unused)) = 0;
+    int32_t bi __attribute__((unused)) = 0;
+    float bt __attribute__((unused)) = 0.0f;
     si = 0;
     while (si < ds_list_count(g_ebuc_station_stack_x)) {
         ds_fn_draw_station_at(ds_list_get_float(g_ebuc_station_stack_x, (int64_t)(si), "game/station.ds:193"), ds_list_get_float(g_ebuc_station_stack_y, (int64_t)(si), "game/station.ds:193"), ds_list_get_float(g_ebuc_station_stack_hp, (int64_t)(si), "game/station.ds:194"), ds_list_get_float(g_ebuc_station_stack_max, (int64_t)(si), "game/station.ds:194"));
@@ -3360,7 +3360,7 @@ static __attribute__((unused)) float ds_fn_player_max_hp_for(float cls) {
 
 static __attribute__((unused)) float ds_fn_ebuc_station_hp_for(float lv) {
     (void)lv;
-    float h = 0.0f;
+    float h __attribute__((unused)) = 0.0f;
     h = g_ebuc_station_hp;
     if (lv >= 1) {
         h = (h + (g_ebuc_station_hp_bonus * 2.0f));
@@ -3377,7 +3377,7 @@ static __attribute__((unused)) float ds_fn_santa_poison_time_for(float lv) {
 
 static __attribute__((unused)) float ds_fn_santa_poison_damage_for(float lv) {
     (void)lv;
-    float d = 0.0f;
+    float d __attribute__((unused)) = 0.0f;
     d = g_santa_poison_dps;
     if (lv >= 1) {
         d = (d + g_santa_poison_damage_bonus);
@@ -3391,7 +3391,7 @@ static __attribute__((unused)) float ds_fn_santa_poison_damage_for(float lv) {
 
 static __attribute__((unused)) float ds_fn_santa_freeze_time_for(float lv) {
     (void)lv;
-    float t = 0.0f;
+    float t __attribute__((unused)) = 0.0f;
     t = 3.0f;
     if (lv >= 3) {
         t = (t + g_santa_freeze_time_bonus);
@@ -3402,9 +3402,9 @@ static __attribute__((unused)) float ds_fn_santa_freeze_time_for(float lv) {
 
 static __attribute__((unused)) void ds_fn_take_damage(float dmg) {
     (void)dmg;
-    float reduction = 0.0f;
-    float real = 0.0f;
-    float absorbed = 0.0f;
+    float reduction __attribute__((unused)) = 0.0f;
+    float real __attribute__((unused)) = 0.0f;
+    float absorbed __attribute__((unused)) = 0.0f;
     reduction = 0.0f;
     if (((g_player_class == 1) && (g_azum_revived == 1)) && (g_player_level >= 1)) {
         reduction = g_azum_second_life_damage_reduction;
@@ -3431,7 +3431,7 @@ static __attribute__((unused)) void ds_fn_take_damage(float dmg) {
 }
 
 static __attribute__((unused)) void ds_fn_heal_after_attack(void) {
-    float amount = 0.0f;
+    float amount __attribute__((unused)) = 0.0f;
     amount = 0.0f;
     if ((g_player_class == 1) && (g_player_level >= 3)) {
         amount = g_azum_attack_heal;
@@ -3446,9 +3446,9 @@ static __attribute__((unused)) void ds_fn_heal_after_attack(void) {
 }
 
 static __attribute__((unused)) float ds_fn_try_revive(void) {
-    int32_t k = 0;
-    float rx = 0.0f;
-    float ry = 0.0f;
+    int32_t k __attribute__((unused)) = 0;
+    float rx __attribute__((unused)) = 0.0f;
+    float ry __attribute__((unused)) = 0.0f;
     if (((Player *)ds_require((void *)(g_player), "game/battle.ds:129"))->hp > 0.0f) {
         return 0.0f;
     }
@@ -3542,8 +3542,8 @@ static __attribute__((unused)) void ds_fn_tick_player_poison(void) {
 }
 
 static __attribute__((unused)) void ds_fn_reset_battle(void) {
-    int32_t ci = 0;
-    int32_t di = 0;
+    int32_t ci __attribute__((unused)) = 0;
+    int32_t di __attribute__((unused)) = 0;
     ((Player *)ds_require((void *)(g_player), "game/battle.ds:219"))->x = ds_div((double)(ds_engine_width()), (double)(2.0f), "game/battle.ds:219");
     ((Player *)ds_require((void *)(g_player), "game/battle.ds:220"))->y = ds_div((double)(ds_engine_height()), (double)(2.0f), "game/battle.ds:220");
     ((Player *)ds_require((void *)(g_player), "game/battle.ds:221"))->angle = 0.0f;
@@ -3651,10 +3651,10 @@ static __attribute__((unused)) void ds_fn_init_game(void) {
 
 static __attribute__((unused)) void ds_fn_candy_rand_pos(float i) {
     (void)i;
-    float m = 0.0f;
-    float cx = 0.0f;
-    float cy = 0.0f;
-    int32_t k = 0;
+    float m __attribute__((unused)) = 0.0f;
+    float cx __attribute__((unused)) = 0.0f;
+    float cy __attribute__((unused)) = 0.0f;
+    int32_t k __attribute__((unused)) = 0;
     m = (g_candy_margin * g_U);
     cx = (m + ds_fn_rint((ds_engine_width() - (2.0f * m))));
     cy = (m + ds_fn_rint((ds_engine_height() - (2.0f * m))));
@@ -3674,7 +3674,7 @@ static __attribute__((unused)) void ds_fn_candy_rand_pos(float i) {
 }
 
 static __attribute__((unused)) void ds_fn_spawn_all_candies(void) {
-    int32_t i = 0;
+    int32_t i __attribute__((unused)) = 0;
     i = 0;
     while (i < g_candy_count) {
         ds_fn_candy_rand_pos(i);
@@ -3684,11 +3684,11 @@ static __attribute__((unused)) void ds_fn_spawn_all_candies(void) {
 }
 
 static __attribute__((unused)) void ds_fn_move_player(void) {
-    float spd = 0.0f;
-    float mx = 0.0f;
-    float my = 0.0f;
-    float jm = 0.0f;
-    float km = 0.0f;
+    float spd __attribute__((unused)) = 0.0f;
+    float mx __attribute__((unused)) = 0.0f;
+    float my __attribute__((unused)) = 0.0f;
+    float jm __attribute__((unused)) = 0.0f;
+    float km __attribute__((unused)) = 0.0f;
     spd = (g_joy_speed * g_U);
     if ((g_player_class == 1) && (g_player_level >= 2)) {
         spd = (spd * (1.0f + g_azum_speed_bonus));
@@ -3742,10 +3742,10 @@ static __attribute__((unused)) float ds_fn_in_punch_box(float px, float py, floa
     (void)pdy;
     (void)tx;
     (void)ty;
-    float rx = 0.0f;
-    float ry = 0.0f;
-    float fw = 0.0f;
-    float side = 0.0f;
+    float rx __attribute__((unused)) = 0.0f;
+    float ry __attribute__((unused)) = 0.0f;
+    float fw __attribute__((unused)) = 0.0f;
+    float side __attribute__((unused)) = 0.0f;
     rx = (tx - px);
     ry = (ty - py);
     fw = ((rx * pdx) + (ry * pdy));
@@ -3758,11 +3758,11 @@ static __attribute__((unused)) float ds_fn_in_punch_box(float px, float py, floa
 }
 
 static __attribute__((unused)) float ds_fn_enemy_in_punch(void) {
-    float hs = 0.0f;
-    float fx = 0.0f;
-    float fy = 0.0f;
-    float sx = 0.0f;
-    float sy = 0.0f;
+    float hs __attribute__((unused)) = 0.0f;
+    float fx __attribute__((unused)) = 0.0f;
+    float fy __attribute__((unused)) = 0.0f;
+    float sx __attribute__((unused)) = 0.0f;
+    float sy __attribute__((unused)) = 0.0f;
     hs = (((Enemy *)ds_require((void *)(g_enemy), "game/battle2.ds:95"))->size * 0.65f);
     fx = (ds_math_cos((double)(((Enemy *)ds_require((void *)(g_enemy), "game/battle2.ds:96"))->angle)) * hs);
     fy = (ds_math_sin((double)(((Enemy *)ds_require((void *)(g_enemy), "game/battle2.ds:97"))->angle)) * hs);
@@ -3831,7 +3831,7 @@ static __attribute__((unused)) void ds_fn_start_punch_now(void) {
 }
 
 static __attribute__((unused)) float ds_fn_station_boom_visual_busy(void) {
-    int32_t i = 0;
+    int32_t i __attribute__((unused)) = 0;
     i = 0;
     while (i < ds_list_count(g_station_boom_ts)) {
         if (ds_list_get_float(g_station_boom_ts, (int64_t)(i), "game/battle2.ds:167") > 0.0f) {
@@ -3940,7 +3940,7 @@ static __attribute__((unused)) void ds_fn_tick_super_windup(void) {
 }
 
 static __attribute__((unused)) void ds_fn_update_gift(void) {
-    int32_t touched = 0;
+    int32_t touched __attribute__((unused)) = 0;
     if (((Gift *)ds_require((void *)(g_gift), "game/battle2.ds:270"))->active == 0.0f) {
         return;
     }
@@ -3992,7 +3992,7 @@ static __attribute__((unused)) void ds_fn_flush_queued_action(void) {
 }
 
 static __attribute__((unused)) void ds_fn_update_game(void) {
-    int32_t ci = 0;
+    int32_t ci __attribute__((unused)) = 0;
     ds_fn_tick_alert_hold();
     ds_fn_tick_revive();
     ds_fn_tick_freeze();
@@ -4123,9 +4123,9 @@ static __attribute__((unused)) void ds_fn_drop_joy(void) {
 static __attribute__((unused)) void ds_fn_joy_update_stick(float x, float y) {
     (void)x;
     (void)y;
-    float dx = 0.0f;
-    float dy = 0.0f;
-    float d = 0.0f;
+    float dx __attribute__((unused)) = 0.0f;
+    float dy __attribute__((unused)) = 0.0f;
+    float d __attribute__((unused)) = 0.0f;
     dx = (x - ((Joy *)ds_require((void *)(g_joy), "game/battle3.ds:136"))->x);
     dy = (y - ((Joy *)ds_require((void *)(g_joy), "game/battle3.ds:137"))->y);
     d = ds_math_sqrt((double)(((dx * dx) + (dy * dy))));
@@ -4213,9 +4213,9 @@ static __attribute__((unused)) void ds_fn_battle_touch_up(float id, float x, flo
 }
 
 static __attribute__((unused)) void ds_fn_draw_grass(void) {
-    float tile = 0.0f;
-    float y = 0.0f;
-    float x = 0.0f;
+    float tile __attribute__((unused)) = 0.0f;
+    float y __attribute__((unused)) = 0.0f;
+    float x __attribute__((unused)) = 0.0f;
     tile = (256.0f * g_U);
     y = 0.0f;
     if (g_tex_grass < 0) {
@@ -4244,8 +4244,8 @@ static __attribute__((unused)) void ds_fn_draw_facing_dot(float x, float y, floa
     (void)angle;
     (void)half;
     (void)c;
-    float fx = 0.0f;
-    float fy = 0.0f;
+    float fx __attribute__((unused)) = 0.0f;
+    float fy __attribute__((unused)) = 0.0f;
     fx = (x + ((ds_math_cos((double)(angle)) * half) * 0.9f));
     fy = (y + ((ds_math_sin((double)(angle)) * half) * 0.9f));
     ds_fn_paint_a(g_BLACK, 0.6f);
@@ -4262,7 +4262,7 @@ static __attribute__((unused)) void ds_fn_draw_cube(float tex, float x, float y,
     (void)angle;
     (void)scale;
     (void)cls;
-    float hw = 0.0f;
+    float hw __attribute__((unused)) = 0.0f;
     hw = (((25.0f * g_cube_scale) * scale) * g_U);
     ds_fn_sprite_tint(tex, ((x - hw) - (g_shadow_off * g_U)), ((y - hw) + (g_shadow_off * g_U)), ((g_cube_scale * scale) * g_U), g_BLACK, g_shadow_alpha);
     if ((cls == 1) && (g_azum_skin == 1)) {
@@ -4298,7 +4298,7 @@ static __attribute__((unused)) void ds_fn_draw_punch_box(float x, float y, float
     (void)reach;
     (void)width;
     (void)alpha;
-    float a = 0.0f;
+    float a __attribute__((unused)) = 0.0f;
     a = (ds_fn_clamp(alpha, 0.0f, 1.0f) * g_aim_max_alpha);
     if (a > 0.01f) {
         ds_fn_paint_a(g_BLACK, a);
@@ -4308,8 +4308,8 @@ static __attribute__((unused)) void ds_fn_draw_punch_box(float x, float y, float
 }
 
 static __attribute__((unused)) void ds_fn_draw_candies(void) {
-    float hw = 0.0f;
-    int32_t i = 0;
+    float hw __attribute__((unused)) = 0.0f;
+    int32_t i __attribute__((unused)) = 0;
     hw = ((32.0f * g_candy_scale) * g_U);
     i = 0;
     while (i < g_candy_count) {
@@ -4320,8 +4320,8 @@ static __attribute__((unused)) void ds_fn_draw_candies(void) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_gift(void) {
-    float s = 0.0f;
-    float hw = 0.0f;
+    float s __attribute__((unused)) = 0.0f;
+    float hw __attribute__((unused)) = 0.0f;
     if (((Gift *)ds_require((void *)(g_gift), "game/battledraw.ds:90"))->active == 0.0f) {
         return;
     }
@@ -4335,11 +4335,11 @@ static __attribute__((unused)) void ds_fn_draw_boom_at(float x, float y, float b
     (void)x;
     (void)y;
     (void)bt;
-    float p = 0.0f;
-    float r = 0.0f;
-    float fade_in = 0.0f;
-    float fade_out = 0.0f;
-    float a = 0.0f;
+    float p __attribute__((unused)) = 0.0f;
+    float r __attribute__((unused)) = 0.0f;
+    float fade_in __attribute__((unused)) = 0.0f;
+    float fade_out __attribute__((unused)) = 0.0f;
+    float a __attribute__((unused)) = 0.0f;
     if (bt <= 0.0f) {
         return;
     }
@@ -4389,8 +4389,8 @@ static __attribute__((unused)) void ds_fn_draw_effects(void) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_controls(void) {
-    DsString * sl = NULL;
-    float sls = 0.0f;
+    DsString * sl __attribute__((unused)) = NULL;
+    float sls __attribute__((unused)) = 0.0f;
     ds_fn_paint_a(g_BLACK, 0.5f);
     ds_render_ring((float)(((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:143"))->x), (float)(((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:143"))->y), (float)(((Joy *)ds_require((void *)(g_joy), "game/battledraw.ds:143"))->r), (float)((4.0f * g_U)));
     ds_fn_paint_a(g_BLACK, 0.6f);
@@ -4425,11 +4425,11 @@ static __attribute__((unused)) void ds_fn_draw_controls(void) {
 
 static __attribute__((unused)) void ds_fn_draw_result(DsString * title) {
     (void)title;
-    float w = 0.0f;
-    float h = 0.0f;
-    float x = 0.0f;
-    float y = 0.0f;
-    float reward = 0.0f;
+    float w __attribute__((unused)) = 0.0f;
+    float h __attribute__((unused)) = 0.0f;
+    float x __attribute__((unused)) = 0.0f;
+    float y __attribute__((unused)) = 0.0f;
+    float reward __attribute__((unused)) = 0.0f;
     ds_render_color_alpha((float)((float)(0.0f)), (float)((float)(0.0f)), (float)((float)(0.0f)), (float)((float)(0.6f)));
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     w = (430.0f * g_U);
@@ -4452,7 +4452,7 @@ static __attribute__((unused)) void ds_fn_draw_result(DsString * title) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_game(void) {
-    float w = 0.0f;
+    float w __attribute__((unused)) = 0.0f;
     ds_fn_draw_grass();
     ds_fn_draw_field();
     ds_fn_draw_dust();
@@ -4493,8 +4493,8 @@ static __attribute__((unused)) float ds_fn_menu_gap(void) {
 
 static __attribute__((unused)) float ds_fn_menu_bh(float n) {
     (void)n;
-    float gap = 0.0f;
-    float h_fit = 0.0f;
+    float gap __attribute__((unused)) = 0.0f;
+    float h_fit __attribute__((unused)) = 0.0f;
     gap = ds_fn_menu_gap();
     h_fit = ds_div((double)(((ds_engine_height() * 0.62f) - ((n - 1.0f) * gap))), (double)(n), "game/menu.ds:13");
     return ds_math_min((double)((g_btn_h * g_U)), (double)(h_fit));
@@ -4503,7 +4503,7 @@ static __attribute__((unused)) float ds_fn_menu_bh(float n) {
 
 static __attribute__((unused)) float ds_fn_menu_y0(float n) {
     (void)n;
-    float total = 0.0f;
+    float total __attribute__((unused)) = 0.0f;
     total = ((ds_fn_menu_bh(n) * n) + (ds_fn_menu_gap() * (n - 1.0f)));
     return ((ds_div((double)(ds_engine_height()), (double)(2.0f), "game/menu.ds:19") - ds_div((double)(total), (double)(2.0f), "game/menu.ds:19")) + (8.0f * g_U));
     return 0.0f;
@@ -4521,8 +4521,8 @@ static __attribute__((unused)) float ds_fn_menu_hit_at(float n, float i, float x
     (void)i;
     (void)x;
     (void)y;
-    float bx = 0.0f;
-    float sy = 0.0f;
+    float bx __attribute__((unused)) = 0.0f;
+    float sy __attribute__((unused)) = 0.0f;
     bx = ds_div((double)((ds_engine_width() - ds_fn_bw())), (double)(2.0f), "game/menu.ds:28");
     sy = ds_fn_menu_slot(n, i);
     if ((x < (bx - (12.0f * g_U))) || (x > ((bx + ds_fn_bw()) + (12.0f * g_U)))) {
@@ -4536,10 +4536,10 @@ static __attribute__((unused)) float ds_fn_menu_hit_at(float n, float i, float x
 }
 
 static __attribute__((unused)) void ds_fn_draw_money(void) {
-    DsString * cup_s = NULL;
-    DsString * cd_s = NULL;
-    float cw = 0.0f;
-    float dw = 0.0f;
+    DsString * cup_s __attribute__((unused)) = NULL;
+    DsString * cd_s __attribute__((unused)) = NULL;
+    float cw __attribute__((unused)) = 0.0f;
+    float dw __attribute__((unused)) = 0.0f;
     DsString *__ds_t0 = ds_fn_tr_cups();
     DsString *__ds_t1 = ds_concat(__ds_t0, ds_literals[167]);
     DsString *__ds_t2 = ds_fn_num_str(g_cups);
@@ -4565,12 +4565,12 @@ static __attribute__((unused)) void ds_fn_draw_money(void) {
 
 static __attribute__((unused)) void ds_fn_draw_lobby_money(float y) {
     (void)y;
-    DsString * cup_s = NULL;
-    DsString * cd_s = NULL;
-    float cw = 0.0f;
-    float dw = 0.0f;
-    float gap = 0.0f;
-    float x = 0.0f;
+    DsString * cup_s __attribute__((unused)) = NULL;
+    DsString * cd_s __attribute__((unused)) = NULL;
+    float cw __attribute__((unused)) = 0.0f;
+    float dw __attribute__((unused)) = 0.0f;
+    float gap __attribute__((unused)) = 0.0f;
+    float x __attribute__((unused)) = 0.0f;
     DsString *__ds_t0 = ds_fn_tr_cups();
     DsString *__ds_t1 = ds_concat(__ds_t0, ds_literals[167]);
     DsString *__ds_t2 = ds_fn_num_str(g_cups);
@@ -4597,8 +4597,8 @@ static __attribute__((unused)) void ds_fn_draw_lobby_money(float y) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_lobby(void) {
-    float mx = 0.0f;
-    float y0 = 0.0f;
+    float mx __attribute__((unused)) = 0.0f;
+    float y0 __attribute__((unused)) = 0.0f;
     ds_fn_check_achievements();
     ds_fn_paint(g_BG_DARK);
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
@@ -4655,7 +4655,7 @@ static __attribute__((unused)) void ds_fn_touch_lobby(float x, float y) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_modes(void) {
-    float x = 0.0f;
+    float x __attribute__((unused)) = 0.0f;
     ds_fn_paint(g_BG_DARK);
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     x = ds_div((double)((ds_engine_width() - ds_fn_bw())), (double)(2.0f), "game/menu.ds:114");
@@ -4697,7 +4697,7 @@ static __attribute__((unused)) void ds_fn_touch_modes(float x, float y) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_settings(void) {
-    float x = 0.0f;
+    float x __attribute__((unused)) = 0.0f;
     ds_fn_paint(g_BG_DARK);
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     x = ds_div((double)((ds_engine_width() - ds_fn_bw())), (double)(2.0f), "game/menu.ds:148");
@@ -4842,8 +4842,8 @@ static __attribute__((unused)) void ds_fn_save_progress(void) {
 }
 
 static __attribute__((unused)) float ds_fn_cls_card_w(void) {
-    float available = 0.0f;
-    float cw = 0.0f;
+    float available __attribute__((unused)) = 0.0f;
+    float cw __attribute__((unused)) = 0.0f;
     available = (ds_engine_width() - (40.0f * g_U));
     cw = ds_div((double)((available - ((g_CLS_GAP * g_U) * 3.0f))), (double)(4.0f), "game/classes.ds:98");
     if (cw > (260.0f * g_U)) {
@@ -4863,8 +4863,8 @@ static __attribute__((unused)) float ds_fn_cls_card_h(void) {
 
 static __attribute__((unused)) float ds_fn_cls_card_x(float i) {
     (void)i;
-    float cw = 0.0f;
-    float total = 0.0f;
+    float cw __attribute__((unused)) = 0.0f;
+    float total __attribute__((unused)) = 0.0f;
     cw = ds_fn_cls_card_w();
     total = ((cw * 4.0f) + ((g_CLS_GAP * g_U) * 3.0f));
     return (ds_div((double)((ds_engine_width() - total)), (double)(2.0f), "game/classes.ds:115") + (i * (cw + (g_CLS_GAP * g_U))));
@@ -4901,16 +4901,16 @@ static __attribute__((unused)) void ds_fn_draw_class_card(float x, float y, floa
     (void)cost;
     (void)title;
     (void)desc;
-    float sel = 0.0f;
-    float locked = 0.0f;
-    float ts = 0.0f;
-    float spr = 0.0f;
-    float title_s = 0.0f;
-    float desc_s = 0.0f;
-    float lv = 0.0f;
-    DsString * lv_text = NULL;
-    float lv_s = 0.0f;
-    DsString * cur = NULL;
+    float sel __attribute__((unused)) = 0.0f;
+    float locked __attribute__((unused)) = 0.0f;
+    float ts __attribute__((unused)) = 0.0f;
+    float spr __attribute__((unused)) = 0.0f;
+    float title_s __attribute__((unused)) = 0.0f;
+    float desc_s __attribute__((unused)) = 0.0f;
+    float lv __attribute__((unused)) = 0.0f;
+    DsString * lv_text __attribute__((unused)) = NULL;
+    float lv_s __attribute__((unused)) = 0.0f;
+    DsString * cur __attribute__((unused)) = NULL;
     sel = 0.0f;
     locked = 0.0f;
     if (g_player_class == cls) {
@@ -4975,7 +4975,7 @@ static __attribute__((unused)) void ds_fn_skin_button(DsString * label, float x,
     (void)h;
     (void)sel;
     (void)locked;
-    Palette * bg = NULL;
+    Palette * bg __attribute__((unused)) = NULL;
     bg = g_PURPLE;
     if (locked == 1.0f) {
         bg = g_PURPLE_DARK;
@@ -4991,14 +4991,14 @@ static __attribute__((unused)) void ds_fn_skin_button(DsString * label, float x,
 static __attribute__((unused)) void ds_fn_draw_skins_row(float y, float h) {
     (void)y;
     (void)h;
-    DsString * label = NULL;
-    float ls = 0.0f;
-    float sw = 0.0f;
-    float sg = 0.0f;
-    float x0 = 0.0f;
-    float sel0 = 0.0f;
-    float sel1 = 0.0f;
-    float locked = 0.0f;
+    DsString * label __attribute__((unused)) = NULL;
+    float ls __attribute__((unused)) = 0.0f;
+    float sw __attribute__((unused)) = 0.0f;
+    float sg __attribute__((unused)) = 0.0f;
+    float x0 __attribute__((unused)) = 0.0f;
+    float sel0 __attribute__((unused)) = 0.0f;
+    float sel1 __attribute__((unused)) = 0.0f;
+    float locked __attribute__((unused)) = 0.0f;
     DsString *__ds_t0 = ds_fn_tr_skins();
     label = ds_concat(__ds_t0, ds_literals[172]);
     ds_release((void*)__ds_t0);
@@ -5089,13 +5089,13 @@ static __attribute__((unused)) void ds_fn_draw_stat_row(DsString * label, float 
 }
 
 static __attribute__((unused)) void ds_fn_draw_class_stats(void) {
-    float bar_w = 0.0f;
-    float bar_h = 0.0f;
-    float bx = 0.0f;
-    float hp_y = 0.0f;
-    float st_y = 0.0f;
-    float hp = 0.0f;
-    float str = 0.0f;
+    float bar_w __attribute__((unused)) = 0.0f;
+    float bar_h __attribute__((unused)) = 0.0f;
+    float bx __attribute__((unused)) = 0.0f;
+    float hp_y __attribute__((unused)) = 0.0f;
+    float st_y __attribute__((unused)) = 0.0f;
+    float hp __attribute__((unused)) = 0.0f;
+    float str __attribute__((unused)) = 0.0f;
     bar_w = (520.0f * g_U);
     bar_h = (26.0f * g_U);
     bx = ds_div((double)((ds_engine_width() - bar_w)), (double)(2.0f), "game/classes.ds:260");
@@ -5129,7 +5129,7 @@ static __attribute__((unused)) void ds_fn_draw_class_stats(void) {
 
 static __attribute__((unused)) void ds_fn_pick_class(float cls) {
     (void)cls;
-    int32_t bought = 0;
+    int32_t bought __attribute__((unused)) = 0;
     if (ds_fn_class_owned(cls) == 1.0f) {
         g_player_class = cls;
         ds_fn_load_selected_level();
@@ -5171,11 +5171,11 @@ static __attribute__((unused)) void ds_fn_pick_class(float cls) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_classes(void) {
-    float y = 0.0f;
-    float cw = 0.0f;
-    float by = 0.0f;
-    float skin_h = 0.0f;
-    float sy = 0.0f;
+    float y __attribute__((unused)) = 0.0f;
+    float cw __attribute__((unused)) = 0.0f;
+    float by __attribute__((unused)) = 0.0f;
+    float skin_h __attribute__((unused)) = 0.0f;
+    float sy __attribute__((unused)) = 0.0f;
     ds_fn_paint(g_BG_DARK);
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     y = ds_fn_cls_card_y();
@@ -5229,13 +5229,13 @@ static __attribute__((unused)) void ds_fn_draw_classes(void) {
 static __attribute__((unused)) void ds_fn_touch_classes(float x, float y) {
     (void)x;
     (void)y;
-    float cy = 0.0f;
-    float cw = 0.0f;
-    float by = 0.0f;
-    float skin_h = 0.0f;
-    float sw2 = 0.0f;
-    float sg2 = 0.0f;
-    float sx0 = 0.0f;
+    float cy __attribute__((unused)) = 0.0f;
+    float cw __attribute__((unused)) = 0.0f;
+    float by __attribute__((unused)) = 0.0f;
+    float skin_h __attribute__((unused)) = 0.0f;
+    float sw2 __attribute__((unused)) = 0.0f;
+    float sg2 __attribute__((unused)) = 0.0f;
+    float sx0 __attribute__((unused)) = 0.0f;
     if (ds_fn_back_hit(x, y) == 1.0f) {
         ds_fn_start_transition(0);
         return;
@@ -5297,7 +5297,7 @@ static __attribute__((unused)) float ds_fn_lvl_rows_y0(void) {
 
 static __attribute__((unused)) void ds_fn_unlock_next_level(float n) {
     (void)n;
-    float cost = 0.0f;
+    float cost __attribute__((unused)) = 0.0f;
     if ((n < 1.0f) || (n > g_max_level)) {
         return;
     }
@@ -5342,20 +5342,20 @@ static __attribute__((unused)) DsString * ds_fn_tr_lvl_locked(void) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_levels(void) {
-    float row_h = 0.0f;
-    float w = 0.0f;
-    float x = 0.0f;
-    float y = 0.0f;
-    float n = 0.0f;
-    float unlocked = 0.0f;
-    float next = 0.0f;
-    float sel = 0.0f;
-    DsString * desc = NULL;
-    DsString * level_title = NULL;
-    float ts1 = 0.0f;
-    float ts2 = 0.0f;
-    DsString * status = NULL;
-    float ts3 = 0.0f;
+    float row_h __attribute__((unused)) = 0.0f;
+    float w __attribute__((unused)) = 0.0f;
+    float x __attribute__((unused)) = 0.0f;
+    float y __attribute__((unused)) = 0.0f;
+    float n __attribute__((unused)) = 0.0f;
+    float unlocked __attribute__((unused)) = 0.0f;
+    float next __attribute__((unused)) = 0.0f;
+    float sel __attribute__((unused)) = 0.0f;
+    DsString * desc __attribute__((unused)) = NULL;
+    DsString * level_title __attribute__((unused)) = NULL;
+    float ts1 __attribute__((unused)) = 0.0f;
+    float ts2 __attribute__((unused)) = 0.0f;
+    DsString * status __attribute__((unused)) = NULL;
+    float ts3 __attribute__((unused)) = 0.0f;
     ds_fn_paint(g_BG_DARK);
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     DsString *__ds_t0 = ds_fn_tr_levels_for_class();
@@ -5442,11 +5442,11 @@ static __attribute__((unused)) void ds_fn_draw_levels(void) {
 static __attribute__((unused)) void ds_fn_touch_levels(float x, float y) {
     (void)x;
     (void)y;
-    float row_h = 0.0f;
-    float w = 0.0f;
-    float rx = 0.0f;
-    float ry = 0.0f;
-    float n = 0.0f;
+    float row_h __attribute__((unused)) = 0.0f;
+    float w __attribute__((unused)) = 0.0f;
+    float rx __attribute__((unused)) = 0.0f;
+    float ry __attribute__((unused)) = 0.0f;
+    float n __attribute__((unused)) = 0.0f;
     if (ds_fn_back_hit(x, y) == 1.0f) {
         ds_fn_start_transition(8);
         return;
@@ -5542,9 +5542,9 @@ static __attribute__((unused)) void ds_fn_buy_bp_level(float n) {
 
 static __attribute__((unused)) float ds_fn_bp_row_h(float n) {
     (void)n;
-    float head = 0.0f;
-    float free_h = 0.0f;
-    float step = 0.0f;
+    float head __attribute__((unused)) = 0.0f;
+    float free_h __attribute__((unused)) = 0.0f;
+    float step __attribute__((unused)) = 0.0f;
     head = (((g_back_y * g_U) + ds_fn_bh()) + (12.0f * g_U));
     free_h = ((ds_engine_height() - head) - (40.0f * g_U));
     step = ds_div((double)(free_h), (double)(5.0f), "game/battlepass.ds:60");
@@ -5560,9 +5560,9 @@ static __attribute__((unused)) float ds_fn_bp_row_h(float n) {
 
 static __attribute__((unused)) float ds_fn_bp_y(float n) {
     (void)n;
-    float head = 0.0f;
-    float free_h = 0.0f;
-    float step = 0.0f;
+    float head __attribute__((unused)) = 0.0f;
+    float free_h __attribute__((unused)) = 0.0f;
+    float step __attribute__((unused)) = 0.0f;
     head = (((g_back_y * g_U) + ds_fn_bh()) + (12.0f * g_U));
     free_h = ((ds_engine_height() - head) - (40.0f * g_U));
     step = ds_div((double)(free_h), (double)(5.0f), "game/battlepass.ds:73");
@@ -5577,19 +5577,19 @@ static __attribute__((unused)) float ds_fn_bp_y(float n) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_battlepass(void) {
-    float w = 0.0f;
-    float x = 0.0f;
-    float n = 0.0f;
-    float row_h = 0.0f;
-    float lv = 0.0f;
-    float y = 0.0f;
-    float bought = 0.0f;
-    float next = 0.0f;
-    Palette * bg = NULL;
-    DsString * level_title = NULL;
-    DsString * status = NULL;
-    float sw = 0.0f;
-    float msg_y = 0.0f;
+    float w __attribute__((unused)) = 0.0f;
+    float x __attribute__((unused)) = 0.0f;
+    float n __attribute__((unused)) = 0.0f;
+    float row_h __attribute__((unused)) = 0.0f;
+    float lv __attribute__((unused)) = 0.0f;
+    float y __attribute__((unused)) = 0.0f;
+    float bought __attribute__((unused)) = 0.0f;
+    float next __attribute__((unused)) = 0.0f;
+    Palette * bg __attribute__((unused)) = NULL;
+    DsString * level_title __attribute__((unused)) = NULL;
+    DsString * status __attribute__((unused)) = NULL;
+    float sw __attribute__((unused)) = 0.0f;
+    float msg_y __attribute__((unused)) = 0.0f;
     ds_fn_paint(g_BG_DARK);
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     DsString *__ds_t0 = ds_fn_tr_battlepass_title();
@@ -5671,11 +5671,11 @@ static __attribute__((unused)) void ds_fn_draw_battlepass(void) {
 static __attribute__((unused)) void ds_fn_touch_battlepass(float x, float y) {
     (void)x;
     (void)y;
-    float w = 0.0f;
-    float rx = 0.0f;
-    float n = 0.0f;
-    float row_h = 0.0f;
-    float ry = 0.0f;
+    float w __attribute__((unused)) = 0.0f;
+    float rx __attribute__((unused)) = 0.0f;
+    float n __attribute__((unused)) = 0.0f;
+    float row_h __attribute__((unused)) = 0.0f;
+    float ry __attribute__((unused)) = 0.0f;
     if (ds_fn_back_hit(x, y) == 1.0f) {
         ds_fn_start_transition(0);
         return;
@@ -5754,10 +5754,10 @@ static __attribute__((unused)) void ds_fn_draw_achievement_card(float y, float h
     (void)title;
     (void)desc;
     (void)unlocked;
-    float x = 0.0f;
-    float w = 0.0f;
-    Palette * bg = NULL;
-    DsString * status = NULL;
+    float x __attribute__((unused)) = 0.0f;
+    float w __attribute__((unused)) = 0.0f;
+    Palette * bg __attribute__((unused)) = NULL;
+    DsString * status __attribute__((unused)) = NULL;
     x = (48.0f * g_U);
     w = (ds_engine_width() - (96.0f * g_U));
     bg = g_PURPLE_DARK;
@@ -5775,8 +5775,8 @@ static __attribute__((unused)) void ds_fn_draw_achievement_card(float y, float h
 }
 
 static __attribute__((unused)) float ds_fn_ach_card_step(void) {
-    float y0 = 0.0f;
-    float step = 0.0f;
+    float y0 __attribute__((unused)) = 0.0f;
+    float step __attribute__((unused)) = 0.0f;
     y0 = (((g_back_y * g_U) + ds_fn_bh()) + (56.0f * g_U));
     step = ds_div((double)(((ds_engine_height() - y0) - (12.0f * g_U))), (double)(4.0f), "game/achievements.ds:66");
     if (step > (124.0f * g_U)) {
@@ -5787,9 +5787,9 @@ static __attribute__((unused)) float ds_fn_ach_card_step(void) {
 }
 
 static __attribute__((unused)) void ds_fn_draw_achievements(void) {
-    float y0 = 0.0f;
-    float step = 0.0f;
-    float h = 0.0f;
+    float y0 __attribute__((unused)) = 0.0f;
+    float step __attribute__((unused)) = 0.0f;
+    float h __attribute__((unused)) = 0.0f;
     ds_fn_paint(g_BG_DARK);
     ds_render_rect((float)(0.0f), (float)(0.0f), (float)(ds_engine_width()), (float)(ds_engine_height()));
     DsString *__ds_t0 = ds_fn_tr_achievements_title();

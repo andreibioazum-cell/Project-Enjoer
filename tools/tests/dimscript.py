@@ -2,6 +2,7 @@
 """Regression test for the Cubic Battle DimScript frontend and AOT output."""
 
 from pathlib import Path
+import os
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
