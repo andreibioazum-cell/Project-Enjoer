@@ -53,35 +53,46 @@ typedef enum {
     ENJOER_SURFACE_ROTATE_270 = 270  /* window is landscape, the other way round */
 } EnjoerSurfaceRotation;
 
-/* Vulkan does not number those transforms by degrees: VkSurfaceTransformFlagBits
- * calls them 0, 1, 2, 3 (IDENTITY, ROTATE_90, ROTATE_180, ROTATE_270), keeps 4
- * for INHERIT_BIT, combines mirrors in the higher bits, and
- * VkSurfaceCapabilitiesKHR::supportedTransforms is that vocabulary again — as
- * flag bits.  Degrees are what the mapping and the matrix below want, so the
- * two are translated here, once: reading a Vulkan value as a degree count is how
- * a rotation gets dropped without anyone noticing. */
+/* Vulkan VkSurfaceTransformFlagBitsKHR bit values (from VK_KHR_surface):
+ * IDENTITY = 0x01, ROTATE_90 = 0x02, ROTATE_180 = 0x04, ROTATE_270 = 0x08.
+ * These are bit flags, not 0..3 indices.  VkSurfaceCapabilitiesKHR::currentTransform
+ * is a single flag bit, and supportedTransforms is a bitmask of these flags.
+ * Degrees are what the mapping and the matrix below want, so the two are translated here. */
+#define ENJOER_VK_SURFACE_TRANSFORM_IDENTITY_BIT   0x00000001
+#define ENJOER_VK_SURFACE_TRANSFORM_ROTATE_90_BIT  0x00000002
+#define ENJOER_VK_SURFACE_TRANSFORM_ROTATE_180_BIT 0x00000004
+#define ENJOER_VK_SURFACE_TRANSFORM_ROTATE_270_BIT 0x00000008
+
 static inline int enjoer_surface_rotation_from_vk(int transform) {
     switch (transform) {
-    case 0: return ENJOER_SURFACE_ROTATE_0;
-    case 1: return ENJOER_SURFACE_ROTATE_90;
-    case 2: return ENJOER_SURFACE_ROTATE_180;
-    case 3: return ENJOER_SURFACE_ROTATE_270;
-    default: return -1; /* INHERIT, a mirror, or a driver's own idea */
+    case 0:
+    case ENJOER_VK_SURFACE_TRANSFORM_IDENTITY_BIT:
+        return ENJOER_SURFACE_ROTATE_0;
+    case ENJOER_VK_SURFACE_TRANSFORM_ROTATE_90_BIT:
+        return ENJOER_SURFACE_ROTATE_90;
+    case ENJOER_VK_SURFACE_TRANSFORM_ROTATE_180_BIT:
+        return ENJOER_SURFACE_ROTATE_180;
+    case ENJOER_VK_SURFACE_TRANSFORM_ROTATE_270_BIT:
+        return ENJOER_SURFACE_ROTATE_270;
+    default:
+        return -1; /* INHERIT, a mirror, or a driver's own idea */
     }
 }
 
 static inline int enjoer_surface_rotation_to_vk(int rotation) {
     switch (rotation) {
-    case ENJOER_SURFACE_ROTATE_90: return 1;
-    case ENJOER_SURFACE_ROTATE_180: return 2;
-    case ENJOER_SURFACE_ROTATE_270: return 3;
-    default: return 0;
+    case ENJOER_SURFACE_ROTATE_90:  return ENJOER_VK_SURFACE_TRANSFORM_ROTATE_90_BIT;
+    case ENJOER_SURFACE_ROTATE_180: return ENJOER_VK_SURFACE_TRANSFORM_ROTATE_180_BIT;
+    case ENJOER_SURFACE_ROTATE_270: return ENJOER_VK_SURFACE_TRANSFORM_ROTATE_270_BIT;
+    default:                        return ENJOER_VK_SURFACE_TRANSFORM_IDENTITY_BIT;
     }
 }
 
-/* The bit a rotation occupies in supportedTransforms. */
+/* The bit a rotation occupies in supportedTransforms.
+ * Since enjoer_surface_rotation_to_vk() returns the VkSurfaceTransformFlagBitsKHR
+ * bit flag directly, it is already the bit in supportedTransforms. */
 static inline int enjoer_surface_rotation_bit(int rotation) {
-    return 1 << enjoer_surface_rotation_to_vk(rotation);
+    return enjoer_surface_rotation_to_vk(rotation);
 }
 
 /* The rotation to pre-rotate the picture for, from the two fields of

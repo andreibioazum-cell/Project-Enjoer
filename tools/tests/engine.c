@@ -294,32 +294,36 @@ static int run_surface_transform(void) {
      * rotation matrix out of it. */
     CHECK(enjoer_surface_rotation_from_vk(1 << 20) == -1);
 
-    /* Two vocabularies for the same thing: Vulkan indexes the four rotations a
-     * surface can ask for (0, 1, 2, 3) while this file counts them in degrees,
-     * and conflating them is invisible in the worst way — every rotation looks
-     * unsupported, the pre-rotation quietly stops happening, and the picture is
-     * still upright because the compositor takes over. */
+    /* Two vocabularies for the same thing: Vulkan defines VkSurfaceTransformFlagBitsKHR
+     * as bit flags (IDENTITY=1, ROTATE_90=2, ROTATE_180=4, ROTATE_270=8) while this
+     * file counts them in degrees (0, 90, 180, 270). */
     CHECK(enjoer_surface_rotation_from_vk(0) == ENJOER_SURFACE_ROTATE_0);
-    CHECK(enjoer_surface_rotation_from_vk(1) == ENJOER_SURFACE_ROTATE_90);
-    CHECK(enjoer_surface_rotation_from_vk(2) == ENJOER_SURFACE_ROTATE_180);
-    CHECK(enjoer_surface_rotation_from_vk(3) == ENJOER_SURFACE_ROTATE_270);
-    CHECK(enjoer_surface_rotation_from_vk(4) == -1); /* INHERIT_BIT: not a rotation */
-    CHECK(enjoer_surface_rotation_to_vk(ENJOER_SURFACE_ROTATE_270) == 3);
+    CHECK(enjoer_surface_rotation_from_vk(1) == ENJOER_SURFACE_ROTATE_0);
+    CHECK(enjoer_surface_rotation_from_vk(2) == ENJOER_SURFACE_ROTATE_90);
+    CHECK(enjoer_surface_rotation_from_vk(4) == ENJOER_SURFACE_ROTATE_180);
+    CHECK(enjoer_surface_rotation_from_vk(8) == ENJOER_SURFACE_ROTATE_270);
+    CHECK(enjoer_surface_rotation_from_vk(0x100) == -1); /* INHERIT_BIT: not a rotation */
+    CHECK(enjoer_surface_rotation_to_vk(ENJOER_SURFACE_ROTATE_0) == 1);
+    CHECK(enjoer_surface_rotation_to_vk(ENJOER_SURFACE_ROTATE_90) == 2);
+    CHECK(enjoer_surface_rotation_to_vk(ENJOER_SURFACE_ROTATE_180) == 4);
+    CHECK(enjoer_surface_rotation_to_vk(ENJOER_SURFACE_ROTATE_270) == 8);
     CHECK(enjoer_surface_rotation_bit(ENJOER_SURFACE_ROTATE_0) == 1);
-    CHECK(enjoer_surface_rotation_bit(ENJOER_SURFACE_ROTATE_90) == (1 << 1));
+    CHECK(enjoer_surface_rotation_bit(ENJOER_SURFACE_ROTATE_90) == 2);
+    CHECK(enjoer_surface_rotation_bit(ENJOER_SURFACE_ROTATE_180) == 4);
+    CHECK(enjoer_surface_rotation_bit(ENJOER_SURFACE_ROTATE_270) == 8);
 
     /* Pre-rotate when the driver asks for it *and* accepts it on a swapchain;
      * take identity when it asks for something it will not take, since the
      * alternative is a failed vkCreateSwapchainKHR and a black screen.  The
      * framebuffer size follows the choice: the extent and the projection are the
      * same decision, made once. */
-    CHECK(enjoer_surface_rotation_for(1, (1 << 1) | 1) == ENJOER_SURFACE_ROTATE_90);
-    CHECK(enjoer_surface_rotation_for(3, 1 << 3) == ENJOER_SURFACE_ROTATE_270);
-    CHECK(enjoer_surface_rotation_for(1, 1) == ENJOER_SURFACE_ROTATE_0);
-    CHECK(enjoer_surface_rotation_for(4, 0xFF) == ENJOER_SURFACE_ROTATE_0);
+    CHECK(enjoer_surface_rotation_for(2, 2 | 1) == ENJOER_SURFACE_ROTATE_90);
+    CHECK(enjoer_surface_rotation_for(8, 8) == ENJOER_SURFACE_ROTATE_270);
+    CHECK(enjoer_surface_rotation_for(2, 1) == ENJOER_SURFACE_ROTATE_0);
+    CHECK(enjoer_surface_rotation_for(0x100, 0x1FF) == ENJOER_SURFACE_ROTATE_0);
     {
-        const int turned = enjoer_surface_rotation_for(1, (1 << 1) | 1);
-        const int flat = enjoer_surface_rotation_for(1, 1);
+        const int turned = enjoer_surface_rotation_for(2, 2 | 1);
+        const int flat = enjoer_surface_rotation_for(2, 1);
         enjoer_surface_extent(turned, 2400, 1080, &width, &height);
         CHECK(width == 1080 && height == 2400);
         enjoer_surface_extent(flat, 2400, 1080, &width, &height);
