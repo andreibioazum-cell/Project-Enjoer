@@ -1,0 +1,201 @@
+-- tuning.ds — константы интерфейса, профиль сессии и числа боя
+-- (вторая половина старого config.ds; профиль раньше тянулся с сервера
+-- через net_load_*, теперь живёт одну сессию в памяти).
+
+-- ── Интерфейсные константы (в дизайн-единицах, умножаются на U) ─────────
+btn_w = 280.0
+btn_h = 64.0
+back_y = 32.0
+msg_time = 2.5
+msg_fade = 0.6
+alert_hold = 0.5
+finish_t = 0.0
+
+-- ── Текстуры ────────────────────────────────────────────────────────────
+-- Имена файлов остались старыми; azum.png/azum_punch.png в корневой папке
+-- отсутствовали, для порта они дорисованы в стиле ordinary.png.
+GRASS = "grass.png"
+ORDINARY_TEX = "ordinary.png"
+PUNCH_TEX = "ordinary_punch.png"
+AZUM_TEX = "azum.png"
+AZUM_PUNCH_TEX = "azum_punch.png"
+SANTA_TEX = "santa.png"
+SANTA_PUNCH_TEX = "santa_punch.png"
+EBUC_TEX = "ebuc.png"
+EBUC_PUNCH_TEX = "ebuc_punch.png"
+DESPENSER_TEX = "despenser.png"
+CANDY_TEX = "candy.png"
+SNOWFLAKE_TEX = "snowflake.png"
+
+tex_grass = -1
+tex_ordinary = -1
+tex_ordinary_punch = -1
+tex_azum = -1
+tex_azum_punch = -1
+tex_santa = -1
+tex_santa_punch = -1
+tex_ebuc = -1
+tex_ebuc_punch = -1
+tex_despenser = -1
+tex_candy = -1
+tex_snowflake = -1
+game_font = -1
+
+-- ── Предупреждение об эпилепсии ─────────────────────────────────────────
+warn_open = 1
+warn_t = 0.0
+warn_a = 1.0
+warn_hold = 2.5
+warn_fade = 0.6
+
+-- ── Профиль (теперь только на сессию) ───────────────────────────────────
+cups = 0.0
+candies = 0.0
+player_class = 0.0
+azum_owned = 0
+santa_owned = 0
+ebuc_owned = 0
+cup_win = 5.0
+candy_win = 3.0
+azum_cost = 50.0
+santa_candy_cost = 100.0
+ebuc_candy_cost = 150.0
+cups_awarded = 0
+class_msg_t = 0.0
+
+player_level = 0.0
+levels_unlocked = 0.0
+max_level = 3.0
+level_base_cost = 30.0
+level_cost_step = 10.0
+level_msg_t = 0.0
+ordinary_level = 0.0
+ordinary_levels_unlocked = 0.0
+azum_level = 0.0
+azum_levels_unlocked = 0.0
+santa_level = 0.0
+santa_levels_unlocked = 0.0
+ebuc_level = 0.0
+ebuc_levels_unlocked = 0.0
+
+-- Хэллоуинский батл пасс: 5 уровней по 100 кубков, как и раньше.
+bp_level = 0.0
+bp_max = 5.0
+bp_cost = 100.0
+bp_msg_t = 0.0
+bp_msg_kind = 0
+azum_skin = 0
+skin_msg_t = 0.0
+
+-- ── Бой: константы из старого config.ds ─────────────────────────────────
+punch_time = 0.2
+punch_cooldown = 0.3
+punch_reach = 104.0
+punch_width = 104.0
+punch_damage = 1.0
+joy_speed = 192.0
+bot_speed = 190.0
+bot_strafe_speed = 96.0
+bot_dodge_speed = 330.0
+cube_scale = 1.0
+player_scale = 1.8
+enemy_scale = 1.8
+aim_fade_out = 0.1
+aim_max_alpha = 0.4
+
+enemy_min_distance = 55.0
+enemy_punch_reach = 104.0
+enemy_punch_width = 104.0
+enemy_windup = 0.10
+enemy_lock_time = 0.04
+enemy_punch_time = 0.10
+enemy_recovery = 0.04
+enemy_cooldown_min = 0.05
+enemy_cooldown_max = 0.12
+enemy_damage = 1.0
+enemy_base_hp = 10.0
+enemy_first_delay = 0.45
+enemy_dodge_time = 0.22
+enemy_dodge_cooldown = 0.65
+enemy_think_min = 0.01
+enemy_think_max = 0.05
+enemy_lead = 0.12
+enemy_hit_margin = 10.0
+enemy_close_gain = 4.2
+enemy_flank_time = 1.1
+enemy_still_speed = 28.0
+enemy_punish_react = 0.08
+enemy_move_smooth = 10.0
+enemy_face_speed = 7.0
+enemy_face_max_speed = 12.0
+enemy_attack_turn_speed = 10.0
+enemy_human_wobble = 10.0
+enemy_human_error = 0.28
+enemy_human_miss = 0.06
+enemy_human_react_min = 0.06
+enemy_human_react_max = 0.16
+enemy_human_speed_var = 0.22
+enemy_human_dodge_fail = 0.25
+
+-- Классы: 0 Обычный, 1 Азум, 2 Дед Мороз, 3 буК
+azum_revived = 0
+revive_prot = 0.0
+azum_second_life_damage_reduction = 0.10
+azum_speed_bonus = 0.03
+azum_attack_heal = 0.10
+ordinary_damage_bonus = 0.05
+ordinary_speed_bonus = 0.02
+ordinary_attack_heal = 0.05
+santa_poison_damage_bonus = 0.15
+santa_freeze_time_bonus = 0.50
+santa_damage = 0.25
+santa_poison_time = 2.4
+santa_poison_tick_interval = 0.6
+santa_poison_dps = 1.0
+santa_follow_delay = 0.4
+santa_super_damage = 2.0
+super_freeze_slow = 0.12
+super_cd_time = 3.0
+super_speed = 420.0
+super_range = 260.0
+super_radius = 130.0
+boom_time = 0.45
+freeze_fade_in = 0.12
+freeze_fade_out = 0.35
+boom_fade_in = 0.25
+boom_fade_out = 0.5
+shadow_off = 10.0
+shadow_alpha = 0.38
+
+ebuc_hp = 12.0
+ebuc_station_hp = 9.0
+ebuc_station_hp_bonus = 1.0
+ebuc_damage = 1.0
+ebuc_super_cd_time = 4.0
+station_boom_time = 0.5
+station_hit_time = 0.1
+station_scale = 1.6
+station_spawn_time = 0.2
+station_spawn_t = 0.0
+ebuc_place_heal = 0.5
+ebuc_beam_heal = 0.1
+station_heal_t = 0.0
+
+candy_count = 5
+candy_margin = 46.0
+candy_scale = 0.7
+candy_give = 1
+
+-- Пыль: общий пул на игрока и бота (в онлайне жили ещё следы соперников).
+dust_max = 48
+dust_fields = 5
+dust_life_max = 0.6
+dust_spawn_cd = 0.06
+dust_r_max = 8.0
+dust_spd = 38.0
+dust_back_off = 34.0
+dust_back_share = 0.85
+dust_side_share = 0.4
+dust_cd = 0.0
+enemy_dust_cd = 0.0
+dust_enemy_min_speed = 40.0

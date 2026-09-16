@@ -1,0 +1,25 @@
+-- Enjoer game manifest: Cubic Battle 4, порт игры со старого ДимСкрипта
+-- (корневые *.ds) на новый. Без онлайна: сетевого API в языке нет,
+-- кнопки онлайна показывают плашку «Недоступно».
+
+title = "Cubic Battle 4"
+author = "andreibioazum"
+package = "com.cb4.cubicbattle"
+version = "1.0"
+version_code = 1
+
+-- portrait | landscape | sensor
+orientation = "sensorLandscape"
+target_fps = 60
+resizeable = true
+
+-- Фон лобби (старое 0xFF1A1A2E) до первого кадра скрипта, r g b в 0..1.
+clear_color = 0.102 0.102 0.180
+
+-- Все модули игры, каждый — до 400 строк. Порядок совпадает с require-цепочкой.
+scripts = ["main.ds", "config.ds", "tuning.ds", "entities.ds", "locale.ds", "locale_shop.ds", "ui.ds", "dust.ds", "enemy.ds", "enemy_brain.ds", "enemy_update.ds", "station.ds", "battle.ds", "battle2.ds", "battle3.ds", "battledraw.ds", "menu.ds", "classes.ds", "levels.ds", "battlepass.ds", "achievements.ds"]
+
+images = ["grass.png", "ordinary.png", "ordinary_punch.png", "azum.png", "azum_punch.png", "santa.png", "santa_punch.png", "ebuc.png", "ebuc_punch.png", "candy.png", "snowflake.png", "despenser.png"]
+
+-- DejaVu Sans Bold (свободная лицензия, см. FONT-LICENSE.txt).
+fonts = ["font.ttf"]

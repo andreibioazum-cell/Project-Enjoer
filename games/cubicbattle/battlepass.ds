@@ -1,0 +1,156 @@
+-- battlepass.ds — экран хэллоуинского батл пасса (порт из старого menu.ds).
+-- Пять уровней по 100 кубков, покупаются строго по порядку. Уровень 1 сразу
+-- даёт обычному классу 3 уровень, уровень 2 — скин «Зомби» для Азума,
+-- награды уровней 3–5 ещё не готовы («Скоро»).
+
+-- Сообщение-подсказка под рядами (тает, как msg у классов).
+bp_msg_text(): string {
+    if bp_msg_kind == 1 then
+        return tr_bp_need_prev()
+    }
+    return tr_bp_need_cups()
+}
+
+bp_reward_text(n: float): string {
+    if n == 1.0 then
+        return tr_bp_reward_1()
+    }
+    if n == 2.0 then
+        return tr_bp_reward_2()
+    }
+    return tr_levels_soon()
+}
+
+buy_bp_level(n: float) {
+    if n < 1.0 or n > bp_max then
+        return
+    }
+    if n != bp_level + 1.0 then
+        bp_msg_t = msg_time
+        bp_msg_kind = 1
+        return
+    }
+    if cups < bp_cost then
+        bp_msg_t = msg_time
+        bp_msg_kind = 0
+        return
+    }
+    cups = cups - bp_cost
+    bp_level = n
+    if n == 1.0 then
+        -- Награда 1-го уровня: обычный класс сразу на 3 уровне.
+        set_class_level(0, 3, 3)
+        if player_class == 0 then
+            player_level = 3
+            levels_unlocked = 3
+        }
+    }
+    if n == 2.0 then
+        -- Награда 2-го уровня: скин «Зомби» на Азума (зелёный тинт).
+        azum_skin = 1
+    }
+    bp_msg_t = 0.0
+    bp_msg_kind = 0
+    save_progress()
+}
+
+bp_row_h(n: float): float {
+    local head = back_y * U + bh() + 12.0 * U
+    local free_h = engine.height() - head - 40.0 * U
+    local step = free_h / 5.0
+    if step > 96.0 * U then
+        step = 96.0 * U
+    }
+    if step < 60.0 * U then
+        step = 60.0 * U
+    }
+    return step - 12.0 * U * 0.9999
+}
+
+bp_y(n: float): float {
+    local head = back_y * U + bh() + 12.0 * U
+    local free_h = engine.height() - head - 40.0 * U
+    local step = free_h / 5.0
+    if step > 96.0 * U then
+        step = 96.0 * U
+    }
+    if step < 60.0 * U then
+        step = 60.0 * U
+    }
+    return head + n * step
+}
+
+draw_battlepass() {
+    paint(BG_DARK)
+    render.rect(0.0, 0.0, engine.width(), engine.height())
+    ctext(tr_battlepass_title(), back_y * U + bh() + 12.0 * U, 1.6 * U, WHITE)
+    local w = 560.0 * U
+    if w > engine.width() - 40.0 * U then
+        w = engine.width() - 40.0 * U
+    }
+    local x = (engine.width() - w) / 2.0
+    local n = 0.0
+    local row_h = bp_row_h(0.0)
+    while n < bp_max do
+        local lv = n + 1.0
+        local y = bp_y(n)
+        local bought = 0.0
+        local next = 0.0
+        if lv <= bp_level then
+            bought = 1.0
+        }
+        if lv == bp_level + 1.0 then
+            next = 1.0
+        }
+        local bg = PURPLE_DARK
+        if bought == 1.0 then
+            bg = PURPLE
+        }
+        roundrect(x, y, w, row_h, 20.0 * U, bg, 1.0)
+        local level_title = tr_bp_level() .. " " .. int_str(lv)
+        draw_text(level_title, x + 16.0 * U, y + 10.0 * U, 1.1 * U, WHITE)
+        draw_text(bp_reward_text(lv), x + 16.0 * U, y + row_h - 30.0 * U, 0.8 * U, WHITE)
+        local status = ""
+        if bought == 1.0 then
+            status = tr_bp_bought()
+        }
+        if next == 1.0 then
+            status = tr_bp_buy() .. " · " .. int_str(bp_cost) ..
+                " " .. tr_cups_unit()
+        }
+        if bought == 0.0 and next == 0.0 then
+            status = tr_bp_locked()
+        }
+        local sw = text_est(status, 0.8 * U)
+        draw_text(status, x + w - 20.0 * U - sw, y + 12.0 * U, 0.8 * U, WHITE)
+        n = n + 1.0
+    }
+    local msg_y = bp_y(bp_max) + 4.0 * U
+    if bp_msg_t > 0.0 then
+        ctext_fade(bp_msg_text(), msg_y, 0.85 * U, WHITE, bp_msg_t, msg_fade)
+    }
+    draw_money()
+    draw_back()
+}
+
+touch_battlepass(x: float, y: float) {
+    if back_hit(x, y) == 1.0 then
+        start_transition(0)
+        return
+    }
+    local w = 560.0 * U
+    if w > engine.width() - 40.0 * U then
+        w = engine.width() - 40.0 * U
+    }
+    local rx = (engine.width() - w) / 2.0
+    local n = 0.0
+    local row_h = bp_row_h(0.0)
+    while n < bp_max do
+        local ry = bp_y(n)
+        if x >= rx and x <= rx + w and y >= ry and y <= ry + row_h then
+            buy_bp_level(n + 1.0)
+            return
+        }
+        n = n + 1.0
+    }
+}

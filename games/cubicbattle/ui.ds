@@ -1,0 +1,167 @@
+-- ui.ds — кнопки, плашки, бары и текст (порт старого ui.ds).
+--
+-- Отличия нового ДимСкрипта, которые видны здесь:
+--   * нет roundrect — скруглённая плашка собирается из двух прямоугольников
+--     и четырёх кругов;
+--   * нет text_ink_width/height/top — ширина строки для центрирования
+--     оценивается по длине (len в C считает байты UTF-8: кириллица = 2 байта
+--     на букву, поэтому у RU и EN свои коэффициенты);
+--   * цвет задаётся render.color перед вызовом, а не параметром.
+
+paint(c: Palette) {
+    render.color(c.r, c.g, c.b)
+}
+
+paint_a(c: Palette, a: float) {
+    render.color_alpha(c.r, c.g, c.b, a)
+}
+
+-- Скруглённая плашка: центральный и боковой прямоугольники + круги в углах.
+roundrect(x: float, y: float, w: float, h: float, r: float, c: Palette, a: float) {
+    if w <= 0.0 or h <= 0.0 then
+        return
+    }
+    local rr = r
+    local lim = math.min(w, h) / 2.0
+    if rr > lim then
+        rr = lim
+    }
+    paint_a(c, a)
+    render.rect(x + rr, y, w - 2.0 * rr, h)
+    if h > 2.0 * rr then
+        render.rect(x, y + rr, w, h - 2.0 * rr)
+    }
+    render.circle(x + rr, y + rr, rr)
+    render.circle(x + w - rr, y + rr, rr)
+    render.circle(x + rr, y + h - rr, rr)
+    render.circle(x + w - rr, y + h - rr, rr)
+}
+
+-- ── Текст ───────────────────────────────────────────────────────────────
+-- Оценка ширины строки: em = 16*scale px; средняя ширина байта ~0.36 em
+-- для русского (2 байта на букву) и ~0.52 em для английского.
+text_est(s: string, scale: float): float {
+    if language == 1 then
+        return len(s) * 0.36 * 16.0 * scale
+    }
+    return len(s) * 0.52 * 16.0 * scale
+}
+
+draw_text(s: string, x: float, y: float, scale: float, c: Palette) {
+    paint(c)
+    render.text(s, x, y, scale)
+}
+
+draw_text_a(s: string, x: float, y: float, scale: float, c: Palette, a: float) {
+    paint_a(c, a)
+    render.text(s, x, y, scale)
+}
+
+-- Центрированная по горизонтали строка (вертикаль — верхний край текста).
+ctext(s: string, y: float, scale: float, c: Palette) {
+    draw_text(s, (engine.width() - text_est(s, scale)) / 2.0, y, scale, c)
+}
+
+ctext_a(s: string, y: float, scale: float, c: Palette, a: float) {
+    draw_text_a(s, (engine.width() - text_est(s, scale)) / 2.0, y, scale, c, a)
+}
+
+-- Текст в центре плашки. Видимые глифы сидят примерно между 0.2 и 0.93 em
+-- от верха строки, поэтому оптический центр — 0.565*em ниже середины плашки.
+text_in_box(label: string, x: float, y: float, w: float, h: float, c: Palette, scale: float) {
+    local est = text_est(label, scale)
+    draw_text(label, x + (w - est) / 2.0, y + h / 2.0 - 9.04 * scale, scale, c)
+}
+
+text_in_field(label: string, x: float, y: float, h: float, c: Palette, scale: float) {
+    draw_text(label, x, y + h / 2.0 - 9.04 * scale, scale, c)
+}
+
+-- Плавное исчезновение подписей («Не хватает кубков» и т.п.).
+ctext_fade(s: string, y: float, scale: float, c: Palette, t: float, fade: float) {
+    local a = clamp(t / fade, 0.0, 1.0)
+    ctext_a(s, y, scale, c, a)
+}
+
+-- ── Кнопки ──────────────────────────────────────────────────────────────
+button(label: string, x: float, y: float, w: float, h: float) {
+    roundrect(x, y, w, h, 20.0 * U, PURPLE, 1.0)
+    text_in_box(label, x, y, w, h, WHITE, 1.6 * U)
+}
+
+button_scaled(label: string, x: float, y: float, w: float, h: float, scale: float) {
+    roundrect(x, y, w, h, 20.0 * U, PURPLE, 1.0)
+    text_in_box(label, x, y, w, h, WHITE, scale)
+}
+
+bw(): float {
+    return btn_w * U
+}
+
+bh(): float {
+    return btn_h * U
+}
+
+draw_back() {
+    button(tr_back(), (engine.width() - bw()) / 2.0, back_y * U, bw(), bh())
+}
+
+back_hit(x: float, y: float): float {
+    local bx = (engine.width() - bw()) / 2.0
+    if x >= bx - 12.0 * U and x <= bx + bw() + 12.0 * U and
+        y >= back_y * U - 8.0 * U and y <= back_y * U + bh() + 8.0 * U then
+        return 1.0
+    }
+    return 0.0
+}
+
+-- ── HP-бары ─────────────────────────────────────────────────────────────
+-- У тонких баров (полоса HP турели) отступ со всех сторон не помещается —
+-- для низких баров он уменьшен, как и в старой игре.
+hud_bar(bx: float, by: float, w: float, h: float, cur: float, max: float, c: Palette, from_right: float) {
+    roundrect(bx, by, w, h, h / 2.0, BAR_BG, 0.87)
+    local shown = cur
+    if shown < 0.0 then
+        shown = 0.0
+    }
+    local pad = 4.0 * U
+    if h <= 12.0 * U then
+        pad = 1.0 * U
+    }
+    local fh = h - 2.0 * pad
+    if fh < 1.0 then
+        fh = 1.0
+    }
+    if max > 0.0 then
+        local fill_w = (w - 2.0 * pad) * shown / max
+        if fill_w > 0.0 then
+            if from_right == 1.0 then
+                roundrect(bx + w - pad - fill_w, by + pad, fill_w, fh, fh / 2.0, c, 1.0)
+            } else {
+                roundrect(bx + pad, by + pad, fill_w, fh, fh / 2.0, c, 1.0)
+            }
+        }
+    }
+}
+
+-- ── Спрайты ─────────────────────────────────────────────────────────────
+-- Старый tex(x, y, имя, поворот, масштаб) умел вращать спрайт; новый
+-- render.image вращать не умеет, поэтому бой рисует кубы без поворота, а
+-- направление взгляда показывает точка-нос (см. battle.ds).
+sprite(handle: float, x: float, y: float, scale: float) {
+    local h32 = math.floor(handle)
+    if h32 < 0.0 then
+        return
+    }
+    render.color(1.0, 1.0, 1.0)
+    render.image(h32, x, y, image.width(h32) * scale, image.height(h32) * scale)
+}
+
+sprite_tint(handle: float, x: float, y: float, scale: float, c: Palette, a: float) {
+    local h32 = math.floor(handle)
+    if h32 < 0.0 then
+        return
+    }
+    render.color_alpha(c.r, c.g, c.b, a)
+    render.image(h32, x, y, image.width(h32) * scale, image.height(h32) * scale)
+}

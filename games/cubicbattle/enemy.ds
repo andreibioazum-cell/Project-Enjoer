@@ -1,0 +1,181 @@
+-- enemy.ds — «человечный» бот: сближение, замах, удар, отход, уклонения,
+-- упреждение с ошибками, дрожание прицела (порт ИИ из старого battle.ds).
+-- Всё движение умножено на U, чтобы темп боя не зависел от разрешения.
+
+enemy_freeze_factor(): float {
+    if enemy.freeze > 0.0 then
+        return enemy.freeze_slow
+    }
+    return 1.0
+}
+
+freeze_enemy(t: float, slow: float) {
+    if t > enemy.freeze then
+        enemy.freeze = t
+        enemy.freeze_slow = slow
+    }
+}
+
+enemy_move(vx: float, vy: float) {
+    local f = enemy_freeze_factor() * enemy.speed_var
+    enemy.mvx = vx * f
+    enemy.mvy = vy * f
+    enemy.x = enemy.x + vx * f * DT
+    enemy.y = enemy.y + vy * f * DT
+    if enemy.x < enemy.size then
+        enemy.x = enemy.size
+    }
+    if enemy.x > engine.width() - enemy.size then
+        enemy.x = engine.width() - enemy.size
+    }
+    if enemy.y < enemy.size then
+        enemy.y = enemy.size
+    }
+    if enemy.y > engine.height() - enemy.size then
+        enemy.y = engine.height() - enemy.size
+    }
+    -- Враг тоже оставляет за спиной шлейф пыли, как и игрок.
+    tick_enemy_dust(enemy.mvx, enemy.mvy)
+}
+
+enemy_face_motion() {
+    local sp = math.sqrt(enemy.mvx * enemy.mvx + enemy.mvy * enemy.mvy)
+    if sp < 10.0 * U then
+        return
+    }
+    local ta = atan2(enemy.mvy, enemy.mvx)
+    local da = ta - enemy.angle
+    if da > PI then
+        da = da - 2.0 * PI
+    }
+    if da < 0.0 - PI then
+        da = da + 2.0 * PI
+    }
+    -- человечная неровность поворота
+    da = da + math.sin(enemy.wobble_t * 2.3) * 0.15
+    local turn = da * clamp(DT * enemy_face_speed, 0.0, 1.0)
+    local maxturn = enemy_face_max_speed * DT
+    enemy.angle = enemy.angle + clamp(turn, 0.0 - maxturn, maxturn)
+}
+
+enemy_track_player() {
+    if enemy.seen == 0.0 then
+        enemy.px = player.x
+        enemy.py = player.y
+        enemy.pvx = 0.0
+        enemy.pvy = 0.0
+        enemy.seen = 1.0
+        return
+    }
+    local vx = 0.0
+    local vy = 0.0
+    if DT > 0.0 then
+        vx = (player.x - enemy.px) / DT
+        vy = (player.y - enemy.py) / DT
+    }
+    local sp = math.sqrt(vx * vx + vy * vy)
+    local cap = joy_speed * U
+    if sp > cap then
+        vx = vx / sp * cap
+        vy = vy / sp * cap
+    }
+    -- шум в оценке скорости — человек не предсказывает идеально
+    vx = vx + (rf100() - 0.5) * 12.0 * U
+    vy = vy + (rf100() - 0.5) * 12.0 * U
+    enemy.pvx = lerp(enemy.pvx, vx, 0.25)
+    enemy.pvy = lerp(enemy.pvy, vy, 0.25)
+    enemy.px = player.x
+    enemy.py = player.y
+}
+
+enemy_predict(lead: float) {
+    -- упреждение с ошибкой
+    local errx = (rf100() - 0.5) * 18.0 * U
+    local erry = (rf100() - 0.5) * 18.0 * U
+    aim_tx = clamp(player.x + enemy.pvx * lead + errx,
+        player.size, engine.width() - player.size)
+    aim_ty = clamp(player.y + enemy.pvy * lead + erry,
+        player.size, engine.height() - player.size)
+}
+
+enemy_turn_prediction() {
+    enemy_predict(enemy_lead)
+    local ta = atan2(aim_ty - enemy.y, aim_tx - enemy.x) + enemy.aim_err
+    local da = ta - enemy.angle
+    if da > PI then
+        da = da - 2.0 * PI
+    }
+    if da < 0.0 - PI then
+        da = da + 2.0 * PI
+    }
+    local step = enemy_attack_turn_speed * DT
+    enemy.angle = enemy.angle + clamp(da, 0.0 - step, step)
+}
+
+-- Плавный доворот на игрока: тот же лимит скорости, что и в замахе.
+enemy_face_player() {
+    enemy_predict(enemy_lead)
+    local ta = atan2(aim_ty - enemy.y, aim_tx - enemy.x)
+    local da = ta - enemy.angle
+    if da > PI then
+        da = da - 2.0 * PI
+    }
+    if da < 0.0 - PI then
+        da = da + 2.0 * PI
+    }
+    local step = enemy_attack_turn_speed * DT
+    enemy.angle = enemy.angle + clamp(da, 0.0 - step, step)
+}
+
+player_in_enemy_punch(): float {
+    local pdx = math.cos(enemy.angle)
+    local pdy = math.sin(enemy.angle)
+    local rx = player.x - enemy.x
+    local ry = player.y - enemy.y
+    local fw = rx * pdx + ry * pdy
+    local side = ry * pdx - rx * pdy
+    local pr = player.size * 0.65
+    local half = enemy_punch_width * U / 2.0 + pr
+    if fw >= 0.0 and fw <= enemy_punch_reach * U + pr and side * side <= half * half then
+        return 1.0
+    }
+    return 0.0
+}
+
+enemy_would_hit(): float {
+    enemy_predict(enemy_lead)
+    local rx = aim_tx - enemy.x
+    local ry = aim_ty - enemy.y
+    local fd = math.sqrt(rx * rx + ry * ry)
+    local pr = player.size * 0.65
+    local margin = enemy_hit_margin * U
+    if math.sqrt(enemy.pvx * enemy.pvx + enemy.pvy * enemy.pvy) < enemy_still_speed * U then
+        margin = 0.0
+    }
+    if fd <= enemy_punch_reach * U + pr - margin then
+        return 1.0
+    }
+    return 0.0
+}
+
+enemy_in_danger(): float {
+    local pdx = math.cos(player.angle)
+    local pdy = math.sin(player.angle)
+    local rx = enemy.x - player.x
+    local ry = enemy.y - player.y
+    local fw = rx * pdx + ry * pdy
+    local side = ry * pdx - rx * pdy
+    local er = enemy.size * 0.65
+    local half = punch_width * U / 2.0 + er
+    if fw >= 0.0 - er and fw <= punch_reach * U + er and side * side <= half * half then
+        return 1.0
+    }
+    return 0.0
+}
+
+enemy_free_window(): float {
+    if punch_left <= 0.0 and punch_cd > enemy_punish_react then
+        return 1.0
+    }
+    return 0.0
+}

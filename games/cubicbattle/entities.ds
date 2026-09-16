@@ -1,0 +1,152 @@
+-- entities.ds — структуры бойцов и состояние боя (порт старого entities.ds).
+-- В старом ДимСкрипте были object с полями по умолчанию; здесь — struct
+-- (поля обнуляются при new) плюс явный reset_battle() в battle.ds.
+
+struct Player {
+    x: float
+    y: float
+    size: float
+    angle: float
+    hp: float
+    max_hp: float
+}
+
+struct Enemy {
+    -- state: 0 сближение, 1 замах, 2 удар, 3 отход, 4 уклонение
+    x: float
+    y: float
+    size: float
+    hp: float
+    max_hp: float
+    angle: float
+    state: float
+    state_time: float
+    cooldown: float
+    hit: float
+    strafe: float
+    dodge_cd: float
+    think: float
+    px: float
+    py: float
+    pvx: float
+    pvy: float
+    seen: float
+    flank: float
+    mvx: float
+    mvy: float
+    svx: float
+    svy: float
+    freeze: float
+    freeze_slow: float
+    poison: float
+    poison_tick: float
+    poison_damage: float
+    -- человечные дополнения
+    spawn_t: float
+    wobble: float
+    wobble_t: float
+    react: float
+    speed_var: float
+    miss_t: float
+    dodge_fail: float
+    aim_err: float
+    hesit: float
+    feint: float
+}
+
+struct Punch {
+    x: float
+    y: float
+    dx: float
+    dy: float
+    active: float
+    shot: float
+    hit: float
+}
+
+struct Gift {
+    x: float
+    y: float
+    dx: float
+    dy: float
+    active: float
+    t: float
+    shot: float
+}
+
+struct Station {
+    x: float
+    y: float
+    hp: float
+    max_hp: float
+    active: float
+    shot: float
+}
+
+-- Виртуальный джойстик (в старой игре приходил из include graphics).
+struct Joy {
+    x: float
+    y: float
+    r: float
+    dx: float
+    dy: float
+    ox: float
+    oy: float
+}
+
+player = new Player
+enemy = new Enemy
+punch = new Punch
+gift = new Gift
+station = new Station
+joy = new Joy
+
+-- Состояние боя (id касаний и флаги храним float, чтобы без приведений
+-- присваивать и callback-параметры типа int, и -1).
+aim_tx = 0.0
+aim_ty = 0.0
+finished = 0.0
+atk_x = 0.0
+atk_y = 0.0
+atk2_x = 0.0
+atk2_y = 0.0
+joy_id = -1.0
+aim_id = -1.0
+super_id = -1.0
+punch_left = 0.0
+punch_cd = 0.0
+aim_a = 0.0
+santa_follow = 0.0
+super_cd = 0.0
+boom_t = 0.0
+boom_x = 0.0
+boom_y = 0.0
+super_windup = 0.0
+-- нажатия во время эффекта ульты встают в очередь
+queued_punch = 0
+queued_super = 0
+freeze_a = 0.0
+player_freeze = 0.0
+player_freeze_slow = 1.0
+pfreeze_a = 0.0
+player_poison = 0.0
+player_poison_tick = 0.0
+player_poison_damage = 0.0
+ppoison_a = 0.0
+poison_a = 0.0
+
+-- Взрывы разрушенных турелей и стек запасных турелей бука.
+station_booms_max = 8
+station_boom_xs = []
+station_boom_ys = []
+station_boom_ts = []
+station_hit_t = 0.0
+ebuc_station_stack_x = []
+ebuc_station_stack_y = []
+ebuc_station_stack_hp = []
+ebuc_station_stack_max = []
+
+-- Леденцы на арене и пул пыли (по dust_fields чисел на частицу).
+candy_x = []
+candy_y = []
+dust = []

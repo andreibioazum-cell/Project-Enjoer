@@ -1,0 +1,208 @@
+-- battle3.ds — главный тик боя, конец матча с наградой, джойстик и тач-ввод
+-- (финальная часть ядра старого battle.ds).
+
+update_game() {
+    tick_alert_hold()
+    tick_revive()
+    tick_freeze()
+    tick_player_poison()
+    tick_station()
+    update_aim()
+    if finished != 0 then
+        return
+    }
+    if player.hp <= 0.0 then
+        if try_revive() == 0.0 then
+            finish_game(2)
+            return
+        }
+    }
+    move_player()
+    -- Подбор леденцов.
+    local ci = 0
+    while ci < candy_count do {
+        if dist(candy_x[ci], candy_y[ci], player.x, player.y) <
+            player.size * 0.65 + 18.0 * U then
+            candies = candies + candy_give
+            save_progress()
+            candy_rand_pos(ci)
+        }
+        ci = ci + 1
+    }
+    if punch_left > 0.0 then
+        punch_left = punch_left - DT
+        if punch_left < 0.0 then
+            punch_left = 0.0
+        }
+    }
+    follow_punch()
+    if super_cd > 0.0 then
+        super_cd = super_cd - DT
+        if super_cd < 0.0 then
+            super_cd = 0.0
+        }
+    }
+    if boom_t > 0.0 then
+        boom_t = boom_t - DT
+        if boom_t < 0.0 then
+            boom_t = 0.0
+        }
+    }
+    tick_super_windup()
+    tick_santa_follow()
+    -- Попадание ударом по врагу.
+    if punch_left > 0.0 and punch.active == 1.0 and punch.hit == 0.0 then
+        if enemy_in_punch() == 1.0 then
+            punch.hit = 1.0
+            if player_class == 2 and santa_follow > 0.0 then
+                if player_level >= 3 then
+                    if enemy.poison <= 0.0 then
+                        enemy.poison_tick = santa_poison_tick_interval
+                        enemy.poison_damage = santa_poison_damage_for(player_level)
+                    } else {
+                        enemy.poison_damage = enemy.poison_damage +
+                            santa_poison_damage_for(player_level)
+                    }
+                    enemy.poison = santa_poison_time_for(player_level)
+                } else {
+                    if enemy.poison <= 0.0 then
+                        enemy.poison_tick = santa_poison_tick_interval
+                    }
+                    enemy.poison = santa_poison_time_for(player_level)
+                }
+            }
+            enemy.hp = enemy.hp - class_punch_damage(player_class)
+            heal_after_attack()
+            if enemy.hp <= 0.0 then
+                finish_game(1)
+                return
+            }
+        }
+    }
+    update_dust()
+    update_gift()
+    flush_queued_action()
+    if finished != 0 then
+        return
+    }
+    update_enemy()
+}
+
+finish_game(result: float) {
+    finished = result
+    aim_id = -1
+    super_id = -1
+    aim_a = 0.0
+    punch.active = 0.0
+    punch.hit = 0.0
+    punch_left = 0.0
+    super_windup = 0.0
+    santa_follow = 0.0
+    drop_joy()
+    gift.active = 0.0
+    boom_t = 0.0
+    station.active = 0.0
+    -- Взрывы турелей не обрываем: они доигрывают под плашкой результата.
+    station_hit_t = 0.0
+    station_spawn_t = 0.0
+    station_heal_t = 0.0
+    ebuc_station_stack_x.clear()
+    ebuc_station_stack_y.clear()
+    ebuc_station_stack_hp.clear()
+    ebuc_station_stack_max.clear()
+    if result == 1.0 and cups_awarded == 0 then
+        cups_awarded = 1
+        cups = cups + cup_win
+        candies = candies + candy_win
+        save_progress()
+        -- Первая победа открывает достижение.
+        if achievement_first_win == 0 then
+            achievement_first_win = 1
+            show_achievement_toast(ACH_FIRST_WIN)
+        }
+    }
+}
+
+-- ── Джойстик и ввод ─────────────────────────────────────────────────────
+drop_joy() {
+    joy_id = -1
+    joy.dx = 0.0
+    joy.dy = 0.0
+    joy.ox = 0.0
+    joy.oy = 0.0
+}
+
+joy_update_stick(x: float, y: float) {
+    local dx = x - joy.x
+    local dy = y - joy.y
+    local d = math.sqrt(dx * dx + dy * dy)
+    if d > joy.r then
+        joy.dx = dx / d
+        joy.dy = dy / d
+        joy.ox = joy.dx * joy.r
+        joy.oy = joy.dy * joy.r
+    } else {
+        joy.dx = dx / joy.r
+        joy.dy = dy / joy.r
+        joy.ox = dx
+        joy.oy = dy
+    }
+}
+
+battle_touch_down(id: float, x: float, y: float) {
+    if finished != 0 then
+        -- Алерт можно скипнуть только спустя alert_hold после конца боя.
+        if finish_t >= alert_hold then
+            start_transition(0)
+        }
+        return
+    }
+    if back_hit(x, y) == 1.0 then
+        start_transition(0)
+        return
+    }
+    if player_class == 2 or player_class == 3 then
+        if dist(x, y, atk2_x, atk2_y) <= 96.0 * U then
+            super_id = id
+            return
+        }
+    }
+    if dist(x, y, atk_x, atk_y) <= 96.0 * U then
+        aim_id = id
+        return
+    }
+    if joy_id == -1.0 then
+        if dist(x, y, joy.x, joy.y) <= 150.0 * U then
+            joy_id = id
+            joy_update_stick(x, y)
+        }
+    }
+}
+
+battle_touch_moved(id: float, x: float, y: float) {
+    if finished != 0 then
+        return
+    }
+    if joy_id >= 0.0 and id == joy_id then
+        joy_update_stick(x, y)
+    }
+}
+
+battle_touch_up(id: float, x: float, y: float) {
+    if finished != 0 then
+        return
+    }
+    if id == super_id then
+        super_id = -1.0
+        fire_super()
+        return
+    }
+    if id == aim_id then
+        aim_id = -1.0
+        fire_punch()
+        return
+    }
+    if id == joy_id then
+        drop_joy()
+    }
+}

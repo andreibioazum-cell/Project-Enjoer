@@ -1,0 +1,225 @@
+-- battledraw.ds — вся отрисовка боя (порт draw_* из старого battle.ds).
+-- Спрайты в новом языке не вращаются (render.image без поворота), поэтому
+-- направление взгляда показывает точка-нос на краю куба, а удар виден по
+-- смене текстуры и полупрозрачному сектору прицела.
+
+draw_grass() {
+    local tile = 256.0 * U
+    local y = 0.0
+    if tex_grass < 0 then
+        render.clear(0.24, 0.42, 0.16)
+        return
+    }
+    while y < engine.height() do {
+        local x = 0.0
+        while x < engine.width() do {
+            render.color(1.0, 1.0, 1.0)
+            render.image(tex_grass, x, y, tile, tile)
+            x = x + tile
+        }
+        y = y + tile
+    }
+}
+
+draw_field() {
+    -- В старой игре поле затемнялось полупрозрачной чёрной плёнкой, но у
+    -- фигур нового движка прозрачности нет: чёрный квадрат был бы сплошным
+    -- и полностью скрыл бы траву. Затемнение поля не переносим.
+}
+
+-- Точка-нос на краю куба: замена вращению спрайта.
+draw_facing_dot(x: float, y: float, angle: float, half: float, c: Palette) {
+    local fx = x + math.cos(angle) * half * 0.9
+    local fy = y + math.sin(angle) * half * 0.9
+    paint_a(BLACK, 0.6)
+    render.circle(fx, fy, 6.5 * U)
+    paint(c)
+    render.circle(fx, fy, 4.5 * U)
+}
+
+-- Куб с тенью. Тень — тот же спрайт, подкрашенный чёрным со сдвигом.
+draw_cube(tex: float, x: float, y: float, angle: float,
+                   scale: float, cls: float) {
+    local hw = 25.0 * cube_scale * scale * U
+    sprite_tint(tex, x - hw - shadow_off * U, y - hw + shadow_off * U,
+        cube_scale * scale * U, BLACK, shadow_alpha)
+    if cls == 1 and azum_skin == 1 then
+        -- Скин «Зомби»: зелёный силуэт Азума.
+        sprite_tint(tex, x - hw, y - hw, cube_scale * scale * U, ZOMBIE, 1.0)
+    } else {
+        sprite(tex, x - hw, y - hw, cube_scale * scale * U)
+    }
+    draw_facing_dot(x, y, angle, hw, WHITE)
+}
+
+player_live_tex(): float {
+    if punch_left > 0.0 then
+        return class_punch_tex(player_class)
+    }
+    return class_idle_tex(player_class)
+}
+
+enemy_battle_tex(): float {
+    if enemy.state == 1.0 or enemy.state == 2.0 then
+        return tex_ordinary_punch
+    }
+    return tex_ordinary
+}
+
+-- Полупрозрачный сектор прицела удара (тёмный конус, как в старой игре).
+draw_punch_box(x: float, y: float, dx: float, dy: float,
+                        reach: float, width: float, alpha: float) {
+    local a = clamp(alpha, 0.0, 1.0) * aim_max_alpha
+    if a > 0.01 then
+        paint_a(BLACK, a)
+        render.line(x, y, x + dx * reach * U, y + dy * reach * U, width * U)
+    }
+}
+
+draw_candies() {
+    local hw = 32.0 * candy_scale * U
+    local i = 0
+    while i < candy_count do {
+        sprite(tex_candy, candy_x[i] - hw, candy_y[i] - hw, candy_scale * U)
+        i = i + 1
+    }
+}
+
+-- Летящая снежинка Деда Мороза (вращение заменено лёгкой пульсацией).
+draw_gift() {
+    if gift.active == 0.0 then
+        return
+    }
+    local s = 0.5 * U * (1.0 + 0.12 * math.sin(gift.t * 18.0))
+    local hw = 32.0 * s
+    sprite(tex_snowflake, gift.x - hw, gift.y - hw, s)
+}
+
+draw_boom_at(x: float, y: float, bt: float) {
+    if bt <= 0.0 then
+        return
+    }
+    local p = 1.0 - bt / boom_time
+    local r = super_radius * U * p
+    local fade_in = clamp(p / boom_fade_in, 0.0, 1.0)
+    local fade_out = clamp(bt / (boom_time * boom_fade_out), 0.0, 1.0)
+    local a = fade_in * fade_out
+    if a <= 0.01 then
+        return
+    }
+    paint_a(ICE_LIGHT, a)
+    render.ring(x, y, r, 9.0 * U)
+    paint_a(ICE, a)
+    render.ring(x, y, r * 0.6, 6.0 * U)
+    paint_a(ICE_LIGHT, a)
+    render.circle(x, y, super_radius * U * 0.3)
+}
+
+draw_boom() {
+    draw_boom_at(boom_x, boom_y, boom_t)
+}
+
+-- Подсветка заморозки/отравления: круг и кольцо поверх цели.
+draw_chill(x: float, y: float, half: float, a: float) {
+    if a <= 0.01 then
+        return
+    }
+    paint_a(ICE, a * 0.3)
+    render.circle(x, y, half)
+    paint_a(BLUE, a * 0.7)
+    render.ring(x, y, half, 5.0 * U)
+}
+
+draw_effects() {
+    draw_chill(enemy.x, enemy.y, enemy.size + 6.0 * U, freeze_a)
+    draw_chill(enemy.x, enemy.y, enemy.size + 6.0 * U, poison_a)
+    draw_chill(player.x, player.y, player.size + 6.0 * U, pfreeze_a)
+    draw_chill(player.x, player.y, player.size + 6.0 * U, ppoison_a)
+}
+
+draw_controls() {
+    -- Джойстик: кольцо и палец.
+    paint_a(BLACK, 0.5)
+    render.ring(joy.x, joy.y, joy.r, 4.0 * U)
+    paint_a(BLACK, 0.6)
+    render.circle(joy.x + joy.ox, joy.y + joy.oy, 34.0 * U)
+    -- Кнопка удара.
+    paint(RED)
+    render.circle(atk_x, atk_y, 70.0 * U)
+    paint_a(BLACK, 0.6)
+    render.ring(atk_x, atk_y, 70.0 * U, 4.0 * U)
+    text_in_box(tr_punch(), atk_x - 70.0 * U, atk_y - 70.0 * U,
+        140.0 * U, 140.0 * U, WHITE, 1.1 * U)
+    -- Кнопка ульты (Дед Мороз и буК).
+    if player_class == 2 or player_class == 3 then
+        paint(PURPLE)
+        render.circle(atk2_x, atk2_y, 70.0 * U)
+        paint_a(BLACK, 0.6)
+        render.ring(atk2_x, atk2_y, 70.0 * U, 4.0 * U)
+        local sl = tr_super()
+        local sls = 1.0 * U
+        if player_class == 3 then
+            sl = tr_super_ebuc()
+        }
+        if super_cd > 0.0 then
+            sl = ceil_str(super_cd)
+            sls = 1.7 * U
+        }
+        text_in_box(sl, atk2_x - 70.0 * U, atk2_y - 70.0 * U,
+            140.0 * U, 140.0 * U, WHITE, sls)
+    }
+    draw_back()
+}
+
+draw_result(title: string) {
+    render.color_alpha(0.0, 0.0, 0.0, 0.6)
+    render.rect(0.0, 0.0, engine.width(), engine.height())
+    local w = 430.0 * U
+    local h = 250.0 * U
+    local x = (engine.width() - w) / 2.0
+    local y = engine.height() / 2.0 - h / 2.0
+    roundrect(x, y, w, h, 30.0 * U, PURPLE, 1.0)
+    local reward = 0.0
+    if finished == 1.0 then
+        reward = cup_win
+    }
+    ctext(title, y + 36.0 * U, 1.9 * U, WHITE)
+    ctext(tr_cups_reward(reward), y + 126.0 * U, 1.5 * U, WHITE)
+    ctext(tr_tap_to_return(), y + 188.0 * U, 1.05 * U, WHITE)
+}
+
+draw_game() {
+    draw_grass()
+    draw_field()
+    draw_dust()
+    -- Тени и тела: игрок, бот.
+    draw_cube(player_live_tex(), player.x, player.y, player.angle,
+        player_scale, player_class)
+    if aim_a > 0.0 and finished == 0 then
+        draw_punch_box(player.x, player.y, math.cos(player.angle),
+            math.sin(player.angle), punch_reach, punch_width, aim_a)
+    }
+    if (enemy.state == 1.0 or enemy.state == 2.0) and finished == 0 then
+        draw_punch_box(enemy.x, enemy.y, math.cos(enemy.angle),
+            math.sin(enemy.angle), enemy_punch_reach, enemy_punch_width, 1.0)
+    }
+    draw_cube(enemy_battle_tex(), enemy.x, enemy.y, enemy.angle,
+        enemy_scale, -1.0)
+    draw_candies()
+    draw_gift()
+    draw_boom()
+    draw_station()
+    draw_effects()
+    -- HP-бары: игрок слева, бот справа.
+    local w = engine.width() / 4.0
+    hud_bar(20.0 * U, 20.0 * U, w, 28.0 * U, player.hp, player.max_hp, HP_GREEN, 0.0)
+    hud_bar(engine.width() - w - 20.0 * U, 20.0 * U, w, 28.0 * U,
+        enemy.hp, enemy.max_hp, RED, 1.0)
+    draw_controls()
+    if finished == 1.0 then
+        draw_result(tr_victory())
+    }
+    if finished == 2.0 then
+        draw_result(tr_defeat())
+    }
+}

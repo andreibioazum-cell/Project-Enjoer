@@ -1,0 +1,228 @@
+-- config.ds — константы, палитра, масштаб и математика порта Cubic Battle 4
+-- со старого ДимСкрипта (корневые *.ds) на новый.
+--
+-- Что намеренно не перенесено (этого нет в новом языке):
+--   * net_* (профиль, онлайн, чат, лидерборд, баннер, ивенты) — профиль
+--     теперь живёт одну сессию в памяти;
+--   * snd_* (музыка лобби) — звукового API нет;
+--   * keyboard_* — экранной клавиатуры нет, а экран входа был частью онлайна.
+-- Всё остальное перенесено: лобби, режимы, классы, уровни, батлпасс,
+-- достижения с тостом, предупреждение об эпилепсии и соло-бой с ботом.
+
+-- ── Масштаб ─────────────────────────────────────────────────────────────
+-- Все размеры меню и боя посчитаны для 360 px по короткой стороне экрана
+-- (как делает games/brick) и умножаются на U, поэтому раскладка не разъезжается
+-- ни на превью, ни на телефоне.
+U = 1.0
+
+ui(): float {
+    return math.max(0.6, math.min(4.0,
+        math.min(engine.width(), engine.height()) / 360.0))
+}
+
+update_ui() {
+    U = ui()
+}
+
+-- ── Состояние ───────────────────────────────────────────────────────────
+-- 0 лобби, 1 соло-бой, 2 режимы, 4 настройки, 8 классы, 9 уровни,
+-- 11 достижения, 12 батл пасс. Экраны 5 (онлайн), 7 (логин) и 10
+-- (лидерборд) не перенесены — их кнопки ведут на тост «Недоступно».
+game_state = 0
+language = 0
+DT = 0.016
+
+-- Переход между экранами: затемнение туда-обратно, как в старой игре.
+t_dir = 0
+t_target = 0
+t_fade = 0.0
+transition_duration = 0.15
+
+-- ── Достижения и тост ───────────────────────────────────────────────────
+-- Раньше флаги хранились битами в achievements.dat на сервере; теперь —
+-- только в памяти сессии (сохранять некуда), логика открытия та же.
+achievement_welcome = 0
+achievement_first_win = 0
+achievement_first_buy = 0
+achievement_all_characters = 0
+ACH_WELCOME = 1
+ACH_FIRST_WIN = 2
+ACH_FIRST_BUY = 4
+ACH_ALL_CHARACTERS = 8
+
+-- Тост поверх экрана: быстрый выезд сверху, пауза, уход строго вверх за край.
+-- Тот же тост используется и для плашки «Недоступно» у кнопок онлайна —
+-- по просьбе она выглядит как достижение.
+ach_toast_t = 0.0
+ach_toast_title = ""
+ach_toast_body = ""
+ACH_TOAST_FADE_IN = 0.14
+ACH_TOAST_HOLD = 1.5
+ACH_TOAST_EXIT = 0.24
+ACH_TOAST_DURATION = 1.96
+
+-- ── Палитра ─────────────────────────────────────────────────────────────
+-- Старый движок красил упакованным ARGB (0xFF5F10A0), новый рисует тремя
+-- float 0..1, поэтому палитра — набор структур, заполняемых в init_palette().
+struct Palette {
+    r: float
+    g: float
+    b: float
+}
+
+PURPLE = new Palette
+PURPLE_DARK = new Palette
+CARD_BG = new Palette
+SEL_FRAME = new Palette
+BG_DARK = new Palette
+WHITE = new Palette
+BLACK = new Palette
+HP_GREEN = new Palette
+RED = new Palette
+BLUE = new Palette
+BAR_BG = new Palette
+ICE = new Palette
+ICE_LIGHT = new Palette
+BEAM = new Palette
+BEAM_CORE = new Palette
+ZOMBIE = new Palette
+GOLD = new Palette
+SILVER = new Palette
+BRONZE = new Palette
+
+make_color(c: Palette, r: float, g: float, b: float) {
+    c.r = r
+    c.g = g
+    c.b = b
+}
+
+init_palette() {
+    make_color(PURPLE, 0.373, 0.063, 0.627)       -- 0xFF5F10A0: кнопки и тост
+    make_color(PURPLE_DARK, 0.165, 0.102, 0.243)  -- 0xFF2A1A3E: закрытые награды
+    make_color(CARD_BG, 0.165, 0.165, 0.251)      -- 0xFF2A2A40: карточки
+    make_color(SEL_FRAME, 0.353, 0.353, 0.471)    -- 0xFF5A5A78: рамка выбранного
+    make_color(BG_DARK, 0.102, 0.102, 0.180)      -- 0xFF1A1A2E: фон меню
+    make_color(WHITE, 1.0, 1.0, 1.0)
+    make_color(BLACK, 0.0, 0.0, 0.0)
+    make_color(HP_GREEN, 0.494, 0.827, 0.129)     -- 0x7ED321
+    make_color(RED, 0.914, 0.271, 0.376)          -- 0xE94560
+    make_color(BLUE, 0.310, 0.765, 0.969)         -- 0x4FC3F7
+    make_color(BAR_BG, 0.090, 0.098, 0.137)       -- 0xDD171923 (без альфы)
+    make_color(ICE, 0.118, 0.533, 0.898)          -- 0x1E88E5: заморозка
+    make_color(ICE_LIGHT, 0.702, 0.898, 0.988)    -- 0xB3E5FC: взрыв снежинки
+    make_color(BEAM, 0.0, 0.902, 0.463)           -- 0x00E676: луч и взрыв турели
+    make_color(BEAM_CORE, 0.784, 0.980, 0.839)    -- 0xC8FAD6: ядро луча
+    make_color(ZOMBIE, 0.4, 0.733, 0.2)           -- 0x66BB33: скин «Зомби»
+    make_color(GOLD, 0.239, 0.196, 0.082)         -- 0xFF3D3215: место 1
+    make_color(SILVER, 0.180, 0.180, 0.188)       -- 0xFF2E2E30: место 2
+    make_color(BRONZE, 0.227, 0.141, 0.078)       -- 0xFF3A2414: место 3
+}
+
+-- Константа пи: C-бэкенд не выносит PI, поэтому своя.
+PI = 3.141592653589793
+
+-- ── Математика ──────────────────────────────────────────────────────────
+-- В новом DimScript нет atan2, rand() и cast'а float -> int — всё это
+-- написано здесь на math.* и маленьких циклах.
+
+clamp(v: float, lo: float, hi: float): float {
+    return math.min(hi, math.max(lo, v))
+}
+
+dist(x0: float, y0: float, x1: float, y1: float): float {
+    local dx = x1 - x0
+    local dy = y1 - y0
+    return math.sqrt(dx * dx + dy * dy)
+}
+
+lerp(a: float, b: float, k: float): float {
+    return math.lerp(a, b, k)
+}
+
+-- rand() старого движка: rint(n) — старое rand() % n, rf100() — (rand()%100)/100.
+rint(n: float): float {
+    return math.floor(math.random() * n)
+}
+
+rf100(): float {
+    return math.floor(math.random() * 100.0) / 100.0
+}
+
+sign(v: float): float {
+    if v > 0.0 then {
+        return 1.0
+    }
+    if v < 0.0 then {
+        return -1.0
+    }
+    return 0.0
+}
+
+-- atan по приближению z*(pi/4 + 0.273*(1 - |z|)), достаточно для игры.
+atan_approx(z: float): float {
+    local az = math.abs(z)
+    if az <= 1.0 then {
+        return z * (0.7853981634 + 0.273 * (1.0 - az))
+    }
+    local r = atan_approx(1.0 / z)
+    if z > 0.0 then {
+        return 1.5707963268 - r
+    }
+    return 0.0 - 1.5707963268 - r
+}
+
+atan2(y: float, x: float): float {
+    if x > 0.0 then {
+        return atan_approx(y / x)
+    }
+    if x < 0.0 then {
+        if y >= 0.0 then {
+            return atan_approx(y / x) + PI
+        }
+        return atan_approx(y / x) - PI
+    }
+    if y > 0.0 then {
+        return 1.5707963268
+    }
+    if y < 0.0 then {
+        return 0.0 - 1.5707963268
+    }
+    return 0.0
+}
+
+-- Целое число строкой («3»), в языке нет приведения float к int.
+int_str(v: float): string {
+    local t = v
+    if t < 0.0 then {
+        t = 0.0 - t
+    }
+    local n = 0
+    while t >= 1.0 do {
+        t = t - 1.0
+        n = n + 1
+    }
+    if v < 0.0 then {
+        return "-" .. n
+    }
+    return "" .. n
+}
+
+ceil_str(v: float): string {
+    local t = v
+    local n = 0
+    while t > 0.0 do {
+        t = t - 1.0
+        n = n + 1
+    }
+    return "" .. n
+}
+
+num_str(v: float): string {
+    if v == math.floor(v) then {
+        return int_str(v)
+    }
+    return str(v)
+}
+
+-- Числа интерфейса, профиль сессии и константы боя переехали в tuning.ds,
+-- чтобы каждый файл оставался короче 400 строк.
