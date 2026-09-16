@@ -30,6 +30,8 @@ int32_t ds_image_height(int32_t handle) { return ds_image_valid(handle) ? images
 
 uint64_t ds_image_revision(void) { return image_revision; }
 
+void ds_image_touch(void) { ++image_revision; }
+
 int32_t ds_image_find(const char *name) {
     if (!name) return -1;
     for (int32_t handle = 0; handle < image_count; ++handle)
@@ -46,6 +48,29 @@ int32_t ds_image_add(const char *name, uint8_t *rgba, int32_t width, int32_t hei
     image->rgba = rgba;
     ++image_revision;
     return image_count++;
+}
+
+int ds_png_magic_ok(const uint8_t *bytes, size_t size) {
+    static const uint8_t signature[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+    if (!bytes || size < sizeof(signature)) return 0;
+    return !memcmp(bytes, signature, sizeof(signature));
+}
+
+const char *ds_image_format_name(const uint8_t *bytes, size_t size) {
+    if (!bytes) return "unknown";
+    if (ds_png_magic_ok(bytes, size)) return "PNG";
+    /* JPEG: SOI followed by the first marker. */
+    if (size >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return "JPEG";
+    /* GIF87a / GIF89a. */
+    if (size >= 6 && !memcmp(bytes, "GIF8", 4) &&
+        (bytes[4] == '7' || bytes[4] == '9') && bytes[5] == 'a') return "GIF";
+    /* BMP. */
+    if (size >= 2 && bytes[0] == 'B' && bytes[1] == 'M') return "BMP";
+    /* WebP: a RIFF container with a WEBP chunk. */
+    if (size >= 12 && !memcmp(bytes, "RIFF", 4) && !memcmp(bytes + 8, "WEBP", 4)) return "WebP";
+    /* TIFF, little- and big-endian. */
+    if (size >= 4 && (!memcmp(bytes, "II*\0", 4) || !memcmp(bytes, "MM\0*", 4))) return "TIFF";
+    return "unknown";
 }
 
 const DsImage *ds_image_at(int32_t handle) { return ds_image_valid(handle) ? &images[handle] : NULL; }

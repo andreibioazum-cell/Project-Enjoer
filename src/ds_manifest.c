@@ -106,7 +106,6 @@ void ds_manifest_default(DsGameManifest *manifest) {
     manifest->target_fps = 60;
     manifest->resizeable = 1;
     manifest->show_fps = 0;
-    manifest->show_cube = 0;
     manifest->clear_color[0] = 0.05f;
     manifest->clear_color[1] = 0.08f;
     manifest->clear_color[2] = 0.15f;
@@ -130,6 +129,59 @@ int ds_manifest_package_valid(const DsGameManifest *manifest) {
         }
     }
     return in_segment && segments >= 1;
+}
+
+/* Parses `["a", "b"]` into a fixed name table.  `extensions` is a `|` separated
+ * list of required suffixes, or NULL for no check. */
+static int read_name_list(DsGameManifest *manifest, const char *value, char *table,
+                           size_t name_size, int capacity, int line_number, const char *key,
+                           const char *extensions) {
+    char list[1024];
+    snprintf(list, sizeof(list), "%s", value);
+    for (char *cursor = list; *cursor; ++cursor)
+        if (*cursor == '[' || *cursor == ']' || *cursor == ',') *cursor = ' ';
+    int count = 0;
+    char *cursor = list;
+    while (*cursor) {
+        while (*cursor == ' ' || *cursor == '"' || *cursor == '\'' || *cursor == '\t')
+            ++cursor;
+        if (!*cursor) break;
+        char *end = cursor;
+        while (*end && *end != ' ' && *end != '"' && *end != '\'') ++end;
+        const size_t size = (size_t)(end - cursor);
+        if (size == 0) break;
+        if (count >= capacity) {
+            fail(manifest, "%s:%d: больше %d имён в '%s'", DS_MANIFEST_NAME, line_number,
+                 capacity, key);
+            return -1;
+        }
+        if (size >= name_size) {
+            fail(manifest, "%s:%d: имя в '%s' длиннее %d символов", DS_MANIFEST_NAME,
+                 line_number, key, (int)name_size - 1);
+            return -1;
+        }
+        if (extensions) {
+            int known = 0;
+            char wanted[64];
+            snprintf(wanted, sizeof(wanted), "%s", extensions);
+            for (char *extension = strtok(wanted, "|"); extension;
+                 extension = strtok(NULL, "|")) {
+                const size_t length = strlen(extension);
+                if (size > length && !memcmp(cursor + size - length, extension, length))
+                    known = 1;
+            }
+            if (!known) {
+                fail(manifest, "%s:%d: '%s' ждёт файлы %s", DS_MANIFEST_NAME, line_number, key,
+                     extensions);
+                return -1;
+            }
+        }
+        memcpy(table + (size_t)count * name_size, cursor, size);
+        table[(size_t)count * name_size + size] = '\0';
+        ++count;
+        cursor = end;
+    }
+    return count;
 }
 
 int ds_manifest_parse(DsGameManifest *manifest, const char *text, size_t length) {
@@ -251,7 +303,13 @@ int ds_manifest_parse(DsGameManifest *manifest, const char *text, size_t length)
             }
             continue;
         }
-        if (!strcmp(key, "resizeable") || !strcmp(key, "show_fps") || !strcmp(key, "cube")) {
+        if (!strcmp(key, "cube")) {
+            fail(manifest, "%s:%d: 3D-куб удалён — Enjoer теперь только 2D, уберите ключ 'cube'",
+                 DS_MANIFEST_NAME, line_number);
+            ok = 0;
+            break;
+        }
+        if (!strcmp(key, "resizeable") || !strcmp(key, "show_fps")) {
             int flag = 0;
             if (!strcmp(value, "true") || !strcmp(value, "1")) flag = 1;
             else if (!strcmp(value, "false") || !strcmp(value, "0")) flag = 0;
@@ -262,8 +320,7 @@ int ds_manifest_parse(DsGameManifest *manifest, const char *text, size_t length)
                 break;
             }
             if (!strcmp(key, "resizeable")) manifest->resizeable = flag;
-            else if (!strcmp(key, "show_fps")) manifest->show_fps = flag;
-            else manifest->show_cube = flag;
+            else manifest->show_fps = flag;
             continue;
         }
         if (!strcmp(key, "clear_color")) {
@@ -313,43 +370,41 @@ int ds_manifest_parse(DsGameManifest *manifest, const char *text, size_t length)
             continue;
         }
         if (!strcmp(key, "scripts")) {
-            char list[512];
-            snprintf(list, sizeof(list), "%s", value);
-            for (char *cursor = list; *cursor; ++cursor)
-                if (*cursor == '[' || *cursor == ']' || *cursor == ',') *cursor = ' ';
-            manifest->script_count = 0;
-            char *cursor = list;
-            while (*cursor) {
-                while (*cursor == ' ' || *cursor == '"' || *cursor == '\'' || *cursor == '\t')
-                    ++cursor;
-                if (!*cursor) break;
-                char *end = cursor;
-                while (*end && *end != ' ' && *end != '"' && *end != '\'') ++end;
-                const size_t size = (size_t)(end - cursor);
-                if (size == 0) break;
-                if (manifest->script_count >= DS_MANIFEST_SCRIPTS) {
-                    fail(manifest, "%s:%d: больше %d скриптов в игре", DS_MANIFEST_NAME,
-                         line_number, DS_MANIFEST_SCRIPTS);
-                    ok = 0;
-                    break;
-                }
-                if (size >= sizeof(manifest->scripts[0])) {
-                    fail(manifest, "%s:%d: имя скрипта длиннее %d символов", DS_MANIFEST_NAME,
-                         line_number, (int)sizeof(manifest->scripts[0]) - 1);
-                    ok = 0;
-                    break;
-                }
-                memcpy(manifest->scripts[manifest->script_count], cursor, size);
-                manifest->scripts[manifest->script_count][size] = '\0';
-                ++manifest->script_count;
-                cursor = end;
+            const int count = read_name_list(manifest, value, &manifest->scripts[0][0],
+                                             sizeof(manifest->scripts[0]), DS_MANIFEST_SCRIPTS,
+                                             line_number, key, ".ds");
+            if (count < 0) {
+                ok = 0;
+                break;
             }
-            if (!ok) break;
+            manifest->script_count = count;
+            continue;
+        }
+        if (!strcmp(key, "images")) {
+            const int count = read_name_list(manifest, value, &manifest->images[0][0],
+                                             sizeof(manifest->images[0]), DS_MANIFEST_IMAGES,
+                                             line_number, key, ".png");
+            if (count < 0) {
+                ok = 0;
+                break;
+            }
+            manifest->image_count = count;
+            continue;
+        }
+        if (!strcmp(key, "fonts")) {
+            const int count = read_name_list(manifest, value, &manifest->fonts[0][0],
+                                             sizeof(manifest->fonts[0]), DS_MANIFEST_FONTS,
+                                             line_number, key, ".ttf|.otf");
+            if (count < 0) {
+                ok = 0;
+                break;
+            }
+            manifest->font_count = count;
             continue;
         }
         fail(manifest, "%s:%d: неизвестный ключ '%s' (можно: title, author, package, version, "
-                       "version_code, orientation, target_fps, resizeable, show_fps, cube, "
-                       "clear_color, scripts)",
+                       "version_code, orientation, target_fps, resizeable, show_fps, "
+                       "clear_color, scripts, images, fonts)",
              DS_MANIFEST_NAME, line_number, key);
         ok = 0;
     }

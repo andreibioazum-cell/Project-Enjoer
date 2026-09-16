@@ -11,7 +11,7 @@
  *
  * Every vertex carries a texture coordinate and a layer:
  *
- *   layer < 0   untextured — the vertex colour is the pixel (shapes, cube);
+ *   layer < 0   untextured — the vertex colour is the pixel (shapes);
  *   layer >= 0  index into the image array loaded by `image.load("x.png")`.
  *
  * A shape therefore costs the same six floats it always did, and a sprite is
@@ -43,8 +43,9 @@ typedef struct EnjoerVertex {
     float layer;
 } EnjoerVertex;
 
-/* One recorded render.text call.  There is intentionally no font backend yet,
- * so the text pass only records position, colour and scale. */
+/* One recorded render.text call.  `font` is the handle returned by font.load,
+ * or -1 for the default face; the TrueType text pass turns every command with
+ * a loaded font into tinted glyph quads before the batch is uploaded. */
 typedef struct EnjoerTextCommand {
     char text[ENJOER_DRAW_TEXT_LENGTH];
     float x;
@@ -53,6 +54,7 @@ typedef struct EnjoerTextCommand {
     float r;
     float g;
     float b;
+    int32_t font;
 } EnjoerTextCommand;
 
 typedef struct EnjoerFrame {
@@ -61,6 +63,9 @@ typedef struct EnjoerFrame {
     int vertex_capacity;
     EnjoerTextCommand texts[ENJOER_DRAW_MAX_TEXT];
     int text_count;
+    /* Set by the TrueType text pass once it turned this frame's texts with
+     * loaded fonts into glyph quads; the records stay for debugging. */
+    int texts_resolved;
     uint64_t text_total;
     float clear_color[3];
     int has_clear;

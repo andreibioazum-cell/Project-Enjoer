@@ -9,6 +9,7 @@ are shared with dimscript_runtime.c, so script runs same on Vulkan.
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -98,6 +99,7 @@ class TextCommand:
     y: float
     scale: float
     color: Tuple[float, float, float]
+    font: int = -1
 
 
 @dataclass
@@ -131,7 +133,8 @@ class Frame:
         return {
             "vertex_count": len(self.vertices),
             "text_count": len(self.texts),
-            "texts": [{"text": t.text, "x": t.x, "y": t.y, "scale": t.scale} for t in self.texts],
+            "texts": [{"text": t.text, "x": t.x, "y": t.y, "scale": t.scale, "font": t.font}
+                      for t in self.texts],
         }
 
 
@@ -147,6 +150,7 @@ class RenderRecorder:
     def __init__(self, frame: Frame) -> None:
         self.frame = frame
         self.color_value = (1.0, 1.0, 1.0)
+        self.font_value = -1
         self.text_calls = 0
 
     @property
@@ -252,6 +256,13 @@ class RenderRecorder:
     def triangle(self, *args: Any) -> None:
         self.tri(*args)
 
+    def font(self, handle: Any) -> None:
+        # -1 selects the default face; a bogus positive handle is ignored
+        # rather than recorded, exactly like ds_render_font() in C.
+        number = int(handle)
+        if number == -1 or number >= 0:
+            self.font_value = number
+
     def text(self, text: Any, x: Any, y: Any, scale: Any) -> None:
         self.text_calls += 1
         if len(self.frame.texts) >= MAX_TEXT:
@@ -263,8 +274,20 @@ class RenderRecorder:
                 float(y),
                 float(scale),
                 self.color_value,
+                self.font_value,
             )
         )
+
+    def image(self, handle: Any, x: Any, y: Any, width: Any, height: Any) -> None:
+        self.image_region(handle, x, y, width, height, 0.0, 0.0, 1.0, 1.0)
+
+    def image_region(self, handle: Any, x: Any, y: Any, width: Any, height: Any,
+                     u0: Any, v0: Any, u1: Any, v1: Any) -> None:
+        # The reference frame stores no texture coordinates, so a sprite is the
+        # same tinted quad the AOT build emits — positions and vertex counts
+        # match, only the uv/layer ride along in C.
+        _ = (handle, u0, v0, u1, v1)
+        self.rect(x, y, width, height)
 
     def _triangle(self, x0, y0, x1, y1, x2, y2) -> None:
         r, g, b = self.color_value
@@ -276,8 +299,9 @@ class RenderRecorder:
 
 
 LIST_METHODS = {"push", "insert", "delete", "remove_at", "clear", "index_of", "join"}
-RENDER_MEMBERS = {"color_value", "text_calls", "clear", "color", "color_alpha", "rect", "frame",
-                  "circle", "ring", "line", "tri", "triangle", "text"}
+RENDER_MEMBERS = {"color_value", "font_value", "text_calls", "clear", "color", "color_alpha",
+                  "rect", "frame", "circle", "ring", "line", "tri", "triangle", "text",
+                  "font", "image", "image_region"}
 
 
 class Interpreter:
@@ -292,6 +316,12 @@ class Interpreter:
         self.globals: Dict[str, Any] = {}
         self.frame = Frame()
         self.render = RenderRecorder(self.frame)
+        self.images: Dict[str, int] = {}
+        self.image_sizes: Dict[int, Tuple[int, int]] = {}
+        self.fonts: Dict[str, int] = {}
+        # Game folder for asset lookups (image.load/font.load), set by
+        # from_game; None keeps the historical working-directory lookup.
+        self.asset_dir: Optional[str] = None
         self.engine = EngineState()
         self.text_log: List[str] = []
         self.initialized = False
@@ -309,7 +339,17 @@ class Interpreter:
         from .project import load_project
 
         project = load_project(directory) if manifest is None else load_project(directory)
-        return cls(project.program, filename=str(project.directory))
+        interpreter = cls(project.program, filename=str(project.directory))
+        interpreter.asset_dir = str(project.directory)
+        return interpreter
+
+    def asset_path(self, path: str) -> str:
+        """Resolve an asset name the way the device does: against the game
+        folder when the interpreter runs one, against the working directory
+        otherwise.  The registry key stays the script-given name either way."""
+        if self.asset_dir and not os.path.isabs(path):
+            return os.path.join(self.asset_dir, path)
+        return path
 
     # --- lifecycle ---------------------------------------------------------
     def initialize(self) -> None:
@@ -473,7 +513,7 @@ class Interpreter:
                 return self.render
             if expression.name == "math":
                 return _Namespace("math")
-            if expression.name in {"engine", "input"}:
+            if expression.name in {"engine", "input", "image", "font"}:
                 return _Namespace(expression.name)
             raise RuntimeError(f"{self.filename}:{expression.line}:{expression.column}: неизвестное имя {expression.name!r}")
         if isinstance(expression, Member):
@@ -720,19 +760,80 @@ class Interpreter:
             return self.engine_builtin(name, numbers)
         if namespace == "input":
             return self.input_builtin(name, arguments, numbers)
+        if namespace == "image":
+            return self.image_builtin(name, arguments)
+        if namespace == "font":
+            return self.font_builtin(name, arguments)
         raise RuntimeError(f"нет builtin {namespace}.{name}")
 
     def render_builtin(self, name: str, arguments: List[Any]) -> Any:
         method = {"frame": "frame_rect"}.get(name, name)
         if name not in {"clear", "color", "color_alpha", "rect", "frame", "circle", "ring", "line",
-                        "tri", "triangle", "text"}:
+                        "tri", "triangle", "text", "font", "image", "image_region"}:
             raise RuntimeError(f"неизвестная функция render.{name}")
         arity = {"clear": 3, "color": 3, "color_alpha": 4, "rect": 4, "frame": 5, "circle": 3,
-                 "ring": 4, "line": 5, "tri": 6, "triangle": 6, "text": 4}[name]
+                 "ring": 4, "line": 5, "tri": 6, "triangle": 6, "text": 4, "font": 1,
+                 "image": 5, "image_region": 9}[name]
         if len(arguments) != arity:
             raise RuntimeError(f"render.{name} ожидает {arity} аргумента")
         getattr(self.render, method)(*arguments)
         return None
+
+    def image_builtin(self, name: str, arguments: List[Any]) -> Any:
+        if name not in {"load", "width", "height", "count"}:
+            raise RuntimeError(f"нет функции image.{name}")
+        if name == "count":
+            return len(self.images)
+        if name == "load":
+            if len(arguments) != 1:
+                raise RuntimeError("image.load ожидает 1 аргумент")
+            return self._image_load(self.to_string(arguments[0]))
+        if len(arguments) != 1:
+            raise RuntimeError(f"image.{name} ожидает 1 аргумент")
+        size = self.image_sizes.get(int(arguments[0]), (0, 0))
+        return size[0] if name == "width" else size[1]
+
+    def _image_load(self, path: str) -> int:
+        if path in self.images:
+            return self.images[path]
+        # Like the C loader, a missing or broken file is -1, not an exception:
+        # a game checks the handle and keeps running.
+        try:
+            with open(self.asset_path(path), "rb") as stream:
+                header = stream.read(24)
+        except OSError:
+            return -1
+        if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
+            return -1
+        width = int.from_bytes(header[16:20], "big")
+        height = int.from_bytes(header[20:24], "big")
+        handle = len(self.images)
+        self.images[path] = handle
+        self.image_sizes[handle] = (width, height)
+        return handle
+
+    def font_builtin(self, name: str, arguments: List[Any]) -> Any:
+        if name not in {"load", "count"}:
+            raise RuntimeError(f"нет функции font.{name}")
+        if name == "count":
+            if arguments:
+                raise RuntimeError("font.count ожидает 0 аргументов")
+            return len(self.fonts)
+        if len(arguments) != 1:
+            raise RuntimeError("font.load ожидает 1 аргумент")
+        path = self.to_string(arguments[0])
+        if path in self.fonts:
+            return self.fonts[path]
+        try:
+            with open(self.asset_path(path), "rb") as stream:
+                magic = stream.read(4)
+        except OSError:
+            return -1
+        if magic not in (b"\x00\x01\x00\x00", b"true", b"typ1", b"OTTO"):
+            return -1
+        handle = len(self.fonts)
+        self.fonts[path] = handle
+        return handle
 
     def math_builtin(self, name: str, arguments: List[Any], numbers: List[float], expression: Expr) -> Any:
         if name not in {"floor", "ceil", "round", "abs", "sign", "sqrt", "sin", "cos", "tan", "min",

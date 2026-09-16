@@ -25,3 +25,6 @@ clear_color = 0.05 0.08 0.15
 -- Load order for the .ds files.  Anything not listed is still loaded, after
 -- these, so forgetting a file only changes startup order.
 scripts = ["main.ds", "blocks.ds", "hud.ds"]
+
+-- DejaVu Sans Bold (free license, see README.md): the bundled UI face.
+fonts = ["font.ttf"]

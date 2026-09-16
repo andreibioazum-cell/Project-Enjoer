@@ -1,7 +1,7 @@
 /* Public C side of Enjoer.
  *
  * The game loop and input state deliberately stay in C. Rendering crosses one
- * small C ABI boundary into src/vulkan_cube.cpp, so the game can remain easy to
+ * small C ABI boundary into src/vulkan_2d.cpp, so the game can remain easy to
  * embed in the Android native activity while the GPU backend is C++. */
 #ifndef ENJOER_ENGINE_H
 #define ENJOER_ENGINE_H
