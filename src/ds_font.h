@@ -8,9 +8,9 @@
  *
  * What `load` validates today is the file header (TrueType / OpenType magic),
  * so a typo in the name or a non-font file fails loudly at load time instead
- * of silently producing tofu.  Glyph rasterization on the device is the next
- * step; the preview already serves these bytes to the browser, which draws the
- * recorded `render.text` calls in the game's own font.
+ * of silently producing tofu.  The handle is then a key into the rasterizer in
+ * ds_ttf.c, which draws the recorded `render.text` calls in the game's own font
+ * on every platform, the preview in the browser included.
  */
 #ifndef DS_FONT_H
 #define DS_FONT_H

@@ -6,6 +6,7 @@
  */
 #include "ds_ttf.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,14 +16,23 @@
 #include "engine.h"
 #include "enjoer_draw.h"
 
-/* Glyph raster size (the em box inside the atlas) and supersampling factor.
- * 48 px keeps body text crisp up to scale 3.0 (48 px on screen); beyond that
- * bilinear magnification softens instead of pixelating. */
+/* Glyph raster size, supersampling factor and the atlas geometry.
+ *
+ * A glyph is baked at the em it is drawn with, so a 16 px label gets a 16 px
+ * bitmap (sampled 1:1, which is what makes small text readable) instead of a
+ * 48 px one that the sampler shrinks into mush.  DS_TTF_PX is the size used
+ * when the wanted one is off the ladder or the atlas has no room left: 48 px
+ * keeps body text crisp up to scale 3.0 exactly like the old fixed size did. */
 #define DS_TTF_PX 48
+#define DS_TTF_PX_MIN 12  /* below this the outlines are not worth rasterizing */
+#define DS_TTF_PX_MAX 96  /* above this the atlas would fill with a handful of glyphs */
 #define DS_TTF_SS 3
 #define DS_TTF_ATLAS 512
 #define DS_TTF_ATLAS_PAD 2
-#define DS_TTF_CACHE 384
+/* One slot per (codepoint, raster size): a HUD with three text sizes needs
+ * three slots per glyph, so the cache is sized for a whole alphabet a few
+ * times over.  The lookup is a linear scan, which stays cheap at this size. */
+#define DS_TTF_CACHE 768
 #define DS_TTF_MAX_POINTS 4096
 #define DS_TTF_MAX_DEPTH 4
 /* A scanline never needs more crossings than this; beyond it the row keeps the
@@ -83,6 +93,10 @@ static int ttf_table(const DsTtfFont *font, const char tag[4], size_t *offset, s
 typedef struct {
     uint32_t codepoint;
     int ready;
+    /* Em box (in raster px) this glyph was baked for: every raster-px metric
+     * below is divided by it, so a glyph that fell back to the base size
+     * still lands in the same place as its neighbours. */
+    int raster;
     /* Atlas cell of the ink bitmap (raster pixels, row 0 is the glyph top). */
     int32_t ax;
     int32_t ay;
@@ -741,12 +755,25 @@ static void ttf_fill(const DsTtfOutline *outline, float scale, float shift_x, fl
 
 /* ------------------------------------------------------------ atlas/cache */
 
-static DsTtfGlyph *ttf_cached(DsTtfFace *face, uint32_t codepoint) {
+static DsTtfGlyph *ttf_cached(DsTtfFace *face, uint32_t codepoint, int raster) {
     int index = 0;
     for (index = 0; index < face->cache_count; ++index)
-        if (face->cache[index].ready && face->cache[index].codepoint == codepoint)
+        if (face->cache[index].ready && face->cache[index].codepoint == codepoint &&
+            face->cache[index].raster == raster)
             return &face->cache[index];
     return NULL;
+}
+
+/* Em box -> raster size to bake at.  Whole pixels inside the ladder, so the
+ * sampler maps one texel to one screen pixel; outside it the nearest allowed
+ * size, because an oversized atlas costs more than the softness it saves. */
+static int ttf_pick_raster(float em) {
+    int px = 0;
+    if (!(em > 0.0f)) return DS_TTF_PX;
+    px = (int)((float)floor((double)em + 0.5));
+    if (px < DS_TTF_PX_MIN) px = DS_TTF_PX_MIN;
+    if (px > DS_TTF_PX_MAX) px = DS_TTF_PX_MAX;
+    return px;
 }
 
 static int ttf_atlas_place(DsTtfFace *face, int w, int h, int32_t *ax, int32_t *ay) {
@@ -758,10 +785,7 @@ static int ttf_atlas_place(DsTtfFace *face, int w, int h, int32_t *ax, int32_t *
         face->atlas_y += face->atlas_row_h + DS_TTF_ATLAS_PAD;
         face->atlas_row_h = 0;
     }
-    if (face->atlas_y + h + DS_TTF_ATLAS_PAD > DS_TTF_ATLAS) {
-        face->atlas_full = 1;
-        return 0;
-    }
+    if (face->atlas_y + h + DS_TTF_ATLAS_PAD > DS_TTF_ATLAS) return 0;
     *ax = face->atlas_x;
     *ay = face->atlas_y;
     face->atlas_x += w + DS_TTF_ATLAS_PAD;
@@ -769,12 +793,18 @@ static int ttf_atlas_place(DsTtfFace *face, int w, int h, int32_t *ax, int32_t *
     return 1;
 }
 
-/* Rasterize one glyph id into the atlas; whitespace yields an advance-only
- * entry, anything broken yields .notdef. */
-static DsTtfGlyph *ttf_rasterize(DsTtfFace *face, uint32_t codepoint, uint16_t glyph,
-                                 int *added) {
-    float raster_scale = (float)DS_TTF_PX / (float)face->units_per_em;
-    DsTtfGlyph *slot = NULL;
+/* ttf_bake outcomes.  FULL is the only one that is worth a second try: it says
+ * "no room at this size", not "this font is broken". */
+#define DS_TTF_BAKE_OK 0
+#define DS_TTF_BAKE_BROKEN 1 /* the metrics themselves are unreadable */
+#define DS_TTF_BAKE_FULL 2   /* the atlas is full at this raster size */
+
+/* Rasterize one glyph id at `raster` px em into the face atlas and fill `slot`.
+ * Whitespace yields an advance-only entry, a broken outline an empty box: both
+ * are OK outcomes, because the advance still lays the line out correctly. */
+static int ttf_bake(DsTtfFace *face, uint32_t codepoint, uint16_t glyph, int raster,
+                    DsTtfGlyph *slot) {
+    float raster_scale = (float)raster / (float)face->units_per_em;
     DsTtfOutline *outline = NULL;
     size_t start = 0;
     size_t end = 0;
@@ -792,21 +822,20 @@ static DsTtfGlyph *ttf_rasterize(DsTtfFace *face, uint32_t codepoint, uint16_t g
     uint8_t *cover = NULL;
     int x = 0;
     int y = 0;
-    if (face->cache_count >= DS_TTF_CACHE) return &face->notdef;
-    if (!ttf_advance(face, glyph, raster_scale, &advance)) return &face->notdef;
-    slot = &face->cache[face->cache_count];
+    int status = DS_TTF_BAKE_OK;
+    if (!ttf_advance(face, glyph, raster_scale, &advance)) return DS_TTF_BAKE_BROKEN;
     memset(slot, 0, sizeof(*slot));
     slot->codepoint = codepoint;
+    slot->raster = raster;
     slot->advance = advance;
     slot->ready = 1;
-    ++face->cache_count;
-    if (!ttf_glyph_range(face, glyph, &start, &end)) return slot;
-    if (start == end) return slot; /* whitespace */
-    if (end - start < 10) return slot;
+    if (!ttf_glyph_range(face, glyph, &start, &end)) return DS_TTF_BAKE_OK;
+    if (start == end) return DS_TTF_BAKE_OK; /* whitespace */
+    if (end - start < 10) return DS_TTF_BAKE_OK;
     if (!ttf_i16(&face->font, start + 2, &x_min) || !ttf_i16(&face->font, start + 4, &y_min) ||
         !ttf_i16(&face->font, start + 6, &x_max) || !ttf_i16(&face->font, start + 8, &y_max))
-        return slot;
-    if (x_max <= x_min || y_max <= y_min) return slot;
+        return DS_TTF_BAKE_OK;
+    if (x_max <= x_min || y_max <= y_min) return DS_TTF_BAKE_OK;
     bitmap_x0 = (int)(x_min < 0 ? (float)x_min * raster_scale - 1.0f : (float)x_min * raster_scale);
     bitmap_y0 = (int)(y_max > 0 ? -(float)y_max * raster_scale - 1.0f : -(float)y_max * raster_scale);
     {
@@ -815,21 +844,21 @@ static DsTtfGlyph *ttf_rasterize(DsTtfFace *face, uint32_t codepoint, uint16_t g
         bitmap_w = bitmap_x1 - bitmap_x0;
         bitmap_h = bitmap_y1 - bitmap_y0;
     }
-    if (bitmap_w <= 0 || bitmap_h <= 0) return slot;
-    if (bitmap_w > DS_TTF_ATLAS / 2 || bitmap_h > DS_TTF_ATLAS / 2) return &face->notdef;
+    if (bitmap_w <= 0 || bitmap_h <= 0) return DS_TTF_BAKE_OK;
+    if (bitmap_w > DS_TTF_ATLAS / 2 || bitmap_h > DS_TTF_ATLAS / 2) return DS_TTF_BAKE_BROKEN;
     outline = (DsTtfOutline *)calloc(1, sizeof(DsTtfOutline));
     cover = (uint8_t *)calloc((size_t)bitmap_w * DS_TTF_SS, (size_t)bitmap_h * DS_TTF_SS);
     if (!outline || !cover) {
         free(outline);
         free(cover);
-        return &face->notdef;
+        return DS_TTF_BAKE_BROKEN;
     }
     if (!ttf_outline(face, glyph, outline, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
                      0.5f / raster_scale / (float)DS_TTF_SS, 0) ||
         outline->count == 0) {
         free(outline);
         free(cover);
-        return slot;
+        return DS_TTF_BAKE_OK;
     }
     ttf_fill(outline, raster_scale * (float)DS_TTF_SS, -(float)bitmap_x0 * (float)DS_TTF_SS,
              -(float)bitmap_y0 * (float)DS_TTF_SS, cover, bitmap_w * DS_TTF_SS,
@@ -837,9 +866,7 @@ static DsTtfGlyph *ttf_rasterize(DsTtfFace *face, uint32_t codepoint, uint16_t g
     free(outline);
     if (!ttf_atlas_place(face, bitmap_w, bitmap_h, &ax, &ay)) {
         free(cover);
-        if (!face->atlas_full) face->atlas_full = 1;
-        else app_log_error("font atlas full, '%u' becomes tofu", codepoint);
-        return &face->notdef;
+        return DS_TTF_BAKE_FULL;
     }
     for (y = 0; y < bitmap_h; ++y) {
         for (x = 0; x < bitmap_w; ++x) {
@@ -869,18 +896,47 @@ static DsTtfGlyph *ttf_rasterize(DsTtfFace *face, uint32_t codepoint, uint16_t g
     slot->h = bitmap_h;
     slot->left = (float)bitmap_x0;
     slot->top = (float)bitmap_y0;
-    if (added) *added = 1;
+    /* The atlas moved, this layer only: the renderer copies one slice instead of
+       rebuilding the texture array, which is what a per-tap digit deserves. */
+    ds_image_touch_layer(face->layer);
+    return status;
+}
+
+/* Bake one codepoint and hand out its slot.  A glyph that no longer fits the
+ * atlas at the wanted size gets a second chance at the base size (which is the
+ * only size the pass knew before per-size atlases existed) and only then
+ * degrades to .notdef, so a big banner costs softness, never letters. */
+static DsTtfGlyph *ttf_rasterize(DsTtfFace *face, uint32_t codepoint, uint16_t glyph,
+                                 int raster) {
+    DsTtfGlyph *slot = NULL;
+    int status = 0;
+    if (face->cache_count >= DS_TTF_CACHE) return &face->notdef;
+    slot = &face->cache[face->cache_count];
+    status = ttf_bake(face, codepoint, glyph, raster, slot);
+    if (status == DS_TTF_BAKE_FULL && raster != DS_TTF_PX)
+        status = ttf_bake(face, codepoint, glyph, DS_TTF_PX, slot);
+    if (status != DS_TTF_BAKE_OK) {
+        memset(slot, 0, sizeof(*slot));
+        if (status == DS_TTF_BAKE_FULL) {
+            /* Only "the atlas is shut" is worth remembering: from here on the
+             * face hands out .notdef without walking the atlas again. */
+            if (!face->atlas_full) face->atlas_full = 1;
+            else app_log_error("font atlas full, '%u' becomes tofu", codepoint);
+        }
+        return &face->notdef;
+    }
+    ++face->cache_count;
     return slot;
 }
 
-static DsTtfGlyph *ttf_glyph(DsTtfFace *face, uint32_t codepoint, int *added) {
-    DsTtfGlyph *found = ttf_cached(face, codepoint);
+static DsTtfGlyph *ttf_glyph(DsTtfFace *face, uint32_t codepoint, int raster) {
+    DsTtfGlyph *found = ttf_cached(face, codepoint, raster);
     uint16_t glyph = 0;
     if (found) return found;
     if (face->atlas_full) return &face->notdef;
     glyph = ttf_glyph_id(face, codepoint);
     if (glyph == 0) return &face->notdef;
-    return ttf_rasterize(face, codepoint, glyph, added);
+    return ttf_rasterize(face, codepoint, glyph, raster);
 }
 
 /* ------------------------------------------------------------------ layout */
@@ -926,44 +982,68 @@ bad:
     return 0xFFFDu;
 }
 
-static void ttf_draw_text(DsTtfFace *face, const EnjoerTextCommand *command, int *added) {
+static void ttf_draw_text(DsTtfFace *face, const EnjoerTextCommand *command) {
     /* Scale 1.0 is a 16 px em (the browser overlay's contract); the pen starts
      * at the command's top-left corner and the baseline sits one ascent below
-     * it.  Atlas glyphs are DS_TTF_PX tall, so `unit` maps raster px to screen
-     * px and every fractional advance accumulates unrounded. */
+     * it.  Glyphs bake at the em this text is drawn with, so `unit` maps one
+     * atlas texel to one screen pixel for the whole ladder.
+     *
+     * Pen origin, baseline and every glyph box are rounded to whole pixels:
+     * text then lands on the same texels on every frame instead of drifting
+     * half a pixel around, which is what makes a HUD that redraws with a
+     * changing scale (or after a resize) look steady rather than shaky.
+     * Advances still accumulate unrounded, so rounding never smears the
+     * spacing across a long line. */
     float em = 16.0f * command->scale;
-    float unit = em / (float)DS_TTF_PX;
+    int raster = 0;
     float ascent = (float)face->ascent / (float)face->units_per_em * em;
     float line = (float)(face->ascent - face->descent + face->line_gap) /
                  (float)face->units_per_em * em;
-    float pen_x = command->x;
-    float baseline = command->y + ascent;
+    float pen_x = 0.0f;
+    float baseline = 0.0f;
     const char *cursor = command->text;
     float inv_atlas = 1.0f / (float)DS_TTF_ATLAS;
     if (!(em > 0.0f) || !command->text[0]) return;
+    raster = ttf_pick_raster(em);
+    pen_x = (float)floor((double)command->x + 0.5);
+    baseline = (float)floor((double)(command->y + ascent) + 0.5);
     while (*cursor) {
         uint32_t codepoint = ttf_next_codepoint(&cursor);
         DsTtfGlyph *glyph = NULL;
+        float unit = 1.0f;
+        float left = 0.0f;
+        float top = 0.0f;
         if (codepoint == (uint32_t)'\n') {
-            pen_x = command->x;
-            baseline += line;
+            pen_x = (float)floor((double)command->x + 0.5);
+            baseline = (float)floor((double)(baseline + line) + 0.5);
             continue;
         }
         if (codepoint == (uint32_t)'\r' || codepoint == 0u) continue;
         if (codepoint == (uint32_t)'\t') {
-            DsTtfGlyph *space = ttf_glyph(face, (uint32_t)' ', added);
-            pen_x += 4.0f * space->advance * unit;
+            DsTtfGlyph *space = ttf_glyph(face, (uint32_t)' ', raster);
+            pen_x += 4.0f * space->advance * (em / (float)space->raster);
             continue;
         }
-        glyph = ttf_glyph(face, codepoint, added);
+        glyph = ttf_glyph(face, codepoint, raster);
+        unit = em / (float)glyph->raster;
+        left = glyph->left * unit;
+        top = glyph->top * unit;
         if (glyph->w > 0 && glyph->h > 0) {
-            float u0 = (float)glyph->ax * inv_atlas;
-            float v0 = (float)glyph->ay * inv_atlas;
-            float u1 = (float)(glyph->ax + glyph->w) * inv_atlas;
-            float v1 = (float)(glyph->ay + glyph->h) * inv_atlas;
-            enjoer_draw_image_quad(pen_x + glyph->left * unit, baseline + glyph->top * unit,
-                                   (float)glyph->w * unit, (float)glyph->h * unit, u0, v0, u1, v1,
-                                   face->layer, command->r, command->g, command->b);
+            float gx0 = (float)floor((double)(pen_x + left) + 0.5);
+            float gy0 = (float)floor((double)(baseline + top) + 0.5);
+            float gx1 = (float)floor((double)(pen_x + (glyph->left + glyph->w) * unit) + 0.5);
+            float gy1 = (float)floor((double)(baseline + (glyph->top + glyph->h) * unit) + 0.5);
+            /* Half a texel inside the cell on every side: the quad edge then
+             * samples the centre of the first and last ink texel, so the
+             * bilinear tap never reaches into the padding or the neighbour
+             * glyph (which is what used to wash out thin strokes). */
+            float u0 = ((float)glyph->ax + 0.5f) * inv_atlas;
+            float v0 = ((float)glyph->ay + 0.5f) * inv_atlas;
+            float u1 = ((float)(glyph->ax + glyph->w) - 0.5f) * inv_atlas;
+            float v1 = ((float)(glyph->ay + glyph->h) - 0.5f) * inv_atlas;
+            if (gx1 > gx0 && gy1 > gy0)
+                enjoer_draw_image_quad(gx0, gy0, gx1 - gx0, gy1 - gy0, u0, v0, u1, v1,
+                                       face->layer, command->r, command->g, command->b);
         }
         pen_x += glyph->advance * unit;
     }
@@ -1055,14 +1135,14 @@ int32_t ds_ttf_load_face(int32_t font) {
     /* The .notdef box takes the first atlas cell, so a missing glyph and a
      * full atlas both degrade to honest tofu instead of nothing. */
     {
-        int added = 0;
         DsTtfGlyph box;
         memset(&box, 0, sizeof(box));
         box.ready = 1;
+        box.raster = DS_TTF_PX; /* the .notdef always lives at the base size */
         face->notdef = box;
         if (face->num_glyphs > 0) {
-            DsTtfGlyph *slot = ttf_rasterize(face, 0xFFFDu, 0, &added);
-            if (slot) face->notdef = *slot;
+            DsTtfGlyph *slot = ttf_rasterize(face, 0xFFFDu, 0, DS_TTF_PX);
+            if (slot && slot->raster > 0) face->notdef = *slot;
             face->cache_count = 0;
         }
         if (!face->notdef.w) {
@@ -1092,11 +1172,15 @@ int32_t ds_ttf_load_face(int32_t font) {
                 face->notdef.top = -(float)face->ascent / (float)face->units_per_em *
                                    (float)DS_TTF_PX;
                 face->notdef.advance = (float)side;
+                face->notdef.raster = DS_TTF_PX;
+                ds_image_touch_layer(face->layer);
             }
         }
     }
     return face->layer;
 }
+
+int32_t ds_ttf_atlas_size(void) { return DS_TTF_ATLAS; }
 
 int32_t ds_ttf_layer(int32_t font) {
     const DsTtfFace *face = ttf_face(font);
@@ -1107,7 +1191,6 @@ int32_t ds_ttf_layer(int32_t font) {
 void ds_ttf_resolve_frame(void) {
     EnjoerFrame *frame = enjoer_frame();
     int index = 0;
-    int added = 0;
     if (!frame || frame->texts_resolved) return;
     for (index = 0; index < frame->text_count; ++index) {
         const EnjoerTextCommand *command = &frame->texts[index];
@@ -1115,10 +1198,9 @@ void ds_ttf_resolve_frame(void) {
         if (!ds_font_valid(command->font)) continue;
         face = ttf_face(command->font);
         if (!face || !face->ready) continue;
-        ttf_draw_text(face, command, &added);
+        ttf_draw_text(face, command);
     }
     frame->texts_resolved = 1;
-    if (added) ds_image_touch();
 }
 
 void ds_ttf_reset(void) {

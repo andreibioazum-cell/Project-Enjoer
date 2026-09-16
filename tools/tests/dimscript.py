@@ -45,8 +45,26 @@ assert interpreter.globals["game"].fields["score"] == 1
 assert interpreter.globals["game"].fields["best"] == 1
 interpreter.update(1.0 / 60.0)
 commands = interpreter.draw()
-assert any(command.text == "Счет: 1" for command in commands)
+assert any(command.text == "Счёт: 1" for command in commands)
 assert any(command.text == "Рекорд: 1" for command in commands)
 assert all(command.font == 0 for command in commands)
-assert interpreter.globals["game"].fields["text_scale"] < 1.6
+
+# A tap scores; it must not move the text it just scored.  The pulse is a shape,
+# so the score keeps one size and one baseline while it plays — a HUD that
+# rescales under the finger is what reads as a shaking screen.
+before = next(c for c in commands if c.text.startswith("Счёт"))
+interpreter.touchpressed(3, 400.0, 90.0)
+interpreter.update(1.0 / 60.0)
+after = next(c for c in interpreter.draw() if c.text.startswith("Счёт"))
+assert before.text == "Счёт: 1" and after.text == "Счёт: 2"
+assert (after.x, after.y, after.scale) == (before.x, before.y, before.scale)
+assert interpreter.globals["game"].fields["tap_age"] > 0.0
+
+# Text sizes follow the screen, so the same layout is readable on a phone and
+# on the 960x540 preview instead of a 16 px speck in a corner.
+interpreter.resized(2400.0, 1080.0)
+wide = next(c for c in interpreter.draw() if c.text.startswith("Счёт"))
+interpreter.resized(960.0, 540.0)
+small = next(c for c in interpreter.draw() if c.text.startswith("Счёт"))
+assert wide.scale > small.scale and wide.y > small.y
 print("PASS DimScript parser + interpreter + C compiler")

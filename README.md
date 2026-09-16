@@ -50,6 +50,14 @@ struct BrickGame {
 game = new BrickGame
 target_x = 0.0
 
+-- Every number in this game is a design unit of a 640x360 screen, times ui():
+-- a field 360 px tall is a strip across the middle of a phone unless it scales,
+-- and so is its text.
+ui(): float {
+    return math.max(0.6, math.min(4.0,
+        math.min(engine.width(), engine.height()) / 360.0))
+}
+
 require "blocks"
 require "hud"
 
@@ -89,7 +97,8 @@ draw() {
                 game.paddle.width, game.paddle.height)
     render.color(1.0, 0.78, 0.32)
     render.circle(game.ball.x, game.ball.y, game.ball.radius)
-    render.text("Счёт: " .. game.score, 20.0, 48.0, 1.0)
+    u = ui()
+    render.text("Счёт: " .. game.score, 20.0 * u, 48.0 * u, 1.0 * u)
     draw_hud()
 }
 
@@ -152,9 +161,17 @@ indices count from the end), and `x[i] = v`.
   (scanline fill, nonzero winding, 3x3 box antialiasing) into a per-font
   atlas, and the renderer draws them as tinted glyph quads — plain textured
   triangles, so Vulkan and the software fallback show the same pixels.
-  Scale contract: 1.0 is a 16 px em box, so body text on phones wants 2.0
-  and up. Texts with the default face (`-1`, or a broken face) stay recorded
-  but undrawn — a game that wants pixels must load a font first.
+  Scale contract: 1.0 is a 16 px em box, so body text on phones wants 2.0 and
+  up, and a game that scales its layout by the screen scales its text with it
+  (see "Screen, orientation and text size").  A glyph is baked at the em it is
+  drawn at, so a small label is its own crisp raster and never a shrunk copy of
+  a big one; its box is rounded to whole pixels and its uv inset by half a
+  texel, so a wall of text keeps a steady baseline and no glyph bleeds into its
+  neighbour.  Texts with the default face (`-1`, or a broken face) stay recorded
+  but undrawn — a game that wants pixels must load a font first.  Growing an
+  atlas is a pixel change to one layer of the texture array, not a new texture
+  set (see `src/ds_image.h`), so the tap that first writes a `9` into a score
+  costs one small upload instead of a rebuild.
 * `render.image(handle, x, y, w, h)`,
   `render.image_region(handle, x, y, w, h, u0, v0, u1, v1)` — sprites from
   `image.load`, tinted by the current `render.color`.
@@ -189,6 +206,33 @@ They run in order per frame: input callbacks first, then `update`, then `draw`.
 A script error reports the file, line and column, and aborts. There is no
 per-frame statement budget: a mistaken
 `while true do` in a game really hangs, so mind your loops.
+
+### Screen, orientation and text size
+
+A game draws in screen pixels and nothing else: `engine.width()` /
+`engine.height()` are the truth every frame, `resized(width, height)` says they
+changed, and touches arrive in the same units — so a layout written against them
+cannot disagree with the window.
+
+`orientation` in the manifest is what the *window* asks the OS for
+(`sensorLandscape`, …).  A phone held upside down keeps its window size while
+its panel wants the picture turned the other way, so the Vulkan renderer
+pre-rotates what the game draws and says so with `preTransform`: whichever hand
+the player holds a landscape phone in, the game lands upright instead of
+sideways, and a rotation is never mistaken for a resize.  The mapping is
+`src/surface_transform.h` — header-only, so a host test can check the matrix
+without Vulkan.  A driver that reports a rotation it will not take on a
+swapchain is answered with identity instead, letting the compositor turn the
+picture: that costs one blit a frame, where asking the driver for a transform it
+does not accept costs a swapchain that never builds.
+
+The rule for a game's own numbers follows from that: never hardcode a position
+for one window size.  Pick a design size (both bundled games use a 360 px short
+side), scale by `min(width, height)`, and use the same factor for `render.text`
+— a fixed `1.0` is a 16 px glyph, a fine size for a preview window and a blur on
+a phone.  And a text stays where it is: an animation that changes a text's scale
+or nudges its origin is what a player reads as a shaking screen, so the bundled
+games answer a tap with rings and borders instead.
 
 ## Game folder and manifest
 
@@ -382,7 +426,11 @@ sh tools/tests/run.sh
 5. `tools/tests/engine.c` — the engine boundary: manifest parsing (including
    the removed `cube` key failing loudly), the 2D batch → rasterizer,
    input reaching a script, resize, image/font registries, and the compiled
-   fallback.
+   fallback.  It also checks the screen rotation on its own — window size to
+   framebuffer extent and the projection matrix, for all four rotations — the
+   text pass (glyph quads on whole pixels, one atlas cell per size drawn) and
+   the two counters of the image registry (a layer whose pixels moved vs a new
+   set of images).
 
 `ASAN=1 sh tools/tests/run.sh` runs all five under
 `-fsanitize=address,undefined`. The object cache is mode-sensitive: switching
@@ -402,12 +450,15 @@ tools/apk/build.sh        fast no-Gradle APK build (gamepack + NDK + aapt2/d8/ap
 tools/toolchain.sh        clang -O3 selection, shared by every build script
 src/ds_manifest.*         game.manifest reader used at startup
 src/ds_files.*            game folder access: disk on host, assets on Android
-src/ds_image.*            PNG registry behind image.load
+src/ds_image.*            PNG registry behind image.load, its dirty layers and
+                          the generation a renderer rebuilds on
 src/ds_png.c              dependency-free PNG decoder
 src/ds_font.*             font registry behind font.load
 src/ds_ttf.*              TrueType text pass: glyph rasterizer + per-font atlas
 src/enjoer_draw.*         the triangle batch both renderers consume
 src/dimscript_runtime.*   native ABI the generated C links against
+src/surface_transform.h   screen rotation: framebuffer size and projection,
+                          header-only so host tests can reach it
 src/generated/            C + header generated from games/clicker
 src/engine.h              C game API and Buffer type
 src/game.c                lifecycle, input, manifest, asset folder
@@ -417,6 +468,7 @@ src/shaders/              GLSL sources and the generated SPIR-V header
 src/main.c                Android NativeActivity loop, asset manager wiring
 game/                     Android Activity and the fallback manifest
 tools/preview/            HTTP frame/input preview (glyphs in /frame.jpg, mirror in /info)
-tools/tests/              engine, AOT, gamepack, string-temps and frontend tests
+tools/tests/              engine (rotation, text pass, images), AOT, gamepack,
+                          string-temps and frontend tests
 tools/ci/annotate.py      turns a build log into check annotations (CI helper)
 ```

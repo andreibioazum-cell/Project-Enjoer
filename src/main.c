@@ -49,13 +49,16 @@ static void handle_command(struct android_app *app, int32_t command) {
         break;
     case APP_CMD_WINDOW_RESIZED:
     case APP_CMD_CONTENT_RECT_CHANGED:
-    case APP_CMD_CONFIG_CHANGED:
-        if (app->window) {
-            screen_w = ANativeWindow_getWidth(app->window);
-            screen_h = ANativeWindow_getHeight(app->window);
-            if (initialized) game_resize(screen_w, screen_h);
-        }
+    case APP_CMD_CONFIG_CHANGED: {
+        /* game_resize is the one that records the size and decides whether this
+         * is a relayout: all three commands also fire for changes that moved
+         * nothing, CONFIG_CHANGED in particular on a tap that lets the system
+         * bars peek.  Reading the window straight past it would hide that. */
+        const int width = app->window ? ANativeWindow_getWidth(app->window) : 0;
+        const int height = app->window ? ANativeWindow_getHeight(app->window) : 0;
+        if (width > 0 && height > 0 && initialized) game_resize(width, height);
         break;
+    }
     case APP_CMD_TERM_WINDOW:
         game_cancel_input();
         game_shutdown();

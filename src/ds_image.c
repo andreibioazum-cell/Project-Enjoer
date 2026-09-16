@@ -14,9 +14,21 @@
 
 /* --- images --------------------------------------------------------------- */
 
+/* Two signals, because the renderer has two different jobs to do:
+ *
+ *   generation — the *set* of images changed (an image was added or freed):
+ *                the texture array itself has to be recreated;
+ *   dirty mask — some pixels changed: the affected layers only have to be
+ *                copied into the array that already exists.
+ *
+ * A font atlas mutates while a game runs (a new glyph is baked on first use,
+ * which happens the moment a score gets a new digit), so a game that changes
+ * its text every tap must not pay for a texture teardown every tap.  A
+ * per-layer mask says which slice actually moved. */
 static DsImage images[DS_MAX_IMAGES];
 static int image_count;
-static uint64_t image_revision = 1;
+static uint32_t image_dirty; /* bit n: layer n needs re-uploading */
+static uint64_t image_generation = 1;
 
 int32_t ds_image_valid(int32_t handle) {
     return handle >= 0 && handle < image_count && images[handle].rgba ? 1 : 0;
@@ -24,13 +36,31 @@ int32_t ds_image_valid(int32_t handle) {
 
 int32_t ds_image_count(void) { return image_count; }
 
-int32_t ds_image_width(int32_t handle) { return ds_image_valid(handle) ? images[handle].width : 0; }
+int32_t ds_image_width(int32_t handle) {
+    return ds_image_valid(handle) ? images[handle].width : 0;
+}
 
-int32_t ds_image_height(int32_t handle) { return ds_image_valid(handle) ? images[handle].height : 0; }
+int32_t ds_image_height(int32_t handle) {
+    return ds_image_valid(handle) ? images[handle].height : 0;
+}
 
-uint64_t ds_image_revision(void) { return image_revision; }
+uint64_t ds_image_generation(void) { return image_generation; }
 
-void ds_image_touch(void) { ++image_revision; }
+uint32_t ds_image_dirty_mask(void) { return image_dirty; }
+
+void ds_image_clear_dirty(void) { image_dirty = 0; }
+
+void ds_image_touch(void) {
+    image_dirty = image_count >= 32 ? 0xFFFFFFFFu : ((1u << image_count) - 1u);
+}
+
+void ds_image_touch_layer(int32_t layer) {
+    if (layer < 0 || layer >= image_count) {
+        ds_image_touch(); /* nothing to name: everything might have moved */
+        return;
+    }
+    image_dirty |= 1u << (uint32_t)layer;
+}
 
 int32_t ds_image_find(const char *name) {
     if (!name) return -1;
@@ -39,15 +69,21 @@ int32_t ds_image_find(const char *name) {
     return -1;
 }
 
-int32_t ds_image_add(const char *name, uint8_t *rgba, int32_t width, int32_t height) {
+int32_t ds_image_add(const char *name, uint8_t *rgba, int32_t width,
+                      int32_t height) {
     if (!rgba || image_count >= DS_MAX_IMAGES) return -1;
     DsImage *image = &images[image_count];
     snprintf(image->name, sizeof(image->name), "%s", name ? name : "");
     image->width = width;
     image->height = height;
     image->rgba = rgba;
-    ++image_revision;
-    return image_count++;
+    const int32_t handle = image_count;
+    /* A new layer means a new texture array, and the fresh layer starts out
+     * dirty so the upload sees its pixels. */
+    ++image_generation;
+    image_dirty |= 1u << (uint32_t)handle;
+    ++image_count;
+    return handle;
 }
 
 int ds_png_magic_ok(const uint8_t *bytes, size_t size) {
@@ -73,7 +109,9 @@ const char *ds_image_format_name(const uint8_t *bytes, size_t size) {
     return "unknown";
 }
 
-const DsImage *ds_image_at(int32_t handle) { return ds_image_valid(handle) ? &images[handle] : NULL; }
+const DsImage *ds_image_at(int32_t handle) {
+    return ds_image_valid(handle) ? &images[handle] : NULL;
+}
 
 void ds_image_reset(void) {
     for (int index = 0; index < image_count; ++index) {
@@ -84,5 +122,6 @@ void ds_image_reset(void) {
         images[index].name[0] = '\0';
     }
     image_count = 0;
-    ++image_revision;
+    image_dirty = 0;
+    ++image_generation;
 }

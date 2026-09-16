@@ -14,11 +14,12 @@ struct Brick {
 }
 
 build_blocks(columns: int): list {
+    local u = ui()
     blocks = []
-    margin = 18.0
-    top = 86.0
-    row_height = 22.0
-    gap = 6.0
+    margin = 18.0 * u
+    top = 86.0 * u -- below the HUD band hud.ds lays out with the same u
+    row_height = 22.0 * u
+    gap = 6.0 * u
     rows = 5
     cell = (engine.width() - margin * 2.0) / columns
     for row = 0, rows do
@@ -37,8 +38,11 @@ build_blocks(columns: int): list {
 }
 
 launch_ball() {
-    game.ball.vx = 165.0
-    game.ball.vy = -330.0
+    -- Speeds scale with the field, or the same game is a slow-motion replay on
+    -- a phone and a blur on a small preview.
+    local u = ui()
+    game.ball.vx = 165.0 * u
+    game.ball.vy = -330.0 * u
     game.ball.stuck = true
 }
 
@@ -58,8 +62,8 @@ step_ball(g: BrickGame, dt: float) {
         g.ball.x = engine.width() - radius
         g.ball.vx = -g.ball.vx
     }
-    if g.ball.y < radius + 12.0 then {
-        g.ball.y = radius + 12.0
+    if g.ball.y < radius + 12.0 * ui() then {
+        g.ball.y = radius + 12.0 * ui()
         g.ball.vy = -g.ball.vy
     }
     bounce_off_paddle(g)
@@ -78,16 +82,16 @@ bounce_off_paddle(g: BrickGame) {
     if g.ball.vy > 0.0 and below and above and inside then {
         g.ball.y = top - radius
         offset = (g.ball.x - g.paddle.x) / half
+        local u = ui()
         speed = math.sqrt(g.ball.vx * g.ball.vx + g.ball.vy * g.ball.vy)
-        if speed < 240.0 then {
-            speed = 240.0
+        if speed < 240.0 * u then {
+            speed = 240.0 * u
         }
-        if speed > 520.0 then {
-            speed = 520.0
+        if speed > 520.0 * u then {
+            speed = 520.0 * u
         }
         g.ball.vx = speed * offset * 0.72
         g.ball.vy = -speed
-        g.text_scale = 1.18
     }
 }
 
@@ -98,7 +102,6 @@ hit_bricks(g: BrickGame) {
             if overlaps(g.ball, brick) then {
                 brick.alive = false
                 g.score = g.score + 1
-                g.text_scale = 1.6
                 from_top = g.ball.y + g.ball.radius - brick.y
                 from_bottom = brick.y + brick.height - (g.ball.y - g.ball.radius)
                 if from_top < from_bottom then {
