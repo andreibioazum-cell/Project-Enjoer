@@ -14,6 +14,7 @@
 #include "renderer.h"
 #include "ds_image.h"
 #include "ds_ttf.h"
+#include "surface_transform.h"
 
 #include <algorithm>
 #include <array>
@@ -185,6 +186,7 @@ public:
     bool init(void *native_window, int width, int height) {
         width_ = std::max(1, width);
         height_ = std::max(1, height);
+        rotation_ = ENJOER_SURFACE_ROTATE_0;
         if (!create_instance()) return false;
         if (!create_surface(native_window)) return false;
         if (!pick_device()) return false;
@@ -204,7 +206,13 @@ public:
     void resize(int width, int height) {
         width_ = std::max(1, width);
         height_ = std::max(1, height);
-        if (initialized_) recreate_swapchain();
+        /* The question is never "did the numbers change" but "did the
+         * framebuffer change": a phone turned upside down keeps its window
+         * size and still needs new images, while a tap that lets the system
+         * bars peek fires a resize of the size we already have — and
+         * recreating a swapchain for nothing is a hitch the player sees as the
+         * picture jumping under the finger. */
+        if (initialized_ && surface_changed()) recreate_swapchain();
     }
 
     void render(const EnjoerFrame *frame) {
@@ -216,6 +224,17 @@ public:
         VkResult acquired = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
                                                   image_available_, VK_NULL_HANDLE, &image);
         if (acquired == VK_ERROR_OUT_OF_DATE_KHR) { recreate_swapchain(); return; }
+        if (acquired == VK_SUBOPTIMAL_KHR && surface_changed()) {
+            /* SUBOPTIMAL is how a driver says "I would rather you asked
+             * differently".  Asking is only worth a frame of stutter when the
+             * surface really moved: otherwise the next present says it again
+             * and the swapchain is rebuilt every frame, which is what a game
+             * that jitters under the finger looks like.  Recreating does
+             * invalidate the image just acquired, so this frame is skipped —
+             * and when nothing changed, the frame is presented as it is. */
+            recreate_swapchain();
+            return;
+        }
         if (acquired != VK_SUCCESS && acquired != VK_SUBOPTIMAL_KHR) return;
         vkResetFences(device_, 1, &in_flight_);
 
@@ -241,8 +260,8 @@ public:
         present.pSwapchains = &swapchain_;
         present.pImageIndices = &image;
         const VkResult presented = vkQueuePresentKHR(queue_, &present);
-        if (presented == VK_ERROR_OUT_OF_DATE_KHR || presented == VK_SUBOPTIMAL_KHR)
-            recreate_swapchain();
+        if (presented == VK_ERROR_OUT_OF_DATE_KHR) recreate_swapchain();
+        else if (presented == VK_SUBOPTIMAL_KHR && surface_changed()) recreate_swapchain();
     }
 
     void shutdown() {
@@ -355,16 +374,10 @@ private:
         if (chosen.format == VK_FORMAT_UNDEFINED) chosen.format = VK_FORMAT_R8G8B8A8_UNORM;
         surface_format_ = chosen.format;
 
-        extent_ = caps.currentExtent;
-        if (extent_.width == 0xFFFFFFFFu) {
-            extent_.width = std::min(std::max(static_cast<uint32_t>(width_),
-                                              caps.minImageExtent.width),
-                                     caps.maxImageExtent.width);
-            extent_.height = std::min(std::max(static_cast<uint32_t>(height_),
-                                               caps.minImageExtent.height),
-                                      caps.maxImageExtent.height);
-        }
+        int rotation = ENJOER_SURFACE_ROTATE_0;
+        swapchain_size(caps, &extent_, &rotation);
         if (extent_.width == 0 || extent_.height == 0) return false;
+        rotation_ = rotation;
 
         uint32_t image_count = caps.minImageCount + 1;
         if (caps.maxImageCount && image_count > caps.maxImageCount)
@@ -383,7 +396,12 @@ private:
         info.imageArrayLayers = 1;
         info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        info.preTransform = caps.currentTransform;
+        /* Telling the compositor the images are already rotated is what makes it
+         * skip its own rotation — and it is a promise: the projection has to keep
+         * it.  `rotation` is in degrees here and Vulkan indexes its transforms, so
+         * the value goes through the translation, never through a cast. */
+        info.preTransform =
+            static_cast<VkSurfaceTransformFlagBitsKHR>(enjoer_surface_rotation_to_vk(rotation));
         info.compositeAlpha = alpha;
         info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
         info.clipped = VK_TRUE;
@@ -628,17 +646,50 @@ private:
         batch_vertices_ = count;
     }
 
-    /* Maps the pixel coordinates a script draws in onto Vulkan clip space. */
+    /* Maps the pixel coordinates a script draws in onto Vulkan clip space: the
+     * plain 2D ortho, with the surface rotation baked in so the panel gets the
+     * picture already turned the way its compositor would have.  Both halves are
+     * in src/surface_transform.h, where a host test can reach them. */
     Mat4 compute_ortho() const {
         Mat4 matrix{};
-        matrix.value[0] = 2.0f / static_cast<float>(extent_.width);
-        matrix.value[5] = -2.0f / static_cast<float>(extent_.height);
-        matrix.value[10] = 1.0f;
-        matrix.value[12] = -1.0f;
-        matrix.value[13] = 1.0f;
-        matrix.value[14] = 0.5f;
-        matrix.value[15] = 1.0f;
+        enjoer_surface_ortho(rotation_, static_cast<float>(extent_.width),
+                             static_cast<float>(extent_.height), matrix.value);
         return matrix;
+    }
+
+    /* The framebuffer this window needs, as the surface reports it: the
+     * rotation to honour and the size to create, clamped into what the driver
+     * accepts.  The window size (display orientation) is what the game and its
+     * touches are measured in, so it is what decides — currentExtent is
+     * deliberately not trusted for this, because drivers disagree about which
+     * of the two spaces it is stated in. */
+    void swapchain_size(const VkSurfaceCapabilitiesKHR &caps, VkExtent2D *out_extent,
+                        int *out_rotation) const {
+        const int rotation = enjoer_surface_rotation_for(static_cast<int>(caps.currentTransform),
+                                                          static_cast<int>(caps.supportedTransforms));
+        int width = 1, height = 1;
+        enjoer_surface_framebuffer(rotation, width_, height_,
+                                   static_cast<int>(caps.minImageExtent.width),
+                                   static_cast<int>(caps.minImageExtent.height),
+                                   static_cast<int>(caps.maxImageExtent.width),
+                                   static_cast<int>(caps.maxImageExtent.height), &width, &height);
+        out_extent->width = static_cast<uint32_t>(width);
+        out_extent->height = static_cast<uint32_t>(height);
+        *out_rotation = rotation;
+    }
+
+    /* True when the surface now wants a framebuffer other than the live one. */
+    bool surface_changed() const {
+        if (device_ == VK_NULL_HANDLE || physical_ == VK_NULL_HANDLE || surface_ == VK_NULL_HANDLE)
+            return false;
+        VkSurfaceCapabilitiesKHR caps{};
+        if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_, surface_, &caps) != VK_SUCCESS)
+            return false;
+        VkExtent2D want{};
+        int rotation = ENJOER_SURFACE_ROTATE_0;
+        swapchain_size(caps, &want, &rotation);
+        return want.width != extent_.width || want.height != extent_.height ||
+               rotation != rotation_;
     }
 
     /* --- images (sprite sheets) ------------------------------------------ */
@@ -657,12 +708,22 @@ private:
         return vkCreateSampler(device_, &info, nullptr, &sampler_) == VK_SUCCESS;
     }
 
-    /* Re-uploads only when a script called image.load since the last frame: the
-     * sprite sheet is decoded once at startup, and after that a frame does no
-     * texture work at all. */
+    /* Two very different jobs hide behind "the textures changed": a new image
+     * means the texture array itself has to be rebuilt, while a font that just
+     * baked one glyph means one layer of the array that already exists has to
+     * have its pixels copied in.  Treating the second like the first is what
+     * made a score that gains a digit tear down and re-create every texture and
+     * wait for the queue behind it — a frame of stutter on exactly the tap the
+     * player was aiming at. */
     void refresh_textures() {
-        if (ds_image_revision() == texture_revision_ && texture_view_ != VK_NULL_HANDLE) return;
-        create_textures();
+        const uint64_t generation = ds_image_generation();
+        if (texture_view_ == VK_NULL_HANDLE || generation != texture_generation_) {
+            create_textures();
+            return;
+        }
+        const uint32_t dirty = ds_image_dirty_mask();
+        if (!dirty) return;
+        if (upload_layers(layer_width_, layer_height_, dirty)) ds_image_clear_dirty();
     }
 
     void create_textures() {
@@ -734,14 +795,20 @@ private:
         write.pImageInfo = &descriptor_image;
         vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
 
-        upload_layers(layer_width, layer_height);
-        texture_revision_ = ds_image_revision();
+        layer_width_ = layer_width;
+        layer_height_ = layer_height;
+        upload_layers(layer_width, layer_height,
+                      count >= 32 ? 0xFFFFFFFFu : ((1u << count) - 1u));
+        ds_image_clear_dirty();
+        texture_generation_ = ds_image_generation();
         app_log("Enjoer: %d image(s) uploaded as a %dx%d texture array", count, layer_width,
                 layer_height);
     }
 
-    void upload_layers(int32_t layer_width, int32_t layer_height) {
-        if (!command_pool_ || texture_image_ == VK_NULL_HANDLE) return;
+    /* Copies every layer named in `mask` into the array: a glyph added to one
+     * atlas is one small upload, not a rebuild of the texture set. */
+    bool upload_layers(int32_t layer_width, int32_t layer_height, uint32_t mask) {
+        if (!command_pool_ || texture_image_ == VK_NULL_HANDLE) return false;
         const VkDeviceSize layer_bytes =
             static_cast<VkDeviceSize>(layer_width) * static_cast<VkDeviceSize>(layer_height) * 4u;
         VkBufferCreateInfo buffer_info = vk_struct<VkBufferCreateInfo>(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
@@ -751,7 +818,7 @@ private:
         VkBuffer staging = VK_NULL_HANDLE;
         VkDeviceMemory staging_memory = VK_NULL_HANDLE;
         void *mapped = nullptr;
-        if (vkCreateBuffer(device_, &buffer_info, nullptr, &staging) != VK_SUCCESS) return;
+        if (vkCreateBuffer(device_, &buffer_info, nullptr, &staging) != VK_SUCCESS) return false;
         VkMemoryRequirements requirements{};
         vkGetBufferMemoryRequirements(device_, staging, &requirements);
         VkMemoryAllocateInfo allocation = vk_struct<VkMemoryAllocateInfo>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
@@ -765,7 +832,7 @@ private:
             vkMapMemory(device_, staging_memory, 0, layer_bytes, 0, &mapped) != VK_SUCCESS) {
             if (staging) vkDestroyBuffer(device_, staging, nullptr);
             if (staging_memory) vkFreeMemory(device_, staging_memory, nullptr);
-            return;
+            return false;
         }
 
         VkCommandBufferAllocateInfo command_allocation = vk_struct<VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
@@ -794,6 +861,7 @@ private:
         for (int32_t index = 0; index < ds_image_count(); ++index) {
             const DsImage *image = ds_image_at(index);
             if (!image || !image->rgba) continue;
+            if (!(mask & (1u << static_cast<uint32_t>(index)))) continue;
             /* Zero the padding, then copy row by row: a smaller image keeps its
              * transparent border instead of repeating the last row. */
             std::memset(mapped, 0, static_cast<size_t>(layer_bytes));
@@ -837,6 +905,7 @@ private:
         vkUnmapMemory(device_, staging_memory);
         vkDestroyBuffer(device_, staging, nullptr);
         vkFreeMemory(device_, staging_memory, nullptr);
+        return true;
     }
 
     void destroy_textures() {
@@ -850,7 +919,7 @@ private:
         texture_view_ = VK_NULL_HANDLE;
         texture_image_ = VK_NULL_HANDLE;
         texture_memory_ = VK_NULL_HANDLE;
-        texture_revision_ = 0;
+        texture_generation_ = 0;
         texture_layers_ = 0;
     }
 
@@ -958,6 +1027,9 @@ private:
 
     bool initialized_ = false;
     int width_ = 1, height_ = 1;
+    /* Rotation of the panel relative to the window, baked into the projection
+     * (EnjoerSurfaceRotation). */
+    int rotation_ = ENJOER_SURFACE_ROTATE_0;
     const EnjoerFrame *frame_ = nullptr;
     int batch_vertices_ = 0;
     VkDescriptorSetLayout descriptor_layout_ = VK_NULL_HANDLE;
@@ -967,8 +1039,12 @@ private:
     VkImage texture_image_ = VK_NULL_HANDLE;
     VkDeviceMemory texture_memory_ = VK_NULL_HANDLE;
     VkImageView texture_view_ = VK_NULL_HANDLE;
-    uint64_t texture_revision_ = 0;
+    /* The image set the array was built for; a layer whose pixels moved is not a
+     * new set, so the two must not be conflated (see refresh_textures). */
+    uint64_t texture_generation_ = 0;
     int32_t texture_layers_ = 0;
+    /* Layer size the array was created with: a partial re-upload needs it. */
+    int32_t layer_width_ = 1, layer_height_ = 1;
     VkBuffer batch_buffer_ = VK_NULL_HANDLE;
     VkDeviceMemory batch_memory_ = VK_NULL_HANDLE;
     void *batch_mapped_ = nullptr;

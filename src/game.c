@@ -11,6 +11,7 @@
 #include "renderer.h"
 #include "dimscript_runtime.h"
 #include "ds_files.h"
+#include "ds_font.h"
 #include "generated/clicker.h" /* fallback AOT game */
 
 #include <math.h>
@@ -22,6 +23,10 @@
 static int ready;
 static int script_ready;
 static DsGameManifest manifest;
+/* The size the game was laid out for.  screen_w/screen_h are the platform's own
+ * record — the window code writes them the moment it learns something changed —
+ * so "is this a relayout" cannot be asked of them; this can only move here. */
+static int laid_out_w, laid_out_h;
 
 static double elapsed;
 static double fps;
@@ -71,6 +76,8 @@ void game_init(void *native_window) {
     }
     ds_runtime_init();
     ds_engine_reset(screen_w, screen_h);
+    laid_out_w = screen_w;
+    laid_out_h = screen_h;
 
     /* STRICT COMPILER: the game logic is AOT compiled; the manifest only
      * carries the title, the clear colour and the knobs both sides share. */
@@ -91,9 +98,20 @@ void game_init(void *native_window) {
 }
 
 void game_resize(int width, int height) {
+    /* The Android commands that mean "something about the window changed" fire
+     * for things that changed nothing: a tap that lets the system bars peek in
+     * immersive mode, a locale or a dark-mode toggle.  Only a size the game was
+     * not laid out for is a relayout, and only a relayout may call back into the
+     * script — otherwise a HUD is rebuilt under the player's finger.  The
+     * renderer still hears about every call: it compares the surface itself and
+     * knows that a phone turned upside down changes the framebuffer while the
+     * window size stays put. */
     screen_w = width;
     screen_h = height;
     if (ready) renderer_resize(width, height);
+    if (width == laid_out_w && height == laid_out_h) return;
+    laid_out_w = width;
+    laid_out_h = height;
     ds_engine_reset(screen_w, screen_h);
     if (script_ready) dimscript_resized((float)width, (float)height);
 }
@@ -125,13 +143,22 @@ void game_draw(Buffer *preview_target) {
     if (manifest.show_fps) {
         char label[32];
         DsString *text = NULL;
+        /* The same rule a game follows: a text without a font is recorded and
+         * never drawn, so the overlay borrows the game's own face — and it is
+         * sized by the screen, or a label that reads fine on a laptop is a
+         * smudge on a phone. */
+        float scale = 0.8f * (float)screen_h / 360.0f;
+        if (scale < 0.8f) scale = 0.8f;
+        if (scale > 2.4f) scale = 2.4f;
         snprintf(label, sizeof(label), "%d fps", (int)(fps + 0.5f));
         ds_render_color(1.0f, 1.0f, 1.0f);
+        ds_render_font(ds_font_count() > 0 ? 0 : -1);
         /* ds_render_text copies the bytes into the frame: the string itself
          * is a per-frame temp and must go right back. */
         text = ds_string_new(label, strlen(label));
-        ds_render_text(text, (float)(screen_w - 64), 8.0f, 0.8f);
+        ds_render_text(text, (float)screen_w - 64.0f * scale, 8.0f * scale, scale);
         ds_release(text);
+        ds_render_font(-1);
     }
     enjoer_frame_end();
     renderer_render(preview_target, frame);

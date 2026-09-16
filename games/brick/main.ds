@@ -3,6 +3,10 @@
 -- main.ds owns the state and the lifecycle callbacks, blocks.ds the layout and
 -- the ball physics, hud.ds the HUD.  Compile with dimscriptc (or run it with
 -- --run) after changing a number here; the device executes the AOT build.
+--
+-- Every number below is in design units for a 640x360 screen, multiplied by
+-- ui().  A field that is 360 px tall on a preview is a strip across the middle
+-- of a phone unless it scales, and so is its text.
 require "blocks"
 require "hud"
 
@@ -28,7 +32,7 @@ struct BrickGame {
     lives: int
     state: int -- 0 ready, 1 playing, 2 lost, 3 won
     time: float
-    text_scale: float -- scale for the score animation
+    flash: float -- seconds left of the "you lost a life" border
     paddle: Paddle
     ball: Ball
     blocks: list
@@ -38,18 +42,27 @@ game = new BrickGame
 target_x = 0.0
 game_font = -1 -- handle from font.load, refreshed by load()
 
+-- Pixels per design unit: the short side of the screen over the 360 px this
+-- field is laid out for, clamped so a phone neither dwarfs the ball nor a
+-- preview window swallows the HUD.  blocks.ds and hud.ds multiply their own
+-- layout constants by the same number, so the field, the paddle and the text
+-- stay one composition at any size.
+ui(): float {
+    return math.max(0.6, math.min(4.0, math.min(engine.width(), engine.height()) / 360.0))
+}
+
 load() {
     game.score = 0
     game.lives = 3
     game.state = 0
     game.time = 0.0
-    game.text_scale = 1.0 -- base scale
+    game.flash = 0.0
     game.paddle = new Paddle
     game.ball = new Ball
-    game.paddle.width = 150.0
-    game.paddle.height = 18.0
-    game.paddle.speed = 700.0
-    game.ball.radius = 9.0
+    game.paddle.width = 150.0 * ui()
+    game.paddle.height = 18.0 * ui()
+    game.paddle.speed = 700.0 * ui()
+    game.ball.radius = 9.0 * ui()
     game.blocks = build_blocks(11)
     game_font = font.load("font.ttf")
     center_paddle()
@@ -58,14 +71,14 @@ load() {
 
 center_paddle() {
     game.paddle.x = engine.width() / 2.0
-    game.paddle.y = engine.height() - 70.0
+    game.paddle.y = engine.height() - 70.0 * ui()
     target_x = game.paddle.x
     game.ball.x = game.paddle.x
     game.ball.y = game.paddle.y - 26.0
 }
 
 resized(width: float, height: float) {
-    game.paddle.y = height - 70.0
+    game.paddle.y = height - 70.0 * ui()
     if game.paddle.x > width - game.paddle.width / 2.0 then {
         game.paddle.x = width - game.paddle.width / 2.0
     }
@@ -74,6 +87,12 @@ resized(width: float, height: float) {
 
 update(dt: float) {
     game.time = game.time + dt
+    if game.flash > 0.0 then {
+        game.flash = game.flash - dt
+        if game.flash < 0.0 then {
+            game.flash = 0.0
+        }
+    }
     follow_pointer(dt)
     if game.state == 1 then {
         step_ball(game, dt)
@@ -85,14 +104,7 @@ update(dt: float) {
     } else {
         if game.ball.stuck then {
             game.ball.x = game.paddle.x
-            game.ball.y = game.paddle.y - 26.0
-        }
-    }
-    -- Smoothly return the scale to 1.0 every second
-    if game.text_scale > 1.0 then {
-        game.text_scale = game.text_scale - (1.6 * dt)
-        if game.text_scale < 1.0 then {
-            game.text_scale = 1.0
+            game.ball.y = game.paddle.y - 26.0 * ui()
         }
     }
 }
@@ -126,7 +138,10 @@ follow_pointer(dt: float) {
 
 lose_life() {
     game.lives = game.lives - 1
-    game.text_scale = 1.6
+    -- The border is the feedback.  Nothing that is written on the screen moves,
+    -- shrinks or slides: a HUD whose text rescales on every event is what a
+    -- player reads as a shaking screen.
+    game.flash = 0.45
     if game.lives <= 0 then {
         game.state = 2
         return

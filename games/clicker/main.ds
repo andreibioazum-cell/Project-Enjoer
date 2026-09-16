@@ -2,8 +2,17 @@
 --
 -- load() reads font.ttf (DejaVu Sans Bold) through font.load and draw()
 -- selects it with render.font, so every render.text becomes tinted glyph
--- quads on the device — the same pixels the preview shows.  Scale 1.0 is a
--- 16 px em, so body text sits at 2.0 and up.
+-- quads on the device — the same pixels the preview shows.
+--
+-- Two rules this file exists to demonstrate:
+--
+--   * Everything is measured in design units scaled by `ui()`, the short side
+--     of the screen over the 540 px this layout was drawn for.  A game that
+--     hard-codes 16 px text looks fine in the 960x540 preview and unreadable
+--     on a 2400x1080 phone, where it is a speck in a corner of a screen.
+--   * A tap never moves a text.  The score keeps one size and one baseline and
+--     the feedback is a ring — text that grows, shrinks or slides on every
+--     touch is what a shaky HUD looks like to a player.
 --
 -- This file is the single source of the game: src/generated/clicker.c is
 -- regenerated from this folder, and the APK, the preview and
@@ -12,8 +21,10 @@
 struct ClickerGame {
     score: int
     best: int
-    text_scale: float -- scale used for the click animation
     font: int -- handle from font.load, -1 when the font is missing
+    tap_x: float -- where the last tap landed
+    tap_y: float
+    tap_age: float -- seconds since that tap; the pulse is over at 0.34
 }
 
 game = new ClickerGame
@@ -21,52 +32,91 @@ game = new ClickerGame
 load() {
     game.score = 0
     game.best = 0
-    game.text_scale = 1.0 -- base scale
+    game.tap_x = 0.0
+    game.tap_y = 0.0
+    game.tap_age = 1.0 -- no pulse before the first tap
     game.font = font.load("font.ttf")
+    render.clear(0.05, 0.08, 0.15)
 }
 
-tap() {
+-- Pixels per design unit.  Half a point of clamping on either side keeps a
+-- tiny preview window and a 4K panel both usable instead of collapsing or
+-- overflowing.
+ui(): float {
+    return math.max(0.55, math.min(2.6, math.min(engine.width(), engine.height()) / 540.0))
+}
+
+tap(x: float, y: float) {
     game.score = game.score + 1
     if game.score > game.best then {
         game.best = game.score
     }
-    game.text_scale = 1.6
+    game.tap_x = x
+    game.tap_y = y
+    game.tap_age = 0.0
 }
 
 touchpressed(id, touch_x, touch_y) {
-    tap()
+    tap(touch_x, touch_y)
 }
 
 keypressed(name: string) {
     if name == "space" then {
-        tap()
+        tap(engine.width() / 2.0, engine.height() / 2.0)
     }
 }
 
 update(dt: float) {
-    -- Smoothly return the scale to 1.0 every second.
-    if game.text_scale > 1.0 then {
-        game.text_scale = game.text_scale - (4.0 * dt)
-        if game.text_scale < 1.0 then {
-            game.text_scale = 1.0
-        }
+    -- The pulse is a timer, not a value the HUD is laid out from: when it runs
+    -- out the screen stops changing, and it never touches a text position.
+    if game.tap_age < 1.0 then {
+        game.tap_age = game.tap_age + dt
     }
 }
 
 draw() {
     render.clear(0.05, 0.08, 0.15)
+    local u = ui()
+    local margin = 28.0 * u
+    local card_top = engine.height() / 2.0 - 104.0 * u
+    local card_width = engine.width() - margin * 2.0
+    local card_height = 208.0 * u
+    local text_left = margin + 22.0 * u
+
     render.font(game.font)
+
+    -- Tap feedback: one ring, widening out of the finger and dimming towards
+    -- the background.  Shapes only, so the touch moves nothing the player is
+    -- trying to read.
+    if game.tap_age < 0.34 then {
+        local step = game.tap_age / 0.34
+        local fade = 1.0 - step
+        render.color(0.22 + 0.20 * fade, 0.38 + 0.24 * fade, 0.62 + 0.20 * fade)
+        render.ring(game.tap_x, game.tap_y, (30.0 + 84.0 * step) * u, 6.0 * u * fade + 1.0)
+    }
+
+    -- The card spans the screen between the margins, so the layout is the same
+    -- composition in the preview and on a wide phone instead of a strip of
+    -- pixels in the top left corner.
+    render.color(0.10, 0.14, 0.26)
+    render.rect(margin, card_top, card_width, card_height)
+    render.color(0.30, 0.55, 0.90)
+    render.frame(margin, card_top, card_width, card_height, 3.0 * u)
+
     render.color(1.0, 1.0, 1.0)
+    render.text("Кликер", text_left, card_top - 58.0 * u, 2.0 * u)
 
-    -- The marquee is big on purpose: phones want 2.0 and up.
-    render.text("Главное меню", 20.0, 20.0, 2.0)
-
-    -- The score uses the animated scale.
-    render.text("Счет: " .. game.score, 50.0, 150.0, game.text_scale * 2.0)
+    -- The score: one size, one baseline, forever.  Only the number changes.
+    render.text("Счёт: " .. game.score, text_left, card_top + 34.0 * u, 4.5 * u)
 
     render.color(0.75, 0.85, 1.0)
-    render.text("Тапни по экрану, чтобы заработать", 50.0, 300.0, 1.5)
-    render.text("Рекорд: " .. game.best, 50.0, 340.0, 1.5)
+    render.text("Рекорд: " .. game.best, text_left,
+                card_top + card_height - 62.0 * u, 2.2 * u)
+
+    if game.score == 0 then {
+        render.text("Тапни по экрану, чтобы заработать", text_left,
+                    card_top + card_height + 26.0 * u, 1.8 * u)
+    }
 }
 
 quit() {

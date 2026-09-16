@@ -3,12 +3,13 @@
  *
  * The registry is deliberately tiny and static (DS_MAX_IMAGES slots, no
  * unloading besides ds_image_reset) because a game's sprites are known at
- * startup.  ds_image_revision() changes whenever the set of images changes, and
- * that is the only thing the Vulkan side polls: it re-uploads the texture array
- * exactly when a new image appears, never per frame.  The font atlases live in
- * the same registry and mutate in place (new glyphs rasterize on demand), so
- * the text pass calls ds_image_touch() after adding glyphs to trigger the
- * same re-upload. */
+ * startup.  The Vulkan side polls two counters instead of one:
+ * ds_image_generation() moves when the *set* of images changes and the texture
+ * array has to be rebuilt, while the dirty mask names the layers whose pixels
+ * moved, so the common case is a plain copy into the array that already exists.
+ * The font atlases live in the same registry and mutate in place (a glyph bakes
+ * on first use — which is exactly when a score gains a new digit), so the text
+ * pass marks its own atlas layer dirty rather than asking for a full reload. */
 #ifndef DS_IMAGE_H
 #define DS_IMAGE_H
 
@@ -36,9 +37,19 @@ int32_t ds_image_valid(int32_t handle);
 int32_t ds_image_width(int32_t handle);
 int32_t ds_image_height(int32_t handle);
 const DsImage *ds_image_at(int32_t handle);
-uint64_t ds_image_revision(void);
-/* Bumps the revision without adding an image: for in-place atlas updates. */
+/* The set of images (count, names, sizes) changed: a renderer that owns a
+ * texture array must rebuild it, not just copy pixels into it. */
+uint64_t ds_image_generation(void);
+/* Bit n set: layer n's pixels changed since the last ds_image_clear_dirty().
+ * DS_MAX_IMAGES is 32, so one uint32_t holds every layer. */
+uint32_t ds_image_dirty_mask(void);
+void ds_image_clear_dirty(void);
+/* Marks every layer dirty: for an in-place atlas update that cannot say which
+ * layer it touched. */
 void ds_image_touch(void);
+/* Same, for the one layer that did change — this is what keeps a font atlas
+ * that gains a glyph per tap from re-uploading the whole array. */
+void ds_image_touch_layer(int32_t layer);
 
 /* Handle of an already loaded file, or -1.  Lets `image.load` return the same
  * handle when a script asks for the same sprite sheet twice. */

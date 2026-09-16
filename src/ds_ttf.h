@@ -7,10 +7,12 @@
  * exactly the same pixels with zero shader changes.
  *
  * Glyphs rasterize on demand (CPU scanline fill, nonzero winding, 3x3 box
- * antialiasing) and stay cached in the atlas; the image revision is bumped
- * when new glyphs land, which the renderer already watches to re-upload
- * textures.  Texts with the default face (-1) stay recorded but undrawn, same
- * as before: a game that wants pixels must load a font first.
+ * antialiasing) at the size the text asks for — a 16 px label is a 16 px
+ * bitmap, not a shrunk 48 px one — and stay cached in the atlas.  Each bake
+ * marks its own atlas layer dirty, which is the only texture work a growing
+ * score costs.  Glyphs that no longer fit the atlas retry at the base size
+ * before they degrade.  Texts with the default face (-1) stay recorded but
+ * undrawn, same as before: a game that wants pixels must load a font first.
  *
  * Scale contract (matches what the old browser overlay did): scale 1.0 is a
  * 16 px em box, so `render.text("hi", x, y, 2.0)` is 32 px tall.  Phones want
@@ -38,6 +40,11 @@ int32_t ds_ttf_load_face(int32_t font);
 
 /* Image layer of a font's atlas, or -1 when the face is not ready. */
 int32_t ds_ttf_layer(int32_t font);
+
+/* Edge of the square atlas, in texels.  A tool or a test needs it to turn a
+ * glyph quad's uv span back into the cell size it was rasterized at, which is
+ * how one checks that text is sampled 1:1 instead of shrunk. */
+int32_t ds_ttf_atlas_size(void);
 
 /* Turn this frame's recorded texts with valid fonts into tinted glyph quads.
  * Called once per frame by renderer_render, before the batch is uploaded. */

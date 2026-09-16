@@ -6,8 +6,10 @@
 typedef struct ClickerGame {
     int32_t score;
     int32_t best;
-    float text_scale;
     int32_t font;
+    float tap_x;
+    float tap_y;
+    float tap_age;
 } ClickerGame;
 
 /* ClickerGame: only plain values, no dtor. */
@@ -20,14 +22,15 @@ static int ds_program_initialized;
 static const DsLiteralSource ds_literal_sources[] = {
     {"font.ttf", 8},
     {"space", 5},
-    {"Главное меню", 23},
-    {"Счет: ", 10},
-    {"Тапни по экрану, чтобы заработать", 61},
+    {"Кликер", 12},
+    {"Счёт: ", 10},
     {"Рекорд: ", 14},
+    {"Тапни по экрану, чтобы заработать", 61},
 };
 static DsString **ds_literals;
 static void ds_fn_load(void);
-static void ds_fn_tap(void);
+static float ds_fn_ui(void);
+static void ds_fn_tap(float x, float y);
 static void ds_fn_touchpressed(int32_t id, float touch_x, float touch_y);
 static void ds_fn_keypressed(DsString * name);
 static void ds_fn_update(float dt);
@@ -35,19 +38,31 @@ static void ds_fn_draw(void);
 static void ds_fn_quit(void);
 
 static void ds_fn_load(void) {
-    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:22"))->score = 0;
-    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:23"))->best = 0;
-    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:24"))->text_scale = 1.0f;
-    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:25"))->font = ds_font_load(ds_literals[0]);
+    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:33"))->score = 0;
+    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:34"))->best = 0;
+    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:35"))->tap_x = 0.0f;
+    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:36"))->tap_y = 0.0f;
+    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:37"))->tap_age = 1.0f;
+    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:38"))->font = ds_font_load(ds_literals[0]);
+    ds_render_clear((float)((float)(0.05f)), (float)((float)(0.08f)), (float)((float)(0.15f)));
     return;
 }
 
-static void ds_fn_tap(void) {
-    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:29"))->score = (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:29"))->score + 1);
-    if (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:30"))->score > ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:30"))->best) {
-        ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:31"))->best = ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:31"))->score;
+static float ds_fn_ui(void) {
+    return ds_math_max((double)(0.55f), (double)(ds_math_min((double)(2.6f), (double)(ds_div((double)(ds_math_min((double)(ds_engine_width()), (double)(ds_engine_height()))), (double)(540.0f), "games/clicker/main.ds:46")))));
+    return 0.0f;
+}
+
+static void ds_fn_tap(float x, float y) {
+    (void)x;
+    (void)y;
+    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:50"))->score = (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:50"))->score + 1);
+    if (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:51"))->score > ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:51"))->best) {
+        ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:52"))->best = ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:52"))->score;
     }
-    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:33"))->text_scale = 1.6f;
+    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:54"))->tap_x = x;
+    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:55"))->tap_y = y;
+    ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:56"))->tap_age = 0.0f;
     return;
 }
 
@@ -55,46 +70,69 @@ static void ds_fn_touchpressed(int32_t id, float touch_x, float touch_y) {
     (void)id;
     (void)touch_x;
     (void)touch_y;
-    ds_fn_tap();
+    ds_fn_tap(touch_x, touch_y);
     return;
 }
 
 static void ds_fn_keypressed(DsString * name) {
     (void)name;
     if (ds_string_compare(name, ds_literals[1]) == 0) {
-        ds_fn_tap();
+        ds_fn_tap(ds_div((double)(ds_engine_width()), (double)(2.0f), "games/clicker/main.ds:65"), ds_div((double)(ds_engine_height()), (double)(2.0f), "games/clicker/main.ds:65"));
     }
     return;
 }
 
 static void ds_fn_update(float dt) {
     (void)dt;
-    if (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:48"))->text_scale > 1.0f) {
-        ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:49"))->text_scale = (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:49"))->text_scale - (4.0f * dt));
-        if (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:50"))->text_scale < 1.0f) {
-            ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:51"))->text_scale = 1.0f;
-        }
+    if (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:72"))->tap_age < 1.0f) {
+        ((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:73"))->tap_age = (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:73"))->tap_age + dt);
     }
     return;
 }
 
 static void ds_fn_draw(void) {
+    float u = 0.0f;
+    float margin = 0.0f;
+    float card_top = 0.0f;
+    float card_width = 0.0f;
+    float card_height = 0.0f;
+    float text_left = 0.0f;
+    float step = 0.0f;
+    float fade = 0.0f;
     ds_render_clear((float)((float)(0.05f)), (float)((float)(0.08f)), (float)((float)(0.15f)));
-    ds_render_font((int32_t)((double)(((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:58"))->font)));
+    u = ds_fn_ui();
+    margin = (28.0f * u);
+    card_top = (ds_div((double)(ds_engine_height()), (double)(2.0f), "games/clicker/main.ds:81") - (104.0f * u));
+    card_width = (ds_engine_width() - (margin * 2.0f));
+    card_height = (208.0f * u);
+    text_left = (margin + (22.0f * u));
+    ds_render_font((int32_t)((double)(((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:86"))->font)));
+    if (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:91"))->tap_age < 0.34f) {
+        step = ds_div((double)(((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:92"))->tap_age), (double)(0.34f), "games/clicker/main.ds:92");
+        fade = (1.0f - step);
+        ds_render_color((float)((float)((0.22f + (0.2f * fade)))), (float)((float)((0.38f + (0.24f * fade)))), (float)((float)((0.62f + (0.2f * fade)))));
+        ds_render_ring((float)(((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:95"))->tap_x), (float)(((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:95"))->tap_y), (float)(((30.0f + (84.0f * step)) * u)), (float)((((6.0f * u) * fade) + 1.0f)));
+    }
+    ds_render_color((float)((float)(0.1f)), (float)((float)(0.14f)), (float)((float)(0.26f)));
+    ds_render_rect((float)(margin), (float)(card_top), (float)(card_width), (float)(card_height));
+    ds_render_color((float)((float)(0.3f)), (float)((float)(0.55f)), (float)((float)(0.9f)));
+    ds_render_frame((float)(margin), (float)(card_top), (float)(card_width), (float)(card_height), (float)((3.0f * u)));
     ds_render_color((float)((float)(1.0f)), (float)((float)(1.0f)), (float)((float)(1.0f)));
-    ds_render_text(ds_literals[2], (float)(20.0f), (float)(20.0f), (float)(2.0f));
-    DsString *__ds_t0 = ds_int_to_string((int64_t)(((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:65"))->score));
+    ds_render_text(ds_literals[2], (float)(text_left), (float)((card_top - (58.0f * u))), (float)((2.0f * u)));
+    DsString *__ds_t0 = ds_int_to_string((int64_t)(((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:110"))->score));
     DsString *__ds_t1 = ds_concat(ds_literals[3], __ds_t0);
-    ds_render_text(__ds_t1, (float)(50.0f), (float)(150.0f), (float)((((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:65"))->text_scale * 2.0f)));
+    ds_render_text(__ds_t1, (float)(text_left), (float)((card_top + (34.0f * u))), (float)((4.5f * u)));
     ds_release((void*)__ds_t1);
     ds_release((void*)__ds_t0);
     ds_render_color((float)((float)(0.75f)), (float)((float)(0.85f)), (float)((float)(1.0f)));
-    ds_render_text(ds_literals[4], (float)(50.0f), (float)(300.0f), (float)(1.5f));
-    DsString *__ds_t2 = ds_int_to_string((int64_t)(((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:69"))->best));
-    DsString *__ds_t3 = ds_concat(ds_literals[5], __ds_t2);
-    ds_render_text(__ds_t3, (float)(50.0f), (float)(340.0f), (float)(1.5f));
+    DsString *__ds_t2 = ds_int_to_string((int64_t)(((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:113"))->best));
+    DsString *__ds_t3 = ds_concat(ds_literals[4], __ds_t2);
+    ds_render_text(__ds_t3, (float)(text_left), (float)(((card_top + card_height) - (62.0f * u))), (float)((2.2f * u)));
     ds_release((void*)__ds_t3);
     ds_release((void*)__ds_t2);
+    if (((ClickerGame *)ds_require((void *)(g_game), "games/clicker/main.ds:116"))->score == 0) {
+        ds_render_text(ds_literals[5], (float)(text_left), (float)(((card_top + card_height) + (26.0f * u))), (float)((1.8f * u)));
+    }
     return;
 }
 
