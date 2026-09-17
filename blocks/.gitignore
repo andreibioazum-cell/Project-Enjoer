@@ -1,0 +1,8 @@
+# local preview and build data — not in git
+/data/
+*.dat
+/build*/
+/preview
+/preview-sw
+/staging/
+/third_party/vulkan-headers/

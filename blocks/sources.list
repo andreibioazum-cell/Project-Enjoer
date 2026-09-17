@@ -1,0 +1,51 @@
+# Enjoer source lists, shared by tools/preview/build.sh and CMakeLists.txt.
+# Sections are picked by name; every .c file is its own translation unit.
+[common]
+src/core/log.c
+src/core/state.c
+src/core/assets.c
+src/graphics/image.c
+src/graphics/gfx_font.c
+src/graphics/ttf/ttf_outline.c
+src/graphics/ttf/ttf_font.c
+src/render.c
+src/render_state.c
+src/geometrium/geometrium_game.c
+src/geometrium/geometrium_hand.c
+src/geometrium/geometrium_hud.c
+src/geometrium/geometrium_input.c
+src/geometrium/geometrium_interact.c
+src/geometrium/geometrium_light.c
+src/geometrium/geometrium_material.c
+src/geometrium/geometrium_mesh.c
+src/geometrium/geometrium_perf.c
+src/geometrium/geometrium_player.c
+src/geometrium/geometrium_scene.c
+src/geometrium/geometrium_shapes.c
+src/geometrium/geometrium_terrain.c
+src/geometrium/geometrium_water.c
+src/geometrium/geometrium_world.c
+src/geometrium/geometrium_edits.c
+
+[software]
+src/graphics/gfx_draw.c
+src/graphics/gfx_frame.c
+src/graphics/gfx_text.c
+src/geometrium/geometrium_render.c
+src/render_sw.c
+
+[vulkan]
+# render_vk.c is gone: the RenderBackend table for Vulkan is the tail of
+# src/vk/vk_backend.c, next to the code it exposes.
+src/vk/vk_entry.c
+src/vk/vk_device.c
+src/vk/vk_pipelines.c
+src/vk/vk_world.c
+src/vk/vk_hud.c
+src/vk/vk_text.c
+src/vk/vk_backend.c
+
+[android]
+src/main.c
+src/sound/sound.c
+src/sound/sound_android.c
