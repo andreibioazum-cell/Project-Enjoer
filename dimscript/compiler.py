@@ -173,6 +173,11 @@ BUILTINS: Dict[str, Dict[str, Builtin]] = {
         "image_region": Builtin(
             9, VOID, "ds_render_image_region((int32_t)({0}), {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8})",
             numbers="float"),
+        "image_rot": Builtin(6, VOID,
+                             "ds_render_image_rot((int32_t)({0}), {1}, {2}, {3}, {4}, {5})",
+                             numbers="float"),
+        "text_width": Builtin(2, FLOAT, "ds_render_text_width({0}, {1})",
+                              strings=(0,), numbers="float"),
         "font": Builtin(1, VOID, "ds_render_font((int32_t)({0}))"),
     },
     "image": {

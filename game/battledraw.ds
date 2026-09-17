@@ -1,7 +1,8 @@
 -- battledraw.ds — вся отрисовка боя (порт draw_* из старого battle.ds).
--- Спрайты в новом языке не вращаются (render.image без поворота), поэтому
--- направление взгляда показывает точка-нос на краю куба, а удар виден по
--- смене текстуры и полупрозрачному сектору прицела.
+-- render.image_rot крутит спрайты по-настоящему: кубы поворачиваются корпусом
+-- вслед за углом взгляда, удар виден по смене текстуры и полупрозрачному
+-- сектору прицела. Прозрачность настоящая (альфа-канал в пайплайне), поэтому
+-- тень под кубом и затемнение поля — полупрозрачные, как в старой игре.
 
 draw_grass() {
     local tile = 256.0 * U
@@ -22,46 +23,36 @@ draw_grass() {
 }
 
 draw_field() {
-    -- В старой игре поле затемнялось полупрозрачной чёрной плёнкой, но у
-    -- фигур нового движка прозрачности нет: чёрный квадрат был бы сплошным
-    -- и полностью скрыл бы траву. Затемнение поля не переносим.
+    -- Полупрозрачная чёрная плёнка над травой, как в старой игре — теперь,
+    -- когда у фигур есть альфа-канал, она действительно просвечивает.
+    paint_a(BLACK, 0.18)
+    render.rect(0.0, 0.0, engine.width(), engine.height())
 }
 
--- Точка-нос на краю куба: замена вращению спрайта.
-draw_facing_dot(x: float, y: float, angle: float, half: float, c: Palette) {
-    local fx = x + math.cos(angle) * half * 0.9
-    local fy = y + math.sin(angle) * half * 0.9
-    paint_a(BLACK, 0.6)
-    render.circle(fx, fy, 6.5 * U)
-    paint(c)
-    render.circle(fx, fy, 4.5 * U)
-}
-
--- Куб с тенью. Тень — тот же спрайт, подкрашенный чёрным со сдвигом.
--- Поворот кубиков через сдвиг текстуры (эмуляция поворота)
+-- Куб с тенью. Тень — тот же спрайт, повёрнут вместе с корпусом и
+-- подкрашенный чёрным с настоящей прозрачностью (раньше поворот имитировался
+-- сдвигом текстуры на 2 px, а «полупрозрачная» тень была сплошным квадратом).
 draw_cube(tex: float, x: float, y: float, angle: float,
                    scale: float, cls: float) {
-    local hw = 25.0 * cube_scale * scale * U
-    
-    -- Рисуем тень (более прозрачная)
+    local h32 = math.floor(tex)
+    if h32 < 0.0 then
+        return
+    }
+    local size = image.width(h32) * cube_scale * scale * U
+    local half = size * 0.5
     local shadow_a = shadow_alpha * 0.6
-    sprite_tint(tex, x - hw - shadow_off * U, y - hw + shadow_off * U,
-        cube_scale * scale * U, BLACK, shadow_a)
-    
-    -- Поворот кубика: используем сдвиг текстуры на основе угла
-    -- Это создает иллюзию поворота без реального вращения спрайта
-    local rot_offset_x = math.cos(angle) * 2.0 * U
-    local rot_offset_y = math.sin(angle) * 2.0 * U
-    
+
+    render.color_alpha(0.0, 0.0, 0.0, shadow_a)
+    render.image_rot(h32, x - half - shadow_off * U, y - half + shadow_off * U,
+        size, size, angle)
+
     if cls == 1 and azum_skin == 1 then
         -- Скин «Зомби»: зелёный силуэт Азума.
-        sprite_tint(tex, x - hw + rot_offset_x, y - hw + rot_offset_y, cube_scale * scale * U, ZOMBIE, 1.0)
+        render.color_alpha(ZOMBIE.r, ZOMBIE.g, ZOMBIE.b, 1.0)
     } else {
-        sprite(tex, x - hw + rot_offset_x, y - hw + rot_offset_y, cube_scale * scale * U)
+        render.color(1.0, 1.0, 1.0)
     }
-    
-    -- Точка-нос показывает направление
-    draw_facing_dot(x, y, angle, hw, WHITE)
+    render.image_rot(h32, x - half, y - half, size, size, angle)
 }
 
 player_live_tex(): float {
@@ -97,14 +88,20 @@ draw_candies() {
     }
 }
 
--- Летящая снежинка Деда Мороза (вращение заменено лёгкой пульсацией).
+-- Летящая снежинка Деда Мороза: крутится в полёте и слегка пульсирует.
 draw_gift() {
     if gift.active == 0.0 then
         return
     }
+    local h32 = math.floor(tex_snowflake)
+    if h32 < 0.0 then
+        return
+    }
     local s = 0.5 * U * (1.0 + 0.12 * math.sin(gift.t * 18.0))
-    local hw = 32.0 * s
-    sprite(tex_snowflake, gift.x - hw, gift.y - hw, s)
+    local size = image.width(h32) * s
+    render.color(1.0, 1.0, 1.0)
+    render.image_rot(h32, gift.x - size * 0.5, gift.y - size * 0.5,
+        size, size, gift.t * 6.0)
 }
 
 draw_boom_at(x: float, y: float, bt: float) {

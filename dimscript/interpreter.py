@@ -90,6 +90,7 @@ class Vertex:
     r: float
     g: float
     b: float
+    a: float = 1.0
 
 
 @dataclass
@@ -98,7 +99,7 @@ class TextCommand:
     x: float
     y: float
     scale: float
-    color: Tuple[float, float, float]
+    color: Tuple[float, float, float, float]
     font: int = -1
 
 
@@ -118,11 +119,11 @@ class Frame:
         self.has_clear = False
         self.overflow = False
 
-    def triangle(self, x0, y0, x1, y1, x2, y2, r, g, b) -> None:
+    def triangle(self, x0, y0, x1, y1, x2, y2, r, g, b, a=1.0) -> None:
         # Positions are raw pixels (the renderer owns the orthographic
         # transform); only the colour is clamped, exactly like push_vertex() in
         # src/enjoer_draw.c.
-        color = (_clamp01(r), _clamp01(g), _clamp01(b))
+        color = (_clamp01(r), _clamp01(g), _clamp01(b), _clamp01(a))
         for x, y in ((x0, y0), (x1, y1), (x2, y2)):
             if len(self.vertices) >= MAX_VERTICES:
                 self.overflow = True
@@ -149,7 +150,7 @@ class RenderRecorder:
 
     def __init__(self, frame: Frame) -> None:
         self.frame = frame
-        self.color_value = (1.0, 1.0, 1.0)
+        self.color_value = (1.0, 1.0, 1.0, 1.0)
         self.font_value = -1
         self.text_calls = 0
 
@@ -166,11 +167,10 @@ class RenderRecorder:
         self.frame.has_clear = True
 
     def color(self, red: Any, green: Any, blue: Any, alpha: Any = None) -> None:
-        values = [float(red), float(green), float(blue)]
-        if alpha is not None:
-            a = max(0.0, min(1.0, float(alpha)))
-            values = [value * a for value in values]
-        self.color_value = (values[0], values[1], values[2])
+        # Straight alpha, exactly like ds_render_color_alpha() in C: the rgb
+        # ride along untouched and the blend happens in the rasterizer.
+        a = 1.0 if alpha is None else max(0.0, min(1.0, float(alpha)))
+        self.color_value = (float(red), float(green), float(blue), a)
 
     def color_alpha(self, red: Any, green: Any, blue: Any, alpha: Any) -> None:
         self.color(red, green, blue, alpha)
@@ -281,6 +281,39 @@ class RenderRecorder:
     def image(self, handle: Any, x: Any, y: Any, width: Any, height: Any) -> None:
         self.image_region(handle, x, y, width, height, 0.0, 0.0, 1.0, 1.0)
 
+    def image_rot(self, handle: Any, x: Any, y: Any, width: Any, height: Any,
+                  angle: Any) -> None:
+        # Same corner rotation as enjoer_draw_image_quad_rot() in C; the
+        # reference frame stores no texture coordinates, so two tinted
+        # triangles match vertex-for-vertex.
+        _ = handle
+        x, y, width, height, angle = map(float, (x, y, width, height, angle))
+        if width <= 0 or height <= 0:
+            return
+        cx, cy = x + width * 0.5, y + height * 0.5
+        c, s = math.cos(angle), math.sin(angle)
+
+        def rot(px: float, py: float) -> Tuple[float, float]:
+            dx, dy = px - cx, py - cy
+            return cx + dx * c - dy * s, cy + dx * s + dy * c
+
+        x0, y0 = rot(x, y)
+        x1, y1 = rot(x + width, y)
+        x2, y2 = rot(x + width, y + height)
+        x3, y3 = rot(x, y + height)
+        self._quad(x0, y0, x1, y1, x2, y2, x3, y3)
+
+    def text_width(self, text: Any, scale: Any) -> float:
+        # The font-less reference build cannot read glyph advances, so this is
+        # the same average-advance approximation the AOT build's ds_ttf_measure
+        # refines: ~0.55em per glyph, longest \n-separated line, tab = 4 spaces.
+        em = 16.0 * float(scale)
+        longest = 0.0
+        for line in Interpreter.to_string(text).split("\n"):
+            width = line.replace("\t", "    ")
+            longest = max(longest, len(width) * 0.55 * em)
+        return longest
+
     def image_region(self, handle: Any, x: Any, y: Any, width: Any, height: Any,
                      u0: Any, v0: Any, u1: Any, v1: Any) -> None:
         # The reference frame stores no texture coordinates, so a sprite is the
@@ -290,8 +323,8 @@ class RenderRecorder:
         self.rect(x, y, width, height)
 
     def _triangle(self, x0, y0, x1, y1, x2, y2) -> None:
-        r, g, b = self.color_value
-        self.frame.triangle(x0, y0, x1, y1, x2, y2, r, g, b)
+        r, g, b, a = self.color_value
+        self.frame.triangle(x0, y0, x1, y1, x2, y2, r, g, b, a)
 
     def _quad(self, x0, y0, x1, y1, x2, y2, x3, y3) -> None:
         self._triangle(x0, y0, x1, y1, x2, y2)
@@ -301,7 +334,7 @@ class RenderRecorder:
 LIST_METHODS = {"push", "insert", "delete", "remove_at", "clear", "index_of", "join"}
 RENDER_MEMBERS = {"color_value", "font_value", "text_calls", "clear", "color", "color_alpha",
                   "rect", "frame", "circle", "ring", "line", "tri", "triangle", "text",
-                  "font", "image", "image_region"}
+                  "font", "image", "image_region", "image_rot", "text_width"}
 
 
 class Interpreter:
@@ -769,15 +802,15 @@ class Interpreter:
     def render_builtin(self, name: str, arguments: List[Any]) -> Any:
         method = {"frame": "frame_rect"}.get(name, name)
         if name not in {"clear", "color", "color_alpha", "rect", "frame", "circle", "ring", "line",
-                        "tri", "triangle", "text", "font", "image", "image_region"}:
+                        "tri", "triangle", "text", "font", "image", "image_region",
+                        "image_rot", "text_width"}:
             raise RuntimeError(f"неизвестная функция render.{name}")
         arity = {"clear": 3, "color": 3, "color_alpha": 4, "rect": 4, "frame": 5, "circle": 3,
                  "ring": 4, "line": 5, "tri": 6, "triangle": 6, "text": 4, "font": 1,
-                 "image": 5, "image_region": 9}[name]
+                 "image": 5, "image_region": 9, "image_rot": 6, "text_width": 2}[name]
         if len(arguments) != arity:
             raise RuntimeError(f"render.{name} ожидает {arity} аргумента")
-        getattr(self.render, method)(*arguments)
-        return None
+        return getattr(self.render, method)(*arguments)
 
     def image_builtin(self, name: str, arguments: List[Any]) -> Any:
         if name not in {"load", "width", "height", "count"}:
@@ -954,7 +987,9 @@ class Interpreter:
             parts = [float(part) for part in value]
             if len(parts) == 3:
                 return (parts[0], parts[1], parts[2])
-        raise RuntimeError("цвет — три числа")
+            if len(parts) == 4:
+                return (parts[0], parts[1], parts[2], parts[3])
+        raise RuntimeError("цвет — три или четыре числа")
 
     @staticmethod
     def default_value(type_name: str) -> Any:

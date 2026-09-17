@@ -44,7 +44,7 @@ namespace {
 
 /* The 2D batch vertex: position in screen pixels, tint colour, texture
  * coordinate and array layer (negative = untextured shape). */
-using Vertex = EnjoerVertex;
+using Vertex = EnjoerVertex; /* 10 floats: pos3, rgba4, uv2, layer1 */
 
 static uint32_t rgba(int r, int g, int b) {
     auto byte = [](int value) -> uint32_t {
@@ -119,6 +119,9 @@ static void fill_pixel_triangle(Buffer *buffer, const EnjoerVertex &a, const Enj
     const int tint_red = (int)(255.0f * a.r + 0.5f);
     const int tint_green = (int)(255.0f * a.g + 0.5f);
     const int tint_blue = (int)(255.0f * a.b + 0.5f);
+    /* The batch keeps a straight alpha per vertex; every primitive here emits
+     * one value per triangle, so reading it off vertex a is exact. */
+    const int tint_alpha = (int)(255.0f * a.a + 0.5f);
     const int layer = static_cast<int>(std::lround(a.layer));
     const DsImage *image = layer >= 0 ? ds_image_at(layer) : nullptr;
     for (int py = top; py < bottom; ++py) {
@@ -133,14 +136,18 @@ static void fill_pixel_triangle(Buffer *buffer, const EnjoerVertex &a, const Enj
             int red = tint_red;
             int green = tint_green;
             int blue = tint_blue;
-            int alpha = 255;
+            int alpha = tint_alpha;
             if (image) {
+                int texel_alpha = 255;
                 const float u = wa * a.u + wb * b.u + wc * c.u;
                 const float v = wa * a.v + wb * b.v + wc * c.v;
-                sample_image(image, u, v, &red, &green, &blue, &alpha);
+                sample_image(image, u, v, &red, &green, &blue, &texel_alpha);
                 red = red * tint_red / 255;
                 green = green * tint_green / 255;
                 blue = blue * tint_blue / 255;
+                /* Sprite pixels fade by the tint alpha too: that is how a
+                 * translucent cube shadow or a fading toast survives. */
+                alpha = texel_alpha * tint_alpha / 255;
             }
             uint32_t *target = &row[px];
             if (alpha >= 255) {
@@ -550,10 +557,10 @@ private:
 
         VkVertexInputBindingDescription binding{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
         VkVertexInputAttributeDescription attributes[4]{};
-        attributes[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 0}; /* position */
-        attributes[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3}; /* colour   */
-        attributes[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT, sizeof(float) * 6};    /* uv       */
-        attributes[3] = {3, 0, VK_FORMAT_R32_SFLOAT, sizeof(float) * 8};       /* layer    */
+        attributes[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 0};    /* position */
+        attributes[1] = {1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, sizeof(float) * 3}; /* colour   */
+        attributes[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT, sizeof(float) * 7};       /* uv       */
+        attributes[3] = {3, 0, VK_FORMAT_R32_SFLOAT, sizeof(float) * 9};          /* layer    */
         VkPipelineVertexInputStateCreateInfo vertex_input = vk_struct<VkPipelineVertexInputStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO);
         vertex_input.vertexBindingDescriptionCount = 1;
         vertex_input.pVertexBindingDescriptions = &binding;

@@ -172,8 +172,14 @@ void ds_render_text(DsString *text, float x, float y, float scale); /* borrows *
 void ds_render_font(int32_t handle);
 int32_t ds_render_current_font(void);
 void ds_render_image(int32_t handle, float x, float y, float width, float height);
+void ds_render_image_rot(int32_t handle, float x, float y, float width, float height,
+                         float angle);
 void ds_render_image_region(int32_t handle, float x, float y, float width, float height,
                             float u0, float v0, float u1, float v1);
+/* Pixel width of `text` drawn at `scale` with the current font, measured with
+ * the same TrueType advances the text pass lays glyphs out with — the number a
+ * script needs to centre a label exactly (multi-line: the longest line). */
+double ds_render_text_width(DsString *text, float scale); /* borrows */
 uint64_t ds_render_text_count(void);
 uint64_t ds_render_image_count(void);
 
