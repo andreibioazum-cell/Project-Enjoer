@@ -57,12 +57,28 @@ static int ensure_scratch(size_t vertices, size_t indices) {
 
 /* Converts one chunk mesh into GPU vertices: white texels for textured quads,
  * a baked light byte per corner and the material layer of every face. Opaque
- * triangles are written from index 0, water triangles from the middle. */
+ * triangles grow from index 0, water triangles from where the opaque block
+ * ends, so the layout is [opaque | water] in mesh order — the two index
+ * ranges the draw passes use, exactly like the software two-pass walk.
+ *
+ * The previous version placed the water block at water_count * 6: a
+ * water-heavy chunk (ocean surface, waterfalls) wrote past the scratch buffer,
+ * while any chunk whose opaque quads outnumbered the water quads overwrote the
+ * water entries mid-loop and then read the "compaction" source beyond the
+ * allocation.  On a phone both showed up as a crash within the first frames —
+ * the world always meshes a lake somewhere inside the draw distance. */
 static int build_mesh(const GeometriumChunkView *view, size_t *vertex_count, size_t *opaque_indices, size_t *water_indices) {
     size_t vertices = (size_t)view->count * 4;
     size_t indices = (size_t)view->count * 6;
     if (!ensure_scratch(vertices, indices)) return 0;
-    size_t opaque = 0, water = (size_t)view->water_count * 6;
+    /* The quads themselves decide where the water block starts: counting them
+     * here keeps the layout correct even if the mesh's water_count ever
+     * disagrees with what it actually holds. */
+    size_t water_quads = 0;
+    for (int i = 0; i < view->count; i++)
+        if (geometrium_material_water(geometrium_material_layer(view->quads[i].block, view->quads[i].face)))
+            water_quads++;
+    size_t opaque = 0, water = (indices - water_quads * 6);
     for (int i = 0; i < view->count; i++) {
         const GeometriumQuad *quad = &view->quads[i];
         int sx = view->cx * CHUNK_SIZE * 2 + quad->x;
@@ -93,16 +109,9 @@ static int build_mesh(const GeometriumChunkView *view, size_t *vertex_count, siz
         target[3] = base + 0; target[4] = base + 2; target[5] = base + 3;
         if (is_water) water += 6; else opaque += 6;
     }
-    if (water > (size_t)view->water_count * 6) {
-        /* Some chunks are queued for the water pass but no longer hold water:
-         * compact the tail onto the end of the opaque block. */
-        memmove(scratch_indices + opaque, scratch_indices + (size_t)view->count * 6,
-                ((size_t)view->water_count * 6) * sizeof(uint32_t));
-        water = (size_t)view->water_count * 6;
-    }
     *vertex_count = vertices;
     *opaque_indices = opaque;
-    *water_indices = water;
+    *water_indices = water_quads * 6;   /* water index count, not an offset */
     return 1;
 }
 
