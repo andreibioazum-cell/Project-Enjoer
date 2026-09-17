@@ -765,8 +765,10 @@ int vk_device_init(AAssetManager *assets) {
     if (!create_instance()) return 0;
     if (!pick_physical_device()) return 0;
     if (!create_device()) return 0;
-    if (!vk_textures_init(assets)) return 0;
+    /* Pipelines own the descriptor sets, so they come first and the textures
+     * (which write those sets) right after. */
     if (!vk_pipelines_init(assets)) return 0;
+    if (!vk_textures_init(assets)) return 0;
     vk.ready = 1;
     return 1;
 }
