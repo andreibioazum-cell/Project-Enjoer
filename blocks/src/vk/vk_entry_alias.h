@@ -1,0 +1,93 @@
+/* src/vk/vk_entry_alias.h — the standard Vulkan names, redirected.
+ *
+ * Separate from vk_entry.h on purpose: the loader itself (vk_entry.c) needs the
+ * plain names to exist as identifiers, while every renderer module wants them to
+ * mean "the function pointer this machine happened to provide". */
+#ifndef ENJOER_VK_ENTRY_ALIAS_H
+#define ENJOER_VK_ENTRY_ALIAS_H
+
+#include "vk_entry.h"
+
+/* Generated from the entry-point lists; keep the order in sync by regenerating
+ * with tools/vulkan/aliases.sh whenever the lists change. */
+#define vkGetInstanceProcAddr enjoer_vk.vkGetInstanceProcAddr
+#define vkCreateInstance enjoer_vk.vkCreateInstance
+#define vkDestroyInstance enjoer_vk.vkDestroyInstance
+#define vkEnumerateInstanceLayerProperties enjoer_vk.vkEnumerateInstanceLayerProperties
+#define vkEnumeratePhysicalDevices enjoer_vk.vkEnumeratePhysicalDevices
+#define vkGetPhysicalDeviceProperties enjoer_vk.vkGetPhysicalDeviceProperties
+#define vkGetPhysicalDeviceMemoryProperties enjoer_vk.vkGetPhysicalDeviceMemoryProperties
+#define vkGetPhysicalDeviceQueueFamilyProperties enjoer_vk.vkGetPhysicalDeviceQueueFamilyProperties
+#define vkGetPhysicalDeviceFormatProperties enjoer_vk.vkGetPhysicalDeviceFormatProperties
+#define vkCreateDevice enjoer_vk.vkCreateDevice
+#define vkGetDeviceProcAddr enjoer_vk.vkGetDeviceProcAddr
+#define vkDestroySurfaceKHR enjoer_vk.vkDestroySurfaceKHR
+#define vkDestroySwapchainKHR enjoer_vk.vkDestroySwapchainKHR
+#define vkAllocateCommandBuffers enjoer_vk.vkAllocateCommandBuffers
+#define vkAllocateDescriptorSets enjoer_vk.vkAllocateDescriptorSets
+#define vkAllocateMemory enjoer_vk.vkAllocateMemory
+#define vkBeginCommandBuffer enjoer_vk.vkBeginCommandBuffer
+#define vkBindBufferMemory enjoer_vk.vkBindBufferMemory
+#define vkBindImageMemory enjoer_vk.vkBindImageMemory
+#define vkCmdBeginRenderPass enjoer_vk.vkCmdBeginRenderPass
+#define vkCmdBindDescriptorSets enjoer_vk.vkCmdBindDescriptorSets
+#define vkCmdBindIndexBuffer enjoer_vk.vkCmdBindIndexBuffer
+#define vkCmdBindPipeline enjoer_vk.vkCmdBindPipeline
+#define vkCmdBindVertexBuffers enjoer_vk.vkCmdBindVertexBuffers
+#define vkCmdClearAttachments enjoer_vk.vkCmdClearAttachments
+#define vkCmdCopyBuffer enjoer_vk.vkCmdCopyBuffer
+#define vkCmdCopyBufferToImage enjoer_vk.vkCmdCopyBufferToImage
+#define vkCmdCopyImageToBuffer enjoer_vk.vkCmdCopyImageToBuffer
+#define vkCmdDraw enjoer_vk.vkCmdDraw
+#define vkCmdDrawIndexed enjoer_vk.vkCmdDrawIndexed
+#define vkCmdEndRenderPass enjoer_vk.vkCmdEndRenderPass
+#define vkCmdPipelineBarrier enjoer_vk.vkCmdPipelineBarrier
+#define vkCmdPushConstants enjoer_vk.vkCmdPushConstants
+#define vkCmdSetScissor enjoer_vk.vkCmdSetScissor
+#define vkCmdSetViewport enjoer_vk.vkCmdSetViewport
+#define vkCreateBuffer enjoer_vk.vkCreateBuffer
+#define vkCreateCommandPool enjoer_vk.vkCreateCommandPool
+#define vkCreateDescriptorPool enjoer_vk.vkCreateDescriptorPool
+#define vkCreateDescriptorSetLayout enjoer_vk.vkCreateDescriptorSetLayout
+#define vkCreateFence enjoer_vk.vkCreateFence
+#define vkCreateFramebuffer enjoer_vk.vkCreateFramebuffer
+#define vkCreateGraphicsPipelines enjoer_vk.vkCreateGraphicsPipelines
+#define vkCreateImage enjoer_vk.vkCreateImage
+#define vkCreateImageView enjoer_vk.vkCreateImageView
+#define vkCreatePipelineLayout enjoer_vk.vkCreatePipelineLayout
+#define vkCreateRenderPass enjoer_vk.vkCreateRenderPass
+#define vkCreateSampler enjoer_vk.vkCreateSampler
+#define vkCreateSemaphore enjoer_vk.vkCreateSemaphore
+#define vkCreateShaderModule enjoer_vk.vkCreateShaderModule
+#define vkDestroyBuffer enjoer_vk.vkDestroyBuffer
+#define vkDestroyCommandPool enjoer_vk.vkDestroyCommandPool
+#define vkDestroyDescriptorPool enjoer_vk.vkDestroyDescriptorPool
+#define vkDestroyDescriptorSetLayout enjoer_vk.vkDestroyDescriptorSetLayout
+#define vkDestroyDevice enjoer_vk.vkDestroyDevice
+#define vkDestroyFence enjoer_vk.vkDestroyFence
+#define vkDestroyFramebuffer enjoer_vk.vkDestroyFramebuffer
+#define vkDestroyImage enjoer_vk.vkDestroyImage
+#define vkDestroyImageView enjoer_vk.vkDestroyImageView
+#define vkDestroyPipeline enjoer_vk.vkDestroyPipeline
+#define vkDestroyPipelineLayout enjoer_vk.vkDestroyPipelineLayout
+#define vkDestroyRenderPass enjoer_vk.vkDestroyRenderPass
+#define vkDestroySampler enjoer_vk.vkDestroySampler
+#define vkDestroySemaphore enjoer_vk.vkDestroySemaphore
+#define vkDestroyShaderModule enjoer_vk.vkDestroyShaderModule
+#define vkDeviceWaitIdle enjoer_vk.vkDeviceWaitIdle
+#define vkEndCommandBuffer enjoer_vk.vkEndCommandBuffer
+#define vkFreeCommandBuffers enjoer_vk.vkFreeCommandBuffers
+#define vkFreeMemory enjoer_vk.vkFreeMemory
+#define vkGetBufferMemoryRequirements enjoer_vk.vkGetBufferMemoryRequirements
+#define vkGetDeviceQueue enjoer_vk.vkGetDeviceQueue
+#define vkGetImageMemoryRequirements enjoer_vk.vkGetImageMemoryRequirements
+#define vkMapMemory enjoer_vk.vkMapMemory
+#define vkQueueSubmit enjoer_vk.vkQueueSubmit
+#define vkQueueWaitIdle enjoer_vk.vkQueueWaitIdle
+#define vkResetCommandBuffer enjoer_vk.vkResetCommandBuffer
+#define vkResetFences enjoer_vk.vkResetFences
+#define vkUnmapMemory enjoer_vk.vkUnmapMemory
+#define vkUpdateDescriptorSets enjoer_vk.vkUpdateDescriptorSets
+#define vkWaitForFences enjoer_vk.vkWaitForFences
+
+#endif
