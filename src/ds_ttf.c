@@ -1049,7 +1049,8 @@ static void ttf_draw_text(DsTtfFace *face, const EnjoerTextCommand *command) {
             ds_image_layer_uv(face->layer, &u1, &v1);
             if (gx1 > gx0 && gy1 > gy0)
                 enjoer_draw_image_quad(gx0, gy0, gx1 - gx0, gy1 - gy0, u0, v0, u1, v1,
-                                       face->layer, command->r, command->g, command->b);
+                                       face->layer, command->r, command->g, command->b,
+                                       command->a);
         }
         pen_x += glyph->advance * unit;
     }
@@ -1194,18 +1195,68 @@ int32_t ds_ttf_layer(int32_t font) {
     return face->layer;
 }
 
+void ds_ttf_draw_command(const EnjoerTextCommand *command) {
+    DsTtfFace *face = NULL;
+    if (!command) return;
+    if (!ds_font_valid(command->font)) return;
+    face = ttf_face(command->font);
+    if (!face || !face->ready) return;
+    ttf_draw_text(face, command);
+}
+
+float ds_ttf_measure(int32_t font, const char *text, float scale) {
+    /* The layout walk of ttf_draw_text minus the drawing: same codepoints,
+     * same raster-size ladder, same advances, so the number matches the
+     * pixels exactly. */
+    const DsTtfFace *const_face = ttf_face(font);
+    DsTtfFace *face = NULL;
+    float em = 16.0f * scale;
+    int raster = 0;
+    float line_width = 0.0f;
+    float width = 0.0f;
+    const char *cursor = text;
+    if (!const_face || !const_face->ready || !text || !(em > 0.0f)) return 0.0f;
+    face = (DsTtfFace *)const_face;
+    raster = ttf_pick_raster(em);
+    while (*cursor) {
+        /* ttf_next_codepoint advances the cursor; measure only walks it. */
+        uint32_t codepoint = ttf_next_codepoint(&cursor);
+        DsTtfGlyph *glyph = NULL;
+        float unit = 1.0f;
+        if (codepoint == (uint32_t)'\n') {
+            if (line_width > width) width = line_width;
+            line_width = 0.0f;
+            continue;
+        }
+        if (codepoint == (uint32_t)'\r' || codepoint == 0u) continue;
+        if (codepoint == (uint32_t)'\t') {
+            DsTtfGlyph *space = ttf_glyph(face, (uint32_t)' ', raster);
+            line_width += 4.0f * space->advance * (em / (float)space->raster);
+            continue;
+        }
+        glyph = ttf_glyph(face, codepoint, raster);
+        unit = em / (float)glyph->raster;
+        line_width += glyph->advance * unit;
+    }
+    if (line_width > width) width = line_width;
+    return width;
+}
+
 void ds_ttf_resolve_frame(void) {
     EnjoerFrame *frame = enjoer_frame();
     int index = 0;
+    int pending = 0;
     if (!frame || frame->texts_resolved) return;
+    /* Only a test that assembled records by hand can arrive unresolved:
+     * draw them in record order, after everything else. */
     for (index = 0; index < frame->text_count; ++index) {
-        const EnjoerTextCommand *command = &frame->texts[index];
-        DsTtfFace *face = NULL;
-        if (!ds_font_valid(command->font)) continue;
-        face = ttf_face(command->font);
-        if (!face || !face->ready) continue;
-        ttf_draw_text(face, command);
+        EnjoerTextCommand *command = &frame->texts[index];
+        if (command->resolved) continue;
+        ds_ttf_draw_command(command);
+        command->resolved = 1;
+        pending = 1;
     }
+    (void)pending;
     frame->texts_resolved = 1;
 }
 

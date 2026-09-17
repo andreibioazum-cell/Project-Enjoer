@@ -38,6 +38,7 @@ typedef struct EnjoerVertex {
     float r;
     float g;
     float b;
+    float a; /* 1 is opaque; both rasterizers blend src-over-dst with it */
     float u;
     float v;
     float layer;
@@ -54,7 +55,12 @@ typedef struct EnjoerTextCommand {
     float r;
     float g;
     float b;
+    float a;
     int32_t font;
+    /* Set when the TrueType pass already turned this record into glyph quads.
+     * Texts resolve the moment they are recorded, so a label keeps its place
+     * in the painter's order instead of being appended after every shape. */
+    int resolved;
 } EnjoerTextCommand;
 
 typedef struct EnjoerFrame {
@@ -64,7 +70,9 @@ typedef struct EnjoerFrame {
     EnjoerTextCommand texts[ENJOER_DRAW_MAX_TEXT];
     int text_count;
     /* Set by the TrueType text pass once it turned this frame's texts with
-     * loaded fonts into glyph quads; the records stay for debugging. */
+     * loaded fonts into glyph quads; the records stay for debugging.  As texts
+     * now resolve at record time this is simply "every record with a loaded
+     * font is quads already". */
     int texts_resolved;
     uint64_t text_total;
     float clear_color[3];
@@ -79,27 +87,36 @@ void enjoer_frame_end(void);
 void enjoer_frame_clear(int width, int height);
 
 /* Triangle level API.  Anything a game asks for becomes triangles here, so the
- * renderer never implements shapes itself. */
+ * renderer never implements shapes itself.  Every vertex carries a straight
+ * (non-premultiplied) alpha alongside its colour: the renderers blend with
+ * src-over-dst, so a translucent shadow or screen fade is just geometry. */
 void enjoer_draw_triangle(float x0, float y0, float x1, float y1, float x2, float y2,
-                          float r, float g, float b);
+                          float r, float g, float b, float a);
 void enjoer_draw_quad(float x0, float y0, float x1, float y1, float x2, float y2,
-                      float x3, float y3, float r, float g, float b);
+                      float x3, float y3, float r, float g, float b, float a);
 void enjoer_draw_rect(float x, float y, float width, float height,
-                      float r, float g, float b);
+                      float r, float g, float b, float a);
 void enjoer_draw_frame_rect(float x, float y, float width, float height, float thickness,
-                            float r, float g, float b);
+                            float r, float g, float b, float a);
 void enjoer_draw_circle(float x, float y, float radius, int segments,
-                        float r, float g, float b);
+                        float r, float g, float b, float a);
 void enjoer_draw_ring(float x, float y, float radius, float thickness, int segments,
-                      float r, float g, float b);
+                      float r, float g, float b, float a);
 void enjoer_draw_line(float x0, float y0, float x1, float y1, float thickness,
-                      float r, float g, float b);
+                      float r, float g, float b, float a);
 
 /* Textured quad: a sprite sheet region in normalised coordinates, tinted by the
- * colour (1, 1, 1 is untinted). */
+ * colour (1, 1, 1, 1 is untinted). */
 void enjoer_draw_image_quad(float x, float y, float width, float height,
                             float u0, float v0, float u1, float v1, int32_t layer,
-                            float r, float g, float b);
+                            float r, float g, float b, float a);
+
+/* Same quad, rotated `angle` screen-space radians about its own centre (the
+ * y-down rotation a game measures with atan2(dy, dx)): the way a spinning cube
+ * or snowflake is drawn without a second pipeline. */
+void enjoer_draw_image_quad_rot(float x, float y, float width, float height,
+                                float u0, float v0, float u1, float v1, int32_t layer,
+                                float r, float g, float b, float a, float angle);
 
 #ifdef __cplusplus
 }

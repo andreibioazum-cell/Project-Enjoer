@@ -46,8 +46,23 @@ int32_t ds_ttf_layer(int32_t font);
  * how one checks that text is sampled 1:1 instead of shrunk. */
 int32_t ds_ttf_atlas_size(void);
 
-/* Turn this frame's recorded texts with valid fonts into tinted glyph quads.
- * Called once per frame by renderer_render, before the batch is uploaded. */
+struct EnjoerTextCommand;
+
+/* Resolve a single recorded text into glyph quads right where it was
+ * recorded.  Texts go through this at record time (ds_render_text), which is
+ * what keeps a label in its painter's-order slot between the shapes its
+ * script drew before and after it. */
+void ds_ttf_draw_command(const struct EnjoerTextCommand *command);
+
+/* Pixel width of `text` laid out at `scale` (scale 1.0 is the 16 px em),
+ * using the same glyph advances the draw path uses; multi-line text measures
+ * its longest line.  0 when the face is missing or the string is empty. */
+float ds_ttf_measure(int32_t font, const char *text, float scale);
+
+/* Backstop for callers that record texts without resolving them (tests that
+ * poke the batch by hand): turns every not-yet-resolved record with a valid
+ * font into glyph quads and flags the frame resolved.  Called once per frame
+ * by renderer_render, before the batch is uploaded. */
 void ds_ttf_resolve_frame(void);
 
 /* Drop every face and atlas.  Atlas pixels belong to the image registry and

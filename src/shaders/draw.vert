@@ -9,11 +9,11 @@
    regenerates it from this file, so the two must stay in step. */
 layout(push_constant) uniform Push { mat4 mvp; } push;
 layout(location = 0) in vec3 in_position;
-layout(location = 1) in vec3 in_color;
+layout(location = 1) in vec4 in_color;
 layout(location = 2) in vec2 in_uv;
 // Array layer of the sprite sheet, or negative for an untextured vertex.
 layout(location = 3) in float in_layer;
-layout(location = 0) out vec3 v_color;
+layout(location = 0) out vec4 v_color;
 layout(location = 1) out vec2 v_uv;
 layout(location = 2) out float v_layer;
 void main() {

@@ -544,24 +544,27 @@ int32_t ds_font_load(DsString *name) {
 }
 
 /* --- render --- */
-static float current_color[3] = {1.0f,1.0f,1.0f};
+/* Straight alpha: nothing is premultiplied anywhere in the pipeline — the
+ * blenders (Vulkan pipeline and software rasterizer alike) do src-over-dst,
+ * so color_alpha(WHITE, 0.5) is a true half-strength sheet, not grey. */
+static float current_color[4] = {1.0f,1.0f,1.0f,1.0f};
 static int32_t current_font = -1;
 static uint64_t text_calls;
 static uint64_t image_calls;
 
-void ds_render_color(float r,float g,float b){ current_color[0]=r; current_color[1]=g; current_color[2]=b; }
-void ds_render_color_alpha(float r,float g,float b,float a){ current_color[0]=r*a; current_color[1]=g*a; current_color[2]=b*a; }
+void ds_render_color(float r,float g,float b){ current_color[0]=r; current_color[1]=g; current_color[2]=b; current_color[3]=1.0f; }
+void ds_render_color_alpha(float r,float g,float b,float a){ current_color[0]=r; current_color[1]=g; current_color[2]=b; current_color[3]=a; }
 const float *ds_render_current_color(void){ return current_color; }
 void ds_render_clear(float r,float g,float b){
     EnjoerFrame *f=enjoer_frame();
     f->clear_color[0]=r; f->clear_color[1]=g; f->clear_color[2]=b; f->has_clear=1;
 }
-void ds_render_rect(float x,float y,float w,float h){ enjoer_draw_rect(x,y,w,h,current_color[0],current_color[1],current_color[2]); }
-void ds_render_frame(float x,float y,float w,float h,float t){ enjoer_draw_frame_rect(x,y,w,h,t,current_color[0],current_color[1],current_color[2]); }
-void ds_render_circle(float x,float y,float r){ enjoer_draw_circle(x,y,r,0,current_color[0],current_color[1],current_color[2]); }
-void ds_render_ring(float x,float y,float r,float t){ enjoer_draw_ring(x,y,r,t,0,current_color[0],current_color[1],current_color[2]); }
-void ds_render_line(float x0,float y0,float x1,float y1,float th){ enjoer_draw_line(x0,y0,x1,y1,th,current_color[0],current_color[1],current_color[2]); }
-void ds_render_triangle(float x0,float y0,float x1,float y1,float x2,float y2){ enjoer_draw_triangle(x0,y0,x1,y1,x2,y2,current_color[0],current_color[1],current_color[2]); }
+void ds_render_rect(float x,float y,float w,float h){ enjoer_draw_rect(x,y,w,h,current_color[0],current_color[1],current_color[2],current_color[3]); }
+void ds_render_frame(float x,float y,float w,float h,float t){ enjoer_draw_frame_rect(x,y,w,h,t,current_color[0],current_color[1],current_color[2],current_color[3]); }
+void ds_render_circle(float x,float y,float r){ enjoer_draw_circle(x,y,r,0,current_color[0],current_color[1],current_color[2],current_color[3]); }
+void ds_render_ring(float x,float y,float r,float t){ enjoer_draw_ring(x,y,r,t,0,current_color[0],current_color[1],current_color[2],current_color[3]); }
+void ds_render_line(float x0,float y0,float x1,float y1,float th){ enjoer_draw_line(x0,y0,x1,y1,th,current_color[0],current_color[1],current_color[2],current_color[3]); }
+void ds_render_triangle(float x0,float y0,float x1,float y1,float x2,float y2){ enjoer_draw_triangle(x0,y0,x1,y1,x2,y2,current_color[0],current_color[1],current_color[2],current_color[3]); }
 void ds_render_font(int32_t h){
     /* -1 selects the default face; a bogus positive handle is ignored rather
      * than recorded, so a typo cannot poison the rest of the frame. */
@@ -572,15 +575,37 @@ void ds_render_text(DsString *text,float x,float y,float scale){
     EnjoerFrame *f=enjoer_frame();
     if (f->text_count < ENJOER_DRAW_MAX_TEXT && text) {
         EnjoerTextCommand *c=&f->texts[f->text_count++];
+        memset(c, 0, sizeof(*c));
         snprintf(c->text,sizeof(c->text),"%s", ds_cstr(text));
-        c->x=x; c->y=y; c->scale=scale; c->r=current_color[0]; c->g=current_color[1]; c->b=current_color[2];
+        c->x=x; c->y=y; c->scale=scale; c->r=current_color[0]; c->g=current_color[1]; c->b=current_color[2]; c->a=current_color[3];
         c->font=current_font;
+        /* Resolve right away: glyph quads land in the batch exactly where the
+         * script asked for them, so a screen-fade sheet or a warning banner
+         * drawn after a label really sits on top of it (and the toast panel
+         * covers its own text's background, never the other way round).  The
+         * record stays for the debug mirrors (/info, frame_dump). */
+        ds_ttf_draw_command(c);
+        c->resolved=1;
+        f->texts_resolved=1;
     }
     ++text_calls; ++f->text_total;
+}
+double ds_render_text_width(DsString *text,float scale){
+    if (!text) return 0.0;
+    return ds_ttf_measure(current_font, ds_cstr(text), scale);
 }
 void ds_render_image(int32_t h,float x,float y,float w,float ht){
     if (!ds_image_valid(h)) return;
     ds_render_image_region(h,x,y,w,ht,0,0,1,1);
+}
+void ds_render_image_rot(int32_t h,float x,float y,float w,float ht,float angle){
+    float u0=0.0f, v0=0.0f, u1=1.0f, v1=1.0f;
+    if (!ds_image_valid(h)) return;
+    /* Same layer coordinates as an upright quad; only the corners move. */
+    ds_image_layer_uv(h, &u0, &v0);
+    ds_image_layer_uv(h, &u1, &v1);
+    enjoer_draw_image_quad_rot(x,y,w,ht,u0,v0,u1,v1,h,current_color[0],current_color[1],current_color[2],current_color[3],angle);
+    ++image_calls;
 }
 void ds_render_image_region(int32_t h,float x,float y,float w,float ht,float u0,float v0,float u1,float v1){
     if (!ds_image_valid(h)) return;
@@ -592,7 +617,7 @@ void ds_render_image_region(int32_t h,float x,float y,float w,float ht,float u0,
      * left corner of a quad that was mostly transparent margin. */
     ds_image_layer_uv(h, &u0, &v0);
     ds_image_layer_uv(h, &u1, &v1);
-    enjoer_draw_image_quad(x,y,w,ht,u0,v0,u1,v1,h,current_color[0],current_color[1],current_color[2]);
+    enjoer_draw_image_quad(x,y,w,ht,u0,v0,u1,v1,h,current_color[0],current_color[1],current_color[2],current_color[3]);
     ++image_calls;
 }
 uint64_t ds_render_text_count(void){ return text_calls; }
@@ -678,5 +703,5 @@ int ds_engine_key_down(DsString *name){
     for(int i=0;i<engine_state.key_count;++i) if(!strcmp(engine_state.key_names[i],txt)) d=engine_state.key_down[i];
     return d;
 }
-void ds_runtime_init(void){ text_calls=0; image_calls=0; current_color[0]=current_color[1]=current_color[2]=1.0f; current_font=-1; ds_image_reset(); ds_font_reset(); ds_ttf_reset(); }
+void ds_runtime_init(void){ text_calls=0; image_calls=0; current_color[0]=current_color[1]=current_color[2]=current_color[3]=1.0f; current_font=-1; ds_image_reset(); ds_font_reset(); ds_ttf_reset(); }
 void ds_runtime_shutdown(void){ free_interned(); ds_image_reset(); ds_font_reset(); ds_ttf_reset(); }
